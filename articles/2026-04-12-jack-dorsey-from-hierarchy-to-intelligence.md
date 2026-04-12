@@ -34,7 +34,7 @@ This post is directly relevant to any leader working on AI transformation inside
 
 ## My Take
 
-*Filed 2026-04-12*
+### Filed 12 April 2026 (Original)
 
 Dorsey's information flow framing is sharp and directionally correct — but the interesting question isn't whether he's right. It's how fast this actually moves, and for whom.
 
@@ -43,6 +43,20 @@ I've already crossed this line. As an MD, I'm using AI to go from strategy to ex
 The model I'm building isn't "AI augments your team." It's: MD builds strategy, AI handles the connective tissue, output goes straight to builders. The middle layer doesn't disappear — but it needs to operate at a level AI cannot yet reach, or it becomes redundant by default.
 
 The scaling mechanism isn't headcount. It's prompt quality. I've already started encoding standards into prompts so the team replicates my output quality. That's a lightweight DRI model in practice — without the restructure.
+
+Dorsey says companies move fast or slow based on information flow. I'd add: the individuals who restructure their own information flow first get a window of compounding advantage before the org catches up. That window is now.
+
+### Annotation — 12 April 2026
+
+Dorsey's information-flow framing is sharp and directionally correct — but the interesting question isn't whether he's right; it's how fast this actually moves, and for whom.
+
+I've already crossed this line. As an MD, I'm using AI to go from strategy to execution without the traditional relay through directors. Tasks that would take weeks — assessing business cases, reviewing company policies, building proposals, synthesising across documents — I'm doing in hours, to my own standard, on my own. Copilot with deep think and SharePoint access is already doing this at a basic level. With better tooling (Opus-class models), the gap widens further.
+
+The model I'm building isn't "AI augments your team." It's: MD builds strategy, AI handles the connective tissue, output goes straight to builders. The middle layer doesn't disappear — but it needs to operate at a level AI cannot yet reach, or it becomes redundant by default.
+
+The scaling mechanism isn't headcount. It's prompt quality. I've already started encoding standards into prompts so the team replicates my output quality. That's a lightweight DRI model in practice — without the restructure.
+
+The hard part isn't the technology. It's the organisational delta — when your output velocity becomes visibly disconnected from your headcount, that's when the structural question gets forced. I'm managing that deliberately through the Agentic IPO programme, which is the vehicle for scaling this properly rather than running it as a shadow operation.
 
 Dorsey says companies move fast or slow based on information flow. I'd add: the individuals who restructure their own information flow first get a window of compounding advantage before the org catches up. That window is now.
 
