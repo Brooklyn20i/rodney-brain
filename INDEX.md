@@ -45,3 +45,5 @@
 
 ---
 *This index is updated automatically every time a new brainfood doc is added. Concept pages are rebuilt weekly.*
+| 2026-04-12 | Agents in the Enterprise: Field Notes | Aaron Levie (@levie) | X Post | #AI #Enterprise #Agents #ChangeManagement #EnterpriseAI | [article](articles/2026-04-12-aaron-levie-agents-in-the-enterprise-field-notes.md) |
+| 2026-04-12 | Claude Code + Obsidian + Skill Graph: Local Research Engine | The Smart Ape (@the_smart_ape) | X Article | #AI #Research #Claude #Obsidian #PKM #SkillGraph | [article](articles/2026-04-12-smart-ape-claude-code-obsidian-skill-graph-research-engine.md) |
