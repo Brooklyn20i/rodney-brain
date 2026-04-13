@@ -3,6 +3,7 @@
 **Date:** 2026-04-11
 **Source:** https://x.com/hwchase17/status/2042978500567609738
 **Type:** X Article (Long-form)
+**Stance:** Aligned
 **Tags:** #AgentHarness #Memory #AI #LangChain #OpenSource #Agents
 
 ## Summary

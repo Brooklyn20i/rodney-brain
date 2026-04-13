@@ -4,6 +4,7 @@
 **Source:** https://x.com/jack/status/2039003879841362278
 **Article:** https://block.xyz/inside/from-hierarchy-to-intelligence
 **Type:** X Article (Long-form)
+**Stance:** Aligned
 **Tags:** #AI #OrgDesign #Leadership #FutureOfWork #Agentic #BlockInc
 
 ## Summary

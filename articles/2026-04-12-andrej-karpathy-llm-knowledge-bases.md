@@ -3,6 +3,7 @@
 **Date:** 2026-04-12
 **Source:** https://x.com/karpathy/status/2039805659525644595
 **Type:** X Post (Long-form)
+**Stance:** Aligned
 **Tags:** #AI #KnowledgeManagement #LLM #PKM #Obsidian #DigitalBrain
 
 ## Summary

@@ -3,6 +3,7 @@
 **Date:** 2026-04-12
 **Source:** https://x.com/levie/status/2043426157367095397
 **Type:** X Post
+**Stance:** Aligned
 **Tags:** #AI #Enterprise #Agents #ChangeManagement #EnterpriseAI #Transformation
 
 ## Summary
