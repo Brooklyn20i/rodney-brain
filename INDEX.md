@@ -1,6 +1,6 @@
 # BRAINFOOD INDEX — Master Catalog
 
-*Your master catalog. Auto-maintained by Computer. Last updated: 2026-04-12.*
+*Your master catalog. Auto-maintained by Computer. Last updated: 2026-04-15.*
 
 ## How to Use This
 
@@ -45,6 +45,12 @@
 
 ---
 *This index is updated automatically every time a new brainfood doc is added. Concept pages are rebuilt weekly.*
+| 2026-04-13 | Cook or Be Cooked | Garry Tan | X Post | Aligned | #AI #Velocity #Startups #Strategy | [article](articles/2026-04-13-garry-tan-cook-or-be-cooked.md) |
+| 2026-04-13 | Claude Magazine Hack | Jason Zook | X Post | Reference | #Claude #Prompting #Visualisation | [article](articles/2026-04-13-jason-zook-claude-magazine-hack.md) |
+| 2026-04-13 | Obsidian + Claude Code Builds a Real Second Brain | 0xMarioNawfal | X Post | Reference | #Obsidian #ClaudeCode #PKM #KnowledgeGraph | [article](articles/2026-04-13-0xmarionawfal-obsidian-claude-code-second-brain.md) |
+| 2026-04-13 | Build Agents That Never Forget | Akshay | X Article | Aligned | #Agents #Memory #VectorSearch #KnowledgeGraph #Cognee | [article](articles/2026-04-13-akshay-build-agents-that-never-forget.md) |
+| 2026-04-13 | Build Your First Claude Skill in 10 Minutes | Guri Singh | X Article | Aligned | #Claude #Skills #Prompting #Automation #MCP | [article](articles/2026-04-13-guri-singh-build-first-claude-skill.md) |
+| 2026-04-13 | Shared Memory Layer for Agent Teams | Santiago (svpino) | X Post | Aligned | #Agents #Memory #Infrastructure #Teams | [article](articles/2026-04-13-svpino-shared-memory-layer-agent-teams.md) |
 | 2026-04-12 | Agents in the Enterprise: Field Notes | Aaron Levie (@levie) | X Post | #AI #Enterprise #Agents #ChangeManagement #EnterpriseAI | [article](articles/2026-04-12-aaron-levie-agents-in-the-enterprise-field-notes.md) |
 | 2026-04-12 | Claude Code + Obsidian + Skill Graph: Local Research Engine | The Smart Ape (@the_smart_ape) | X Article | #AI #Research #Claude #Obsidian #PKM #SkillGraph | [article](articles/2026-04-12-smart-ape-claude-code-obsidian-skill-graph-research-engine.md) |
 | 2026-04-13 | The "AI Layoff Trap" Has Been Mathematically Proven | Charly Wargnier | X Post | Aligned | #AI #FutureOfWork #Economics #Automation | [article](articles/2026-04-13-charly-wargnier-ai-layoff-trap.md) |
