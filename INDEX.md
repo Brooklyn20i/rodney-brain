@@ -64,3 +64,5 @@
 | 2026-04-12 | Claude Managed Agents Clearly Explained (v2) | Charly Wargnier | X Post | Aligned | #Claude #ManagedAgents #AI #Agents #PlatformAsAService | [article](articles/2026-04-12-charly-wargnier-claude-managed-agents-v2.md) |
 | 2026-04-11 | The "Second Brain" Is a Trap (v2) | Bondig | X Article | Aligned | #SecondBrain #PKM #AI #Agents #KnowledgeManagement | [article](articles/2026-04-11-bondig-second-brain-trap-v2.md) |
 | 2026-04-15 | How GBrain Works, and How to Wire It Into Your Agents | AlphaSignal AI | X Article | Reference | #AI #Agents #Memory #Infrastructure #GBrain #Postgres #KnowledgeGraph #OpenSource | [article](articles/2026-04-15-alphasignal-ai-gbrain-architecture.md) |
+| 2026-04-16 | The AI mandate trap | Eric Siu | X Post | Aligned | #ai-adoption #operating-model #metrics #accountability #marketing | [article](articles/2026-04-16-eric-siu-the-ai-mandate-trap.md) |
+| 2026-04-16 | How GBrain Works, and How to Actually Wire It Into Your Agents | AlphaSignal AI | Thread | Aligned | #agent-memory #rag #vector-db #knowledge-management #mcp | [article](articles/2026-04-16-alphasignal-ai-how-gbrain-works.md) |
