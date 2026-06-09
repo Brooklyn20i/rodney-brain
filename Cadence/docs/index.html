@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cadence">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-512.png">
+<title>Cadence</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --sidebar-bg: #1A1F2E;
+    --sidebar-active: #2C3654;
+    --sidebar-text: rgba(255,255,255,0.65);
+    --sidebar-active-text: #FFFFFF;
+    --sidebar-icon-active: #5B9CF6;
+    --app-bg: #F4F4F0;
+    --surface: #FFFFFF;
+    --surface2: #F8F8F6;
+    --border: rgba(0,0,0,0.08);
+    --accent: #1B5E9E;
+    --accent-lt: #4A8FD4;
+    --text: #1A1A1A;
+    --text2: #6B6B6B;
+    --text3: #ABABAB;
+    --red: #D93025;
+    --red-bg: #FEF2F1;
+    --orange: #E07D00;
+    --orange-bg: #FFF8EE;
+    --green: #1A7F37;
+    --green-bg: #EDFAF1;
+    --blue: #1B5E9E;
+    --blue-bg: #EDF4FD;
+    --purple: #6B3FA0;
+    --purple-bg: #F3EEFA;
+    --teal: #0E7490;
+    --teal-bg: #ECFAFA;
+    --sidebar-w: 230px;
+    --header-h: 64px;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif; background: var(--sidebar-bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  /* ── App Shell ──────────────────────────────────────────────────────── */
+  #app { display: flex; height: 100vh; height: 100dvh; padding-top: var(--safe-top); }
+
+  /* ── Sidebar ────────────────────────────────────────────────────────── */
+  #sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 20px 12px 20px; overflow-y: auto; z-index: 10; }
+  #sidebar-title { font-size: 22px; font-weight: 700; color: #FFFFFF; padding: 8px 8px 20px; letter-spacing: -0.3px; }
+  .nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 10px 8px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; margin-bottom: 2px; color: var(--sidebar-text); font-size: 14px; font-weight: 500; transition: background 0.15s, color 0.15s; position: relative; text-decoration: none; }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: var(--sidebar-active); color: var(--sidebar-active-text); }
+  .nav-item .nav-icon { width: 20px; text-align: center; font-size: 15px; opacity: 0.8; }
+  .nav-item.active .nav-icon { opacity: 1; color: var(--sidebar-icon-active); }
+  .nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+  .nav-badge.blue { background: var(--accent); }
+  .nav-badge.purple { background: var(--purple); }
+  .nav-sep { height: 1px; background: rgba(255,255,255,0.08); margin: 8px 4px; }
+  #sidebar-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+  #sidebar-footer .nav-item { font-size: 13px; }
+
+  /* ── Main Content ───────────────────────────────────────────────────── */
+  #main { flex: 1; min-width: 0; background: var(--app-bg); display: flex; flex-direction: column; overflow: hidden; border-radius: 16px 0 0 16px; }
+
+  /* ── Screen ──────────────────────────────────────────────────────────── */
+  .screen { display: none; flex-direction: column; height: 100%; }
+  .screen.active { display: flex; }
+
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  .screen-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: var(--header-h); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .screen-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
+  .screen-header .subtitle { font-size: 13px; color: var(--text2); margin-top: 1px; }
+  .header-left { display: flex; flex-direction: column; gap: 0; }
+
+  /* ── Content area ────────────────────────────────────────────────────── */
+  .screen-content { flex: 1; overflow-y: auto; padding: 20px 24px 24px; }
+  .screen-content::-webkit-scrollbar { width: 6px; }
+  .screen-content::-webkit-scrollbar-track { background: transparent; }
+  .screen-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s, transform 0.1s; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost { background: transparent; color: var(--accent); }
+  .btn-danger { background: var(--red-bg); color: var(--red); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); font-size: 14px; }
+
+  /* ── Cards ───────────────────────────────────────────────────────────── */
+  .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); padding: 16px; margin-bottom: 10px; }
+  .card-compact { padding: 12px 16px; }
+  .card-row { display: flex; align-items: center; gap: 12px; }
+  .card-title { font-size: 15px; font-weight: 600; color: var(--text); line-height: 1.3; }
+  .card-meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
+  .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+  /* ── Tags / Badges ────────────────────────────────────────────────────── */
+  .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .tag-task { background: var(--blue-bg); color: var(--blue); }
+  .tag-decision { background: var(--purple-bg); color: var(--purple); }
+  .tag-followup { background: var(--orange-bg); color: var(--orange); }
+  .tag-risk { background: var(--red-bg); color: var(--red); }
+  .tag-waiting { background: var(--teal-bg); color: var(--teal); }
+  .tag-action { background: var(--green-bg); color: var(--green); }
+  .tag-info { background: var(--blue-bg); color: var(--blue); }
+  .pri-high { background: var(--red-bg); color: var(--red); }
+  .pri-medium { background: var(--orange-bg); color: var(--orange); }
+  .pri-low { background: var(--surface2); color: var(--text2); }
+  .due-overdue { color: var(--red); font-weight: 600; }
+  .due-today { color: var(--orange); font-weight: 600; }
+  .due-normal { color: var(--text2); }
+
+  /* ── Section Headers ──────────────────────────────────────────────────── */
+  .section-header { display: flex; align-items: center; gap: 8px; margin: 16px 0 10px; }
+  .section-header h2 { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text2); }
+  .section-count { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 8px; color: #fff; }
+
+  /* ── Empty State ──────────────────────────────────────────────────────── */
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--text2); }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; font-weight: 500; }
+  .empty-state small { font-size: 13px; color: var(--text3); }
+
+  /* ── Today Screen ─────────────────────────────────────────────────────── */
+  #today-focus-block { background: linear-gradient(135deg, #EBF3FD, #F0F6FF); border: 1px solid #C8DEF5; border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+  #today-focus-block .focus-icon { font-size: 28px; }
+  #today-focus-block .focus-text small { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 4px; }
+  #today-focus-block .focus-text p { font-size: 15px; font-weight: 600; color: var(--text); }
+  .priority-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 6px; }
+  .priority-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); padding: 14px; cursor: pointer; transition: box-shadow 0.15s; }
+  .priority-card:hover { box-shadow: var(--shadow-md); }
+  .priority-card .card-tags { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .priority-card .card-title { font-size: 14px; }
+  .priority-card .card-due { font-size: 11px; margin-top: 8px; }
+
+  /* ── Split view (Capture / Projects etc) ────────────────────────────── */
+  .split-view { display: flex; flex: 1; overflow: hidden; }
+  .split-left { width: 38%; min-width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .split-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .split-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; }
+  .split-panel-header h3 { font-size: 14px; font-weight: 600; }
+  .split-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* ── Form styles ──────────────────────────────────────────────────────── */
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  input[type=text], input[type=date], textarea, select { width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); font-size: 14px; color: var(--text); outline: none; font-family: inherit; transition: border-color 0.15s; }
+  input[type=text]:focus, input[type=date]:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.1); }
+  textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+  select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B6B6B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row .form-group { flex: 1; }
+
+  /* ── Modal ────────────────────────────────────────────────────────────── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 16px; padding: 24px; width: 560px; max-width: calc(100vw - 48px); max-height: calc(100vh - 80px); overflow-y: auto; box-shadow: var(--shadow-md); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .modal-header h2 { font-size: 18px; font-weight: 700; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text2); padding: 4px; border-radius: 4px; }
+
+  /* ── Capture screen ───────────────────────────────────────────────────── */
+  .capture-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; margin-bottom: 12px; }
+  .capture-drop-zone:hover, .capture-drop-zone.drag-over { border-color: var(--accent); background: var(--blue-bg); }
+  .capture-drop-zone .drop-icon { font-size: 32px; margin-bottom: 8px; }
+  .capture-drop-zone p { font-size: 14px; color: var(--text2); }
+  .capture-drop-zone small { font-size: 12px; color: var(--text3); }
+  .capture-queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; display: flex; align-items: center; gap: 10px; }
+  .capture-queue-item:hover { border-color: var(--accent); }
+  .capture-queue-item.selected { border-color: var(--accent); background: var(--blue-bg); }
+  .capture-queue-item .cq-thumb { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .capture-queue-item .cq-info { flex: 1; min-width: 0; }
+  .capture-queue-item .cq-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .capture-queue-item .cq-status { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.pending { background: var(--text3); }
+  .status-dot.processing { background: var(--orange); }
+  .status-dot.done { background: var(--green); }
+
+  /* result items in OCR review */
+  .result-item { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px; }
+  .result-item input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+  .result-item-content { flex: 1; min-width: 0; }
+  .result-item-content .ri-title { font-size: 13px; font-weight: 500; }
+  .result-item-content .ri-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+
+  /* ── Projects screen ──────────────────────────────────────────────────── */
+  .project-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; transition: box-shadow 0.15s; display: flex; align-items: center; gap: 12px; }
+  .project-item:hover { box-shadow: var(--shadow); }
+  .project-item.selected { border-color: var(--accent); background: var(--blue-bg); }
+  .project-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .project-info { flex: 1; min-width: 0; }
+  .project-name { font-size: 14px; font-weight: 600; }
+  .project-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .project-count { font-size: 12px; color: var(--text2); }
+  .detail-section { margin-bottom: 20px; }
+  .detail-section h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin-bottom: 8px; }
+
+  /* ── People screen ────────────────────────────────────────────────────── */
+  .person-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+  .person-item:hover { box-shadow: var(--shadow); }
+  .person-item.selected { border-color: var(--accent); background: var(--blue-bg); }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+
+  /* ── Decisions screen ─────────────────────────────────────────────────── */
+  .decision-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; }
+  .decision-item:hover { box-shadow: var(--shadow); }
+  .decision-item.selected { border-color: var(--accent); background: var(--blue-bg); }
+
+  /* ── Search ───────────────────────────────────────────────────────────── */
+  .search-bar-wrap { display: flex; gap: 8px; margin-bottom: 16px; }
+  #search-input { flex: 1; padding: 10px 14px; border-radius: 22px; border: 1px solid var(--border); background: var(--surface); font-size: 15px; }
+  .search-result-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+  .search-result-item:hover { border-color: var(--accent); }
+  .search-result-item .sr-title { font-size: 14px; font-weight: 500; }
+  .search-result-item .sr-meta { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+  /* ── Review screen ───────────────────────────────────────────────────── */
+  .review-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+  .review-section-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .review-section-body { padding: 12px 16px; }
+  .review-check-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .review-check-item:last-child { border-bottom: none; }
+  .review-check-item input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .review-check-item span { font-size: 14px; }
+  .review-check-item.done span { text-decoration: line-through; color: var(--text2); }
+
+  /* ── Settings ──────────────────────────────────────────────────────────── */
+  .settings-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+  .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-label { font-size: 14px; font-weight: 500; }
+  .settings-row-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .toggle { width: 46px; height: 28px; border-radius: 14px; background: var(--border); position: relative; cursor: pointer; border: none; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--green); }
+  .toggle::after { content: ''; position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: left 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+  .toggle.on::after { left: 21px; }
+  .settings-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text2); padding: 0 0 8px; }
+
+  /* ── Inbox ──────────────────────────────────────────────────────────────── */
+  .inbox-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; }
+  .inbox-item:hover { box-shadow: var(--shadow); border-color: var(--accent-lt); }
+  .inbox-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .inbox-item-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .inbox-item-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Work Item detail ───────────────────────────────────────────────────── */
+  #detail-panel { display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+  #detail-panel h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; line-height: 1.3; }
+  .detail-field { margin-bottom: 14px; }
+  .detail-field label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); display: block; margin-bottom: 4px; }
+  .detail-field .value { font-size: 14px; color: var(--text); }
+  .detail-field textarea { width: 100%; }
+
+  /* ── Notification toast ──────────────────────────────────────────────────── */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: #1A1A1A; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; }
+  #toast.show { opacity: 1; }
+
+  /* ── Mobile hamburger (small screens) ─────────────────────────────────── */
+  #menu-btn { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text); padding: 4px 8px; }
+  #sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9; }
+
+  @media (max-width: 768px) {
+    #sidebar { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); transition: transform 0.25s; z-index: 10; border-radius: 0; }
+    #sidebar.open { transform: translateX(0); }
+    #sidebar-overlay.open { display: block; }
+    #menu-btn { display: block; }
+    #main { border-radius: 0; }
+    .priority-cards { grid-template-columns: 1fr; }
+    .split-view { flex-direction: column; }
+    .split-left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); max-height: 240px; }
+  }
+
+  /* ── Inline edit ─────────────────────────────────────────────────────────── */
+  .editable { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+  .editable:hover { background: var(--surface2); }
+  .checkbox-done { text-decoration: line-through; color: var(--text2); opacity: 0.7; }
+  .work-item-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .work-item-row:last-child { border-bottom: none; }
+  .work-item-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; }
+  .work-item-row .wi-title { flex: 1; font-size: 14px; }
+  .work-item-row .wi-title.done { text-decoration: line-through; color: var(--text2); }
+
+  /* scrollable tag row */
+  .tag-row { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* progress bar */
+  .progress-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 6px; }
+  .progress-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+
+  /* ─ quick capture floating btn ─ */
+  #fab { position: fixed; bottom: 28px; right: 28px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 24px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(27,94,158,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; transition: transform 0.15s; }
+  #fab:active { transform: scale(0.93); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div id="sidebar-title">Cadence</div>
+
+    <div class="nav-section-label">Day</div>
+    <a class="nav-item active" data-screen="today">
+      <span class="nav-icon">☀</span> Today
+    </a>
+    <a class="nav-item" data-screen="capture">
+      <span class="nav-icon">⊡</span> Capture
+    </a>
+    <a class="nav-item" data-screen="inbox">
+      <span class="nav-icon">↓</span> Inbox
+      <span class="nav-badge" id="badge-inbox">0</span>
+    </a>
+
+    <div class="nav-sep"></div>
+    <div class="nav-section-label">Work</div>
+    <a class="nav-item" data-screen="projects">
+      <span class="nav-icon">▤</span> Projects
+    </a>
+    <a class="nav-item" data-screen="people">
+      <span class="nav-icon">✦</span> People
+      <span class="nav-badge blue" id="badge-people" style="display:none"></span>
+    </a>
+    <a class="nav-item" data-screen="decisions">
+      <span class="nav-icon">⚖</span> Decisions
+      <span class="nav-badge purple" id="badge-decisions">0</span>
+    </a>
+
+    <div class="nav-sep"></div>
+    <div id="sidebar-footer">
+      <a class="nav-item" data-screen="review">
+        <span class="nav-icon">✓</span> Review
+      </a>
+      <a class="nav-item" data-screen="search">
+        <span class="nav-icon">⌕</span> Search
+      </a>
+      <a class="nav-item" data-screen="settings">
+        <span class="nav-icon">⚙</span> Settings
+      </a>
+    </div>
+  </nav>
+  <div id="sidebar-overlay"></div>
+
+  <!-- ── Main ──────────────────────────────────────────────────────────── -->
+  <div id="main">
+    <div class="screen-header">
+      <button id="menu-btn">☰</button>
+      <div class="header-left">
+        <h1 id="screen-title">Today</h1>
+        <div class="subtitle" id="screen-subtitle"></div>
+      </div>
+      <div id="header-actions"></div>
+    </div>
+
+    <!-- ── TODAY ──────────────────────────────────────────────────────── -->
+    <div class="screen active" id="screen-today">
+      <div class="screen-content">
+        <div id="today-focus-block">
+          <div class="focus-icon">🧠</div>
+          <div class="focus-text">
+            <small>Suggested Focus</small>
+            <p id="focus-text">Add items to see your top priority here</p>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h2>Top 3 Priorities</h2>
+          <span class="section-count" style="background:var(--accent)" id="count-top3">0</span>
+        </div>
+        <div class="priority-cards" id="top3-cards"></div>
+
+        <div class="section-header">
+          <h2>Overdue</h2>
+          <span class="section-count" style="background:var(--red)" id="count-overdue">0</span>
+        </div>
+        <div id="overdue-list"></div>
+
+        <div class="section-header">
+          <h2>Waiting on Others</h2>
+          <span class="section-count" style="background:var(--purple)" id="count-waiting">0</span>
+        </div>
+        <div id="waiting-list"></div>
+
+        <div class="section-header">
+          <h2>Decisions Needed</h2>
+          <span class="section-count" style="background:var(--purple)" id="count-decisions">0</span>
+        </div>
+        <div id="decisions-today-list"></div>
+
+        <div class="section-header">
+          <h2>Due Today</h2>
+          <span class="section-count" style="background:var(--orange)" id="count-due-today">0</span>
+        </div>
+        <div id="due-today-list"></div>
+      </div>
+    </div>
+
+    <!-- ── CAPTURE ──────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-capture">
+      <div class="split-view">
+        <div class="split-left">
+          <div class="split-panel-header">
+            <h3>Screenshot Queue</h3>
+            <button class="btn btn-primary btn-sm" id="btn-import-screenshot">+ Add</button>
+          </div>
+          <div class="split-panel-body" id="capture-queue"></div>
+        </div>
+        <div class="split-right">
+          <div class="split-panel-header">
+            <h3 id="capture-right-title">Select a screenshot</h3>
+            <div id="capture-right-actions"></div>
+          </div>
+          <div class="split-panel-body" id="capture-right-body">
+            <div class="capture-drop-zone" id="capture-drop-zone">
+              <div class="drop-icon">📷</div>
+              <p>Drop screenshots here or tap "Add"</p>
+              <small>Text is extracted locally — nothing leaves your device</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="file-input" accept="image/*" multiple style="display:none">
+    </div>
+
+    <!-- ── INBOX ──────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-inbox">
+      <div class="screen-content">
+        <div id="inbox-list"></div>
+      </div>
+    </div>
+
+    <!-- ── PROJECTS ────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-projects">
+      <div class="split-view">
+        <div class="split-left">
+          <div class="split-panel-header">
+            <h3>Projects</h3>
+            <button class="btn btn-primary btn-sm" onclick="openAddProject()">+ New</button>
+          </div>
+          <div class="split-panel-body" id="projects-list"></div>
+        </div>
+        <div class="split-right">
+          <div class="split-panel-header">
+            <h3 id="project-detail-title">Select a project</h3>
+            <div id="project-detail-actions"></div>
+          </div>
+          <div class="split-panel-body" id="project-detail-body">
+            <div class="empty-state"><div class="icon">▤</div><p>Select a project</p><small>Or create a new one</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PEOPLE ──────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-people">
+      <div class="split-view">
+        <div class="split-left">
+          <div class="split-panel-header">
+            <h3>People</h3>
+            <button class="btn btn-primary btn-sm" onclick="openAddPerson()">+ Add</button>
+          </div>
+          <div class="split-panel-body" id="people-list"></div>
+        </div>
+        <div class="split-right">
+          <div class="split-panel-header">
+            <h3 id="person-detail-title">Select a person</h3>
+            <div id="person-detail-actions"></div>
+          </div>
+          <div class="split-panel-body" id="person-detail-body">
+            <div class="empty-state"><div class="icon">✦</div><p>Select a person</p><small>Track follow-ups and waiting items</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DECISIONS ──────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-decisions">
+      <div class="screen-content">
+        <div id="decisions-list"></div>
+      </div>
+    </div>
+
+    <!-- ── REVIEW ──────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-review">
+      <div class="screen-content" id="review-content"></div>
+    </div>
+
+    <!-- ── SEARCH ──────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-search">
+      <div class="screen-content">
+        <div class="search-bar-wrap">
+          <input type="text" id="search-input" placeholder="Search everything…" autocomplete="off">
+        </div>
+        <div id="search-results"></div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ─────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-settings">
+      <div class="screen-content">
+        <div id="settings-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FAB ────────────────────────────────────────────────────────────────── -->
+<button id="fab" title="Quick Capture" onclick="openQuickCapture()">+</button>
+
+<!-- ── Modals ─────────────────────────────────────────────────────────────── -->
+
+<!-- Add/Edit Work Item -->
+<div class="modal-overlay" id="modal-workitem">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-workitem-title">New Item</h2>
+      <button class="modal-close" onclick="closeModal('modal-workitem')">✕</button>
+    </div>
+    <input type="hidden" id="wi-id">
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" id="wi-title" placeholder="What needs to happen?" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="wi-type">
+          <option value="task">Task</option>
+          <option value="decision">Decision</option>
+          <option value="followUp">Follow Up</option>
+          <option value="waitingFor">Waiting For</option>
+          <option value="risk">Risk</option>
+          <option value="action">Meeting Action</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="wi-priority">
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="date" id="wi-due">
+      </div>
+      <div class="form-group">
+        <label>Project</label>
+        <select id="wi-project"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Person (waiting on / follow up with)</label>
+      <select id="wi-person"></select>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="wi-notes" placeholder="Context, links, details…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-workitem')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWorkItem()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Project -->
+<div class="modal-overlay" id="modal-project">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-project-title">New Project</h2>
+      <button class="modal-close" onclick="closeModal('modal-project')">✕</button>
+    </div>
+    <input type="hidden" id="proj-id">
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="proj-name" placeholder="Project name" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Goal / Outcome</label>
+      <textarea id="proj-goal" placeholder="What does done look like?"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Status</label>
+        <select id="proj-status">
+          <option value="active">Active</option>
+          <option value="onHold">On Hold</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Colour</label>
+        <select id="proj-color">
+          <option value="#1B5E9E">Blue</option>
+          <option value="#6B3FA0">Purple</option>
+          <option value="#1A7F37">Green</option>
+          <option value="#E07D00">Orange</option>
+          <option value="#D93025">Red</option>
+          <option value="#0E7490">Teal</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-project')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProject()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Person -->
+<div class="modal-overlay" id="modal-person">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-person-title">Add Person</h2>
+      <button class="modal-close" onclick="closeModal('modal-person')">✕</button>
+    </div>
+    <input type="hidden" id="per-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="per-name" placeholder="Full name" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <input type="text" id="per-role" placeholder="e.g. CFO, Lead Dev" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="per-notes" placeholder="Context about this person…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePerson()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Capture -->
+<div class="modal-overlay" id="modal-quick">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Quick Capture</h2>
+      <button class="modal-close" onclick="closeModal('modal-quick')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>What's on your mind?</label>
+      <textarea id="quick-text" rows="4" placeholder="Brain dump — classify later in Inbox…" autofocus></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="quick-type">
+          <option value="task">Task</option>
+          <option value="decision">Decision</option>
+          <option value="followUp">Follow Up</option>
+          <option value="waitingFor">Waiting For</option>
+          <option value="risk">Risk</option>
+          <option value="action">Meeting Action</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="quick-priority">
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-quick')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuickCapture()">Add to Inbox</button>
+    </div>
+  </div>
+</div>
+
+<!-- Decision detail -->
+<div class="modal-overlay" id="modal-decision">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-decision-title">Decision</h2>
+      <button class="modal-close" onclick="closeModal('modal-decision')">✕</button>
+    </div>
+    <input type="hidden" id="dec-id">
+    <div class="form-group">
+      <label>Decision Title</label>
+      <input type="text" id="dec-title" autocomplete="off">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Status</label>
+        <select id="dec-status">
+          <option value="pending">Pending</option>
+          <option value="decided">Decided</option>
+          <option value="deferred">Deferred</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="date" id="dec-due">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Context</label>
+      <textarea id="dec-context" placeholder="What are the options? What's at stake?"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Outcome (once decided)</label>
+      <textarea id="dec-outcome" placeholder="What was decided and why?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-decision')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDecision()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const DB_KEY = 'cadence_v1';
+
+function loadDB() {
+  try { return JSON.parse(localStorage.getItem(DB_KEY)) || defaultDB(); }
+  catch { return defaultDB(); }
+}
+
+function defaultDB() {
+  return {
+    workItems: [],
+    projects: [],
+    people: [],
+    decisions: [],
+    captures: [],
+    settings: {
+      userName: '',
+      dailyReviewTime: '08:00',
+      weeklyReviewDay: 'friday',
+      focusHours: 3
+    }
+  };
+}
+
+function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+let db = loadDB();
+let currentScreen = 'today';
+let selectedProjectId = null;
+let selectedPersonId = null;
+let selectedCaptureId = null;
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function today() { return new Date().toISOString().slice(0,10); }
+
+function fmtDate(d) {
+  if (!d) return '';
+  const t = new Date(d + 'T00:00:00');
+  const now = new Date(); now.setHours(0,0,0,0);
+  const diff = Math.round((t - now) / 86400000);
+  if (diff < 0) return `Overdue ${Math.abs(diff)}d`;
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff < 7) return `${diff}d`;
+  return t.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+}
+
+function isOverdue(d) { return d && d < today(); }
+function isDueToday(d) { return d === today(); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════════════════════════════════
+const SCREEN_TITLES = {
+  today: 'Today', capture: 'Capture', inbox: 'Inbox',
+  projects: 'Projects', people: 'People', decisions: 'Decisions',
+  review: 'Weekly Review', search: 'Search', settings: 'Settings'
+};
+
+function navigate(screen) {
+  currentScreen = screen;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.screen === screen);
+  });
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  document.getElementById('screen-title').textContent = SCREEN_TITLES[screen];
+
+  const headerActions = document.getElementById('header-actions');
+  headerActions.innerHTML = '';
+
+  const today_date_el = document.getElementById('screen-subtitle');
+  today_date_el.textContent = '';
+
+  if (screen === 'today') {
+    const d = new Date();
+    today_date_el.textContent = d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    headerActions.innerHTML = `<button class="btn btn-primary" onclick="openAddItem()">+ Quick Add</button>`;
+    renderToday();
+  } else if (screen === 'inbox') {
+    headerActions.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="processAllInbox()">Process All</button>`;
+    renderInbox();
+  } else if (screen === 'capture') {
+    renderCapture();
+  } else if (screen === 'projects') {
+    renderProjectsList();
+  } else if (screen === 'people') {
+    renderPeopleList();
+  } else if (screen === 'decisions') {
+    headerActions.innerHTML = `<button class="btn btn-primary" onclick="openAddDecision()">+ New Decision</button>`;
+    renderDecisions();
+  } else if (screen === 'review') {
+    renderReview();
+  } else if (screen === 'search') {
+    setTimeout(() => document.getElementById('search-input').focus(), 100);
+    renderSearchResults('');
+  } else if (screen === 'settings') {
+    renderSettings();
+  }
+
+  // close mobile sidebar
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+  updateBadges();
+}
+
+document.querySelectorAll('.nav-item[data-screen]').forEach(el => {
+  el.addEventListener('click', e => { e.preventDefault(); navigate(el.dataset.screen); });
+});
+
+document.getElementById('menu-btn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+});
+document.getElementById('sidebar-overlay').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BADGES
+// ═══════════════════════════════════════════════════════════════════════════
+function updateBadges() {
+  const inboxCount = db.workItems.filter(w => !w.done && !w.projectId && w.inboxed).length;
+  const el = document.getElementById('badge-inbox');
+  el.textContent = inboxCount;
+  el.style.display = inboxCount > 0 ? '' : 'none';
+
+  const pendingDec = db.decisions.filter(d => d.status === 'pending').length;
+  const del = document.getElementById('badge-decisions');
+  del.textContent = pendingDec;
+  del.style.display = pendingDec > 0 ? '' : 'none';
+
+  const waiting = db.workItems.filter(w => !w.done && w.type === 'waitingFor').length;
+  const pel = document.getElementById('badge-people');
+  pel.textContent = waiting;
+  pel.style.display = waiting > 0 ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TODAY
+// ═══════════════════════════════════════════════════════════════════════════
+function priorityScore(w) {
+  let s = 0;
+  if (isOverdue(w.dueDate)) s += 100;
+  else if (isDueToday(w.dueDate)) s += 50;
+  if (w.priority === 'high') s += 60;
+  else if (w.priority === 'medium') s += 40;
+  else s += 20;
+  if (w.type === 'decision' || w.type === 'risk') s += 15;
+  return s;
+}
+
+function typeTag(type) {
+  const map = {
+    task: ['Task', 'tag-task'],
+    decision: ['Decision', 'tag-decision'],
+    followUp: ['Follow Up', 'tag-followup'],
+    waitingFor: ['Waiting For', 'tag-waiting'],
+    risk: ['Risk', 'tag-risk'],
+    action: ['Action', 'tag-action'],
+  };
+  const [label, cls] = map[type] || ['Task', 'tag-task'];
+  return `<span class="tag ${cls}">${label}</span>`;
+}
+
+function priTag(p) {
+  const map = { high: 'pri-high', medium: 'pri-medium', low: 'pri-low' };
+  return `<span class="tag ${map[p] || 'pri-low'}">${p[0].toUpperCase()+p.slice(1)}</span>`;
+}
+
+function dueLabel(d) {
+  if (!d) return '';
+  const f = fmtDate(d);
+  const cls = isOverdue(d) ? 'due-overdue' : (isDueToday(d) ? 'due-today' : 'due-normal');
+  return `<span class="${cls}">${f}</span>`;
+}
+
+function renderToday() {
+  const active = db.workItems.filter(w => !w.done);
+  const scored = active.map(w => ({...w, score: priorityScore(w)}) ).sort((a,b) => b.score - a.score);
+
+  // top 3
+  const top3 = scored.slice(0,3);
+  const top3El = document.getElementById('top3-cards');
+  document.getElementById('count-top3').textContent = top3.length;
+  if (top3.length === 0) {
+    top3El.innerHTML = '<div class="empty-state"><div class="icon">✓</div><p>All clear!</p></div>';
+  } else {
+    top3El.innerHTML = top3.map(w => `
+      <div class="priority-card" onclick="openEditItem('${w.id}')">
+        <div class="card-tags">
+          ${typeTag(w.type)}
+          ${priTag(w.priority)}
+        </div>
+        <div class="card-title">${esc(w.title)}</div>
+        ${w.dueDate ? `<div class="card-due">${dueLabel(w.dueDate)}</div>` : ''}
+      </div>`).join('');
+    document.getElementById('focus-text').textContent = top3[0].title;
+  }
+
+  // overdue
+  const overdue = active.filter(w => isOverdue(w.dueDate));
+  document.getElementById('count-overdue').textContent = overdue.length;
+  document.getElementById('overdue-list').innerHTML = overdue.length === 0
+    ? '<div class="empty-state" style="padding:16px"><small>None — great!</small></div>'
+    : overdue.map(w => rowCard(w)).join('');
+
+  // waiting
+  const waiting = active.filter(w => w.type === 'waitingFor');
+  document.getElementById('count-waiting').textContent = waiting.length;
+  document.getElementById('waiting-list').innerHTML = waiting.length === 0
+    ? '<div class="empty-state" style="padding:16px"><small>Nothing waiting</small></div>'
+    : waiting.map(w => rowCard(w)).join('');
+
+  // decisions
+  const decs = db.decisions.filter(d => d.status === 'pending');
+  document.getElementById('count-decisions').textContent = decs.length;
+  document.getElementById('decisions-today-list').innerHTML = decs.length === 0
+    ? '<div class="empty-state" style="padding:16px"><small>No pending decisions</small></div>'
+    : decs.map(d => `
+      <div class="card card-compact" onclick="openEditDecision('${d.id}')">
+        <div class="card-row">
+          <span class="tag tag-decision">Decision</span>
+          <span class="card-title" style="flex:1">${esc(d.title)}</span>
+          ${d.dueDate ? dueLabel(d.dueDate) : ''}
+        </div>
+      </div>`).join('');
+
+  // due today
+  const dueToday = active.filter(w => isDueToday(w.dueDate) && w.type !== 'waitingFor');
+  document.getElementById('count-due-today').textContent = dueToday.length;
+  document.getElementById('due-today-list').innerHTML = dueToday.length === 0
+    ? '<div class="empty-state" style="padding:16px"><small>Nothing else due today</small></div>'
+    : dueToday.map(w => rowCard(w)).join('');
+}
+
+function rowCard(w) {
+  const proj = w.projectId ? db.projects.find(p => p.id === w.projectId) : null;
+  return `<div class="card card-compact" onclick="openEditItem('${w.id}')">
+    <div class="card-row">
+      <input type="checkbox" ${w.done?'checked':''} onclick="event.stopPropagation();toggleDone('${w.id}',this)">
+      <div style="flex:1">
+        <div class="card-title ${w.done?'checkbox-done':''}">${esc(w.title)}</div>
+        <div class="card-meta tag-row" style="margin-top:4px">
+          ${typeTag(w.type)} ${priTag(w.priority)}
+          ${proj ? `<span class="tag tag-info">${esc(proj.name)}</span>` : ''}
+          ${w.dueDate ? dueLabel(w.dueDate) : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleDone(id, cb) {
+  const w = db.workItems.find(w => w.id === id);
+  if (!w) return;
+  w.done = cb.checked;
+  w.completedAt = cb.checked ? new Date().toISOString() : null;
+  saveDB(); updateBadges();
+  if (currentScreen === 'today') renderToday();
+  else if (currentScreen === 'inbox') renderInbox();
+  toast(cb.checked ? 'Marked done ✓' : 'Reopened');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INBOX
+// ═══════════════════════════════════════════════════════════════════════════
+function renderInbox() {
+  const items = db.workItems.filter(w => w.inboxed && !w.done);
+  const el = document.getElementById('inbox-list');
+  if (items.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">✓</div><p>Inbox zero!</p><small>Captured items appear here for processing</small></div>';
+    return;
+  }
+  el.innerHTML = items.map(w => `
+    <div class="inbox-item">
+      <div class="inbox-item-header">
+        <div class="inbox-item-title">${esc(w.title)}</div>
+        <div class="inbox-item-meta">
+          ${typeTag(w.type)} ${priTag(w.priority)}
+        </div>
+      </div>
+      ${w.notes ? `<div class="card-meta" style="margin-bottom:8px">${esc(w.notes).slice(0,120)}${w.notes.length>120?'…':''}</div>` : ''}
+      <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openEditItem('${w.id}')">Edit & File</button>
+        <button class="btn btn-sm" style="background:var(--green-bg);color:var(--green)" onclick="fileItem('${w.id}')">✓ File</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem('${w.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function fileItem(id) {
+  const w = db.workItems.find(w => w.id === id);
+  if (!w) return;
+  w.inboxed = false;
+  saveDB(); updateBadges(); renderInbox();
+  toast('Filed');
+}
+
+function processAllInbox() {
+  db.workItems.filter(w => w.inboxed && !w.done).forEach(w => w.inboxed = false);
+  saveDB(); updateBadges(); renderInbox();
+  toast('Inbox cleared');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WORK ITEMS CRUD
+// ═══════════════════════════════════════════════════════════════════════════
+function openAddItem(opts = {}) {
+  document.getElementById('wi-id').value = '';
+  document.getElementById('wi-title').value = opts.title || '';
+  document.getElementById('wi-notes').value = opts.notes || '';
+  document.getElementById('wi-due').value = '';
+  populateProjectSelect('wi-project', opts.projectId || '');
+  populatePersonSelect('wi-person', opts.personId || '');
+  const typeEl = document.getElementById('wi-type');
+  typeEl.value = opts.type || 'task';
+  document.getElementById('wi-priority').value = opts.priority || 'medium';
+  document.getElementById('modal-workitem-title').textContent = 'New Item';
+  openModal('modal-workitem');
+  setTimeout(() => document.getElementById('wi-title').focus(), 100);
+}
+
+function openEditItem(id) {
+  const w = db.workItems.find(w => w.id === id);
+  if (!w) return;
+  document.getElementById('wi-id').value = w.id;
+  document.getElementById('wi-title').value = w.title;
+  document.getElementById('wi-notes').value = w.notes || '';
+  document.getElementById('wi-due').value = w.dueDate || '';
+  populateProjectSelect('wi-project', w.projectId || '');
+  populatePersonSelect('wi-person', w.personId || '');
+  document.getElementById('wi-type').value = w.type || 'task';
+  document.getElementById('wi-priority').value = w.priority || 'medium';
+  document.getElementById('modal-workitem-title').textContent = 'Edit Item';
+  openModal('modal-workitem');
+}
+
+function saveWorkItem() {
+  const id = document.getElementById('wi-id').value;
+  const title = document.getElementById('wi-title').value.trim();
+  if (!title) { alert('Please enter a title'); return; }
+  const item = {
+    id: id || uid(),
+    title,
+    type: document.getElementById('wi-type').value,
+    priority: document.getElementById('wi-priority').value,
+    dueDate: document.getElementById('wi-due').value || null,
+    projectId: document.getElementById('wi-project').value || null,
+    personId: document.getElementById('wi-person').value || null,
+    notes: document.getElementById('wi-notes').value.trim(),
+    done: false,
+    inboxed: !id, // new items go to inbox
+    createdAt: id ? (db.workItems.find(w=>w.id===id)||{}).createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (id) {
+    const idx = db.workItems.findIndex(w => w.id === id);
+    if (idx >= 0) { item.done = db.workItems[idx].done; item.inboxed = db.workItems[idx].inboxed; db.workItems[idx] = item; }
+  } else {
+    db.workItems.push(item);
+  }
+  saveDB(); closeModal('modal-workitem'); updateBadges();
+  toast(id ? 'Saved' : 'Added to Inbox');
+  if (currentScreen === 'today') renderToday();
+  else if (currentScreen === 'inbox') renderInbox();
+  else if (currentScreen === 'projects' && selectedProjectId) renderProjectDetail(selectedProjectId);
+}
+
+function deleteItem(id) {
+  if (!confirm('Delete this item?')) return;
+  db.workItems = db.workItems.filter(w => w.id !== id);
+  saveDB(); updateBadges();
+  if (currentScreen === 'today') renderToday();
+  else if (currentScreen === 'inbox') renderInbox();
+  toast('Deleted');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DECISIONS
+// ═══════════════════════════════════════════════════════════════════════════
+function openAddDecision() {
+  document.getElementById('dec-id').value = '';
+  document.getElementById('dec-title').value = '';
+  document.getElementById('dec-status').value = 'pending';
+  document.getElementById('dec-due').value = '';
+  document.getElementById('dec-context').value = '';
+  document.getElementById('dec-outcome').value = '';
+  document.getElementById('modal-decision-title').textContent = 'New Decision';
+  openModal('modal-decision');
+}
+
+function openEditDecision(id) {
+  const d = db.decisions.find(d => d.id === id);
+  if (!d) return;
+  document.getElementById('dec-id').value = d.id;
+  document.getElementById('dec-title').value = d.title;
+  document.getElementById('dec-status').value = d.status;
+  document.getElementById('dec-due').value = d.dueDate || '';
+  document.getElementById('dec-context').value = d.context || '';
+  document.getElementById('dec-outcome').value = d.outcome || '';
+  document.getElementById('modal-decision-title').textContent = 'Edit Decision';
+  openModal('modal-decision');
+}
+
+function saveDecision() {
+  const id = document.getElementById('dec-id').value;
+  const title = document.getElementById('dec-title').value.trim();
+  if (!title) { alert('Please enter a title'); return; }
+  const item = {
+    id: id || uid(),
+    title,
+    status: document.getElementById('dec-status').value,
+    dueDate: document.getElementById('dec-due').value || null,
+    context: document.getElementById('dec-context').value.trim(),
+    outcome: document.getElementById('dec-outcome').value.trim(),
+    createdAt: id ? (db.decisions.find(d=>d.id===id)||{}).createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (id) {
+    const idx = db.decisions.findIndex(d => d.id === id);
+    if (idx >= 0) db.decisions[idx] = item;
+  } else {
+    db.decisions.push(item);
+  }
+  saveDB(); closeModal('modal-decision'); updateBadges();
+  renderDecisions();
+  toast('Saved');
+}
+
+function renderDecisions() {
+  const el = document.getElementById('decisions-list');
+  if (db.decisions.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">⚖</div><p>No decisions yet</p><small>Track decisions that need to be made</small></div>';
+    return;
+  }
+  const groups = {
+    pending: db.decisions.filter(d => d.status === 'pending'),
+    deferred: db.decisions.filter(d => d.status === 'deferred'),
+    decided: db.decisions.filter(d => d.status === 'decided'),
+  };
+  let html = '';
+  if (groups.pending.length) {
+    html += `<div class="section-header"><h2>Pending</h2><span class="section-count" style="background:var(--purple)">${groups.pending.length}</span></div>`;
+    html += groups.pending.map(d => decCard(d)).join('');
+  }
+  if (groups.deferred.length) {
+    html += `<div class="section-header"><h2>Deferred</h2><span class="section-count" style="background:var(--orange)">${groups.deferred.length}</span></div>`;
+    html += groups.deferred.map(d => decCard(d)).join('');
+  }
+  if (groups.decided.length) {
+    html += `<div class="section-header"><h2>Decided</h2><span class="section-count" style="background:var(--green)">${groups.decided.length}</span></div>`;
+    html += groups.decided.map(d => decCard(d)).join('');
+  }
+  el.innerHTML = html;
+}
+
+function decCard(d) {
+  const statusCls = {pending:'tag-decision', deferred:'tag-followup', decided:'tag-action'};
+  return `<div class="decision-item" onclick="openEditDecision('${d.id}')">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span class="tag ${statusCls[d.status]}">${d.status[0].toUpperCase()+d.status.slice(1)}</span>
+      ${d.dueDate ? dueLabel(d.dueDate) : ''}
+    </div>
+    <div class="card-title">${esc(d.title)}</div>
+    ${d.context ? `<div class="card-meta" style="margin-top:4px">${esc(d.context).slice(0,100)}${d.context.length>100?'…':''}</div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROJECTS
+// ═══════════════════════════════════════════════════════════════════════════
+function openAddProject() {
+  document.getElementById('proj-id').value = '';
+  document.getElementById('proj-name').value = '';
+  document.getElementById('proj-goal').value = '';
+  document.getElementById('proj-status').value = 'active';
+  document.getElementById('proj-color').value = '#1B5E9E';
+  document.getElementById('modal-project-title').textContent = 'New Project';
+  openModal('modal-project');
+}
+
+function openEditProject(id) {
+  const p = db.projects.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('proj-id').value = p.id;
+  document.getElementById('proj-name').value = p.name;
+  document.getElementById('proj-goal').value = p.goal || '';
+  document.getElementById('proj-status').value = p.status || 'active';
+  document.getElementById('proj-color').value = p.color || '#1B5E9E';
+  document.getElementById('modal-project-title').textContent = 'Edit Project';
+  openModal('modal-project');
+}
+
+function saveProject() {
+  const id = document.getElementById('proj-id').value;
+  const name = document.getElementById('proj-name').value.trim();
+  if (!name) { alert('Please enter a project name'); return; }
+  const item = {
+    id: id || uid(),
+    name,
+    goal: document.getElementById('proj-goal').value.trim(),
+    status: document.getElementById('proj-status').value,
+    color: document.getElementById('proj-color').value,
+    createdAt: id ? (db.projects.find(p=>p.id===id)||{}).createdAt : new Date().toISOString(),
+  };
+  if (id) {
+    const idx = db.projects.findIndex(p => p.id === id);
+    if (idx >= 0) db.projects[idx] = item;
+  } else {
+    db.projects.push(item);
+  }
+  saveDB(); closeModal('modal-project');
+  renderProjectsList();
+  if (id && selectedProjectId === id) renderProjectDetail(id);
+  toast('Saved');
+}
+
+function renderProjectsList() {
+  const el = document.getElementById('projects-list');
+  if (db.projects.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">▤</div><p>No projects yet</p></div>';
+    return;
+  }
+  el.innerHTML = db.projects.map(p => {
+    const count = db.workItems.filter(w => w.projectId === p.id && !w.done).length;
+    const done = db.workItems.filter(w => w.projectId === p.id && w.done).length;
+    const total = count + done;
+    const pct = total > 0 ? Math.round(done/total*100) : 0;
+    return `<div class="project-item ${selectedProjectId===p.id?'selected':''}" onclick="selectProject('${p.id}')">
+      <div class="project-dot" style="background:${p.color||'#1B5E9E'}"></div>
+      <div class="project-info">
+        <div class="project-name">${esc(p.name)}</div>
+        <div class="project-meta">${count} open · ${pct}% done</div>
+        <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectProject(id) {
+  selectedProjectId = id;
+  renderProjectsList();
+  renderProjectDetail(id);
+}
+
+function renderProjectDetail(id) {
+  const p = db.projects.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('project-detail-title').textContent = p.name;
+  document.getElementById('project-detail-actions').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="openEditProject('${p.id}')">Edit</button>
+    <button class="btn btn-primary btn-sm" onclick="openAddItem({projectId:'${p.id}'})">+ Add Item</button>`;
+
+  const items = db.workItems.filter(w => w.projectId === id);
+  const open = items.filter(w => !w.done);
+  const closed = items.filter(w => w.done);
+
+  let html = '';
+  if (p.goal) html += `<div class="detail-section"><div class="card-meta" style="font-style:italic">${esc(p.goal)}</div></div>`;
+
+  html += `<div class="detail-section"><h3>Open (${open.length})</h3>`;
+  if (open.length === 0) html += '<div class="card-meta">No open items</div>';
+  else html += open.map(w => workItemRow(w)).join('');
+  html += '</div>';
+
+  if (closed.length > 0) {
+    html += `<div class="detail-section"><h3>Completed (${closed.length})</h3>`;
+    html += closed.map(w => workItemRow(w)).join('');
+    html += '</div>';
+  }
+
+  document.getElementById('project-detail-body').innerHTML = html;
+}
+
+function workItemRow(w) {
+  return `<div class="work-item-row">
+    <input type="checkbox" ${w.done?'checked':''} onclick="toggleDone('${w.id}',this);if(selectedProjectId)setTimeout(()=>renderProjectDetail(selectedProjectId),50)">
+    <span class="wi-title ${w.done?'done':''}">${esc(w.title)}</span>
+    ${typeTag(w.type)}
+    ${w.dueDate ? dueLabel(w.dueDate) : ''}
+    <button class="btn btn-icon" onclick="openEditItem('${w.id}')" style="margin-left:4px">✎</button>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PEOPLE
+// ═══════════════════════════════════════════════════════════════════════════
+function openAddPerson() {
+  document.getElementById('per-id').value = '';
+  document.getElementById('per-name').value = '';
+  document.getElementById('per-role').value = '';
+  document.getElementById('per-notes').value = '';
+  document.getElementById('modal-person-title').textContent = 'Add Person';
+  openModal('modal-person');
+}
+
+function openEditPerson(id) {
+  const p = db.people.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('per-id').value = p.id;
+  document.getElementById('per-name').value = p.name;
+  document.getElementById('per-role').value = p.role || '';
+  document.getElementById('per-notes').value = p.notes || '';
+  document.getElementById('modal-person-title').textContent = 'Edit Person';
+  openModal('modal-person');
+}
+
+function savePerson() {
+  const id = document.getElementById('per-id').value;
+  const name = document.getElementById('per-name').value.trim();
+  if (!name) { alert('Please enter a name'); return; }
+  const item = {
+    id: id || uid(),
+    name,
+    role: document.getElementById('per-role').value.trim(),
+    notes: document.getElementById('per-notes').value.trim(),
+    createdAt: id ? (db.people.find(p=>p.id===id)||{}).createdAt : new Date().toISOString(),
+  };
+  if (id) {
+    const idx = db.people.findIndex(p => p.id === id);
+    if (idx >= 0) db.people[idx] = item;
+  } else {
+    db.people.push(item);
+  }
+  saveDB(); closeModal('modal-person');
+  renderPeopleList();
+  if (id && selectedPersonId === id) renderPersonDetail(id);
+  toast('Saved');
+}
+
+function initials(name) {
+  return name.split(' ').slice(0,2).map(n=>n[0]||'').join('').toUpperCase();
+}
+
+function renderPeopleList() {
+  const el = document.getElementById('people-list');
+  if (db.people.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">✦</div><p>No people yet</p><small>Track follow-ups and waiting items by person</small></div>';
+    return;
+  }
+  el.innerHTML = db.people.map(p => {
+    const waiting = db.workItems.filter(w => !w.done && w.personId === p.id && w.type === 'waitingFor').length;
+    const followup = db.workItems.filter(w => !w.done && w.personId === p.id && w.type === 'followUp').length;
+    return `<div class="person-item ${selectedPersonId===p.id?'selected':''}" onclick="selectPerson('${p.id}')">
+      <div class="avatar">${initials(p.name)}</div>
+      <div class="project-info">
+        <div class="project-name">${esc(p.name)}</div>
+        <div class="project-meta">${p.role ? esc(p.role) + ' · ' : ''}${waiting} waiting · ${followup} follow-ups</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectPerson(id) {
+  selectedPersonId = id;
+  renderPeopleList();
+  renderPersonDetail(id);
+}
+
+function renderPersonDetail(id) {
+  const p = db.people.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('person-detail-title').textContent = p.name;
+  document.getElementById('person-detail-actions').innerHTML = `
+    <button class="btn btn-secondary btn-sm" onclick="openEditPerson('${p.id}')">Edit</button>
+    <button class="btn btn-primary btn-sm" onclick="openAddItem({personId:'${p.id}',type:'followUp'})">+ Follow Up</button>`;
+
+  const items = db.workItems.filter(w => w.personId === id && !w.done);
+  const waiting = items.filter(w => w.type === 'waitingFor');
+  const followups = items.filter(w => w.type === 'followUp');
+  const other = items.filter(w => w.type !== 'waitingFor' && w.type !== 'followUp');
+
+  let html = '';
+  if (p.role) html += `<div class="card-meta" style="margin-bottom:16px">${esc(p.role)}</div>`;
+  if (p.notes) html += `<div class="card" style="margin-bottom:16px"><div class="card-meta">${esc(p.notes)}</div></div>`;
+
+  if (waiting.length) {
+    html += `<div class="detail-section"><h3>Waiting On ${p.name.split(' ')[0]}</h3>`;
+    html += waiting.map(w => workItemRow(w)).join('');
+    html += '</div>';
+  }
+  if (followups.length) {
+    html += `<div class="detail-section"><h3>Follow Ups</h3>`;
+    html += followups.map(w => workItemRow(w)).join('');
+    html += '</div>';
+  }
+  if (other.length) {
+    html += `<div class="detail-section"><h3>Other</h3>`;
+    html += other.map(w => workItemRow(w)).join('');
+    html += '</div>';
+  }
+  if (!waiting.length && !followups.length && !other.length) {
+    html += '<div class="empty-state"><div class="icon">✓</div><p>Nothing pending with this person</p></div>';
+  }
+
+  document.getElementById('person-detail-body').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAPTURE (text-based OCR simulation on desktop / image preview on iPad)
+// ═══════════════════════════════════════════════════════════════════════════
+function renderCapture() {
+  const el = document.getElementById('capture-queue');
+  if (db.captures.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px 12px"><small>No screenshots yet. Tap "+ Add" to import.</small></div>';
+  } else {
+    el.innerHTML = db.captures.map(c => `
+      <div class="capture-queue-item ${selectedCaptureId===c.id?'selected':''}" onclick="selectCapture('${c.id}')">
+        <div class="cq-thumb">${c.thumb ? `<img src="${c.thumb}" style="width:44px;height:44px;object-fit:cover;border-radius:6px">` : '📷'}</div>
+        <div class="cq-info">
+          <div class="cq-name">${esc(c.name)}</div>
+          <div class="cq-status">${c.itemsExtracted ? `${c.itemsExtracted} items extracted` : 'Not yet processed'}</div>
+        </div>
+        <div class="status-dot ${c.processed?'done':'pending'}"></div>
+      </div>`).join('');
+  }
+  if (selectedCaptureId) selectCapture(selectedCaptureId);
+}
+
+document.getElementById('btn-import-screenshot').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const files = Array.from(e.target.files);
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const cap = {
+        id: uid(),
+        name: f.name,
+        thumb: ev.target.result,
+        text: '',
+        processed: false,
+        itemsExtracted: 0,
+        createdAt: new Date().toISOString(),
+      };
+      db.captures.push(cap);
+      saveDB();
+      renderCapture();
+      selectCapture(cap.id);
+    };
+    reader.readAsDataURL(f);
+  });
+  e.target.value = '';
+});
+
+// drop zone
+const dropZone = document.getElementById('capture-drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')).forEach(f => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const cap = { id:uid(), name:f.name, thumb:ev.target.result, text:'', processed:false, itemsExtracted:0, createdAt:new Date().toISOString() };
+      db.captures.push(cap); saveDB(); renderCapture(); selectCapture(cap.id);
+    };
+    reader.readAsDataURL(f);
+  });
+});
+
+function selectCapture(id) {
+  selectedCaptureId = id;
+  const cap = db.captures.find(c => c.id === id);
+  if (!cap) return;
+  renderCapture();
+  document.getElementById('capture-right-title').textContent = cap.name;
+
+  const actEl = document.getElementById('capture-right-actions');
+  actEl.innerHTML = `<button class="btn btn-danger btn-sm" onclick="deleteCapture('${id}')">Delete</button>`;
+
+  const body = document.getElementById('capture-right-body');
+  body.innerHTML = `
+    ${cap.thumb ? `<img src="${cap.thumb}" style="max-width:100%;border-radius:8px;margin-bottom:12px;display:block">` : ''}
+    <div class="form-group">
+      <label>Extracted / Typed Text</label>
+      <textarea id="cap-text" rows="8" placeholder="Paste or type the text from this screenshot…">${esc(cap.text)}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-primary" onclick="classifyCapture('${id}')">🔍 Extract Work Items</button>
+      <button class="btn btn-secondary" onclick="saveCapText('${id}')">Save Text</button>
+    </div>
+    <div id="cap-results"></div>`;
+
+  if (cap.results && cap.results.length > 0) renderCaptureResults(cap.results);
+}
+
+function saveCapText(id) {
+  const cap = db.captures.find(c => c.id === id);
+  if (!cap) return;
+  cap.text = document.getElementById('cap-text').value;
+  saveDB(); toast('Saved');
+}
+
+function classifyCapture(id) {
+  const cap = db.captures.find(c => c.id === id);
+  if (!cap) return;
+  const text = document.getElementById('cap-text').value.trim();
+  if (!text) { toast('Please enter some text first'); return; }
+  cap.text = text;
+  const results = classify(text);
+  cap.results = results;
+  cap.processed = true;
+  cap.itemsExtracted = results.length;
+  saveDB(); renderCaptureResults(results);
+  toast(`Found ${results.length} item${results.length!==1?'s':''}`);
+}
+
+function renderCaptureResults(results) {
+  const el = document.getElementById('cap-results');
+  if (!el) return;
+  if (results.length === 0) { el.innerHTML = '<div class="empty-state" style="padding:16px"><small>No items found. Try adding more context.</small></div>'; return; }
+  el.innerHTML = `<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text2);margin-bottom:8px">Extracted Items</div>` +
+    results.map((r, i) => `
+      <div class="result-item">
+        <input type="checkbox" id="ri-${i}" checked>
+        <div class="result-item-content">
+          <div class="ri-title">${esc(r.title)}</div>
+          <div class="ri-tags">${typeTag(r.type)} ${priTag(r.priority)}</div>
+        </div>
+      </div>`).join('') +
+    `<button class="btn btn-primary" style="margin-top:8px" onclick="addCaptureItems()">Add Checked to Inbox</button>`;
+  el._results = results;
+}
+
+function addCaptureItems() {
+  const el = document.getElementById('cap-results');
+  if (!el || !el._results) return;
+  let added = 0;
+  el._results.forEach((r, i) => {
+    const cb = document.getElementById(`ri-${i}`);
+    if (cb && cb.checked) {
+      db.workItems.push({ id:uid(), title:r.title, type:r.type, priority:r.priority, dueDate:null, projectId:null, personId:null, notes:r.notes||'', done:false, inboxed:true, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+      added++;
+    }
+  });
+  saveDB(); updateBadges();
+  toast(`Added ${added} item${added!==1?'s':''} to Inbox`);
+}
+
+function deleteCapture(id) {
+  if (!confirm('Delete this capture?')) return;
+  db.captures = db.captures.filter(c => c.id !== id);
+  selectedCaptureId = null;
+  saveDB(); renderCapture();
+  document.getElementById('capture-right-title').textContent = 'Select a screenshot';
+  document.getElementById('capture-right-body').innerHTML = `<div class="capture-drop-zone"><div class="drop-icon">📷</div><p>Drop screenshots here or tap "+ Add"</p><small>Text is extracted locally — nothing leaves your device</small></div>`;
+}
+
+// ── Local Heuristic Classifier ──────────────────────────────────────────────
+function classify(text) {
+  const lines = text.split(/[\n.!?]+/).map(l => l.trim()).filter(l => l.length > 8);
+  return lines.slice(0, 20).map(line => {
+    const lower = line.toLowerCase();
+    let type = 'task';
+    let priority = 'medium';
+
+    if (/follow\s?up|chase|check\s?in|ping|reach\s?out/.test(lower)) type = 'followUp';
+    else if (/waiting\s?for|pending\s+(from|on)|need(s)?\s+to\s+send|hasn't|hasn't/.test(lower)) type = 'waitingFor';
+    else if (/decide|decision|approve|sign\s?off|choose|vote|resolve/.test(lower)) type = 'decision';
+    else if (/risk|blocker|issue|concern|problem|escalat/.test(lower)) type = 'risk';
+    else if (/action\s?item|agreed\s+to|will\s+(do|send|complete)|committed/.test(lower)) type = 'action';
+
+    if (/urgent|asap|critical|immediately|overdue|today/.test(lower)) priority = 'high';
+    else if (/low\s+priority|nice\s+to\s+have|when\s+possible|eventually/.test(lower)) priority = 'low';
+
+    return { title: line.slice(0, 120), type, priority, notes: '' };
+  }).filter(r => r.title.length > 10);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REVIEW
+// ═══════════════════════════════════════════════════════════════════════════
+function renderReview() {
+  const stale = db.projects.filter(p => p.status === 'active').length;
+  const overdue = db.workItems.filter(w => !w.done && isOverdue(w.dueDate)).length;
+  const inbox = db.workItems.filter(w => w.inboxed && !w.done).length;
+  const decisions = db.decisions.filter(d => d.status === 'pending').length;
+
+  const el = document.getElementById('review-content');
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,#EBF3FD,#F0F6FF);border-color:#C8DEF5">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">Weekly Review Checklist</div>
+      <div style="font-size:13px;color:var(--text2)">Systematically review your commitments and capture new ones.</div>
+    </div>
+    ${reviewSection('📥 Process Inbox', [
+      {label: `Clear ${inbox} inbox item${inbox!==1?'s':''}`, done: inbox===0, action: ()=>navigate('inbox')},
+    ])}
+    ${reviewSection('⚠️ Overdue Items', [
+      {label: `Review ${overdue} overdue item${overdue!==1?'s':''}`, done: overdue===0},
+    ])}
+    ${reviewSection('⚖ Open Decisions', [
+      {label: `${decisions} decision${decisions!==1?'s':''} pending`, done: decisions===0, action: ()=>navigate('decisions')},
+    ])}
+    ${reviewSection('▤ Projects Review', [
+      {label: 'Review each active project', done: false},
+      {label: 'Check for stale projects (>2 weeks)', done: false},
+      {label: 'Identify next actions for blocked projects', done: false},
+    ])}
+    ${reviewSection('✦ Waiting On Others', [
+      {label: 'Follow up on outstanding items', done: db.workItems.filter(w=>!w.done&&w.type==='waitingFor').length===0},
+    ])}
+    ${reviewSection('📅 Next Week', [
+      {label: 'Schedule focus time for top 3 priorities', done: false},
+      {label: 'Block time for deep work', done: false},
+      {label: 'Review upcoming deadlines', done: false},
+    ])}
+  `;
+}
+
+function reviewSection(title, items) {
+  const allDone = items.every(i => i.done);
+  return `<div class="review-section">
+    <div class="review-section-header">
+      <span style="font-size:14px;font-weight:600">${title}</span>
+      <span class="tag ${allDone?'tag-action':'tag-followup'}">${allDone?'Done':'Pending'}</span>
+    </div>
+    <div class="review-section-body">
+      ${items.map((item, i) => `
+        <div class="review-check-item ${item.done?'done':''}">
+          <input type="checkbox" ${item.done?'checked':''} onchange="this.closest('.review-check-item').classList.toggle('done',this.checked)">
+          <span>${esc(item.label)}</span>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════════════════════
+document.getElementById('search-input').addEventListener('input', e => {
+  renderSearchResults(e.target.value.trim().toLowerCase());
+});
+
+function renderSearchResults(q) {
+  const el = document.getElementById('search-results');
+  if (!q) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">⌕</div><p>Type to search</p><small>Searches items, decisions, projects and people</small></div>';
+    return;
+  }
+  const results = [];
+  db.workItems.filter(w => w.title.toLowerCase().includes(q) || (w.notes||'').toLowerCase().includes(q)).forEach(w => {
+    results.push({type:'item', label:'Item', title:w.title, sub: w.type + (w.projectId ? ' · '+((db.projects.find(p=>p.id===w.projectId)||{}).name||'') : ''), click:()=>openEditItem(w.id)});
+  });
+  db.decisions.filter(d => d.title.toLowerCase().includes(q) || (d.context||'').toLowerCase().includes(q)).forEach(d => {
+    results.push({type:'decision', label:'Decision', title:d.title, sub:d.status, click:()=>openEditDecision(d.id)});
+  });
+  db.projects.filter(p => p.name.toLowerCase().includes(q) || (p.goal||'').toLowerCase().includes(q)).forEach(p => {
+    results.push({type:'project', label:'Project', title:p.name, sub:p.status, click:()=>{navigate('projects');setTimeout(()=>selectProject(p.id),100);}});
+  });
+  db.people.filter(p => p.name.toLowerCase().includes(q) || (p.role||'').toLowerCase().includes(q)).forEach(p => {
+    results.push({type:'person', label:'Person', title:p.name, sub:p.role||'', click:()=>{navigate('people');setTimeout(()=>selectPerson(p.id),100);}});
+  });
+
+  if (results.length === 0) {
+    el.innerHTML = `<div class="empty-state"><p>No results for "${esc(q)}"</p></div>`;
+    return;
+  }
+  const tagMap = {item:'tag-task', decision:'tag-decision', project:'tag-info', person:'tag-action'};
+  el.innerHTML = results.map((r, i) => `
+    <div class="search-result-item" onclick="_searchClick(${i})">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span class="tag ${tagMap[r.type]}">${r.label}</span>
+        <span class="sr-title">${esc(r.title)}</span>
+      </div>
+      ${r.sub ? `<div class="sr-meta">${esc(r.sub)}</div>` : ''}
+    </div>`).join('');
+  el._results = results;
+}
+
+function _searchClick(i) {
+  const el = document.getElementById('search-results');
+  if (el._results && el._results[i]) el._results[i].click();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+function renderSettings() {
+  const s = db.settings;
+  const itemCount = db.workItems.length;
+  const doneCount = db.workItems.filter(w=>w.done).length;
+  const projCount = db.projects.length;
+
+  document.getElementById('settings-content').innerHTML = `
+    <div class="settings-section-title">Profile</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div><div class="settings-row-label">Your Name</div><div class="settings-row-sub">Used in reviews and suggestions</div></div>
+        <input type="text" id="set-name" value="${esc(s.userName||'')}" placeholder="Your name" style="width:180px" oninput="saveSetting('userName',this.value)">
+      </div>
+    </div>
+
+    <div class="settings-section-title" style="margin-top:16px">Review Schedule</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div><div class="settings-row-label">Daily Review Time</div></div>
+        <input type="time" id="set-time" value="${s.dailyReviewTime||'08:00'}" style="width:120px" oninput="saveSetting('dailyReviewTime',this.value)">
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">Weekly Review Day</div></div>
+        <select id="set-day" style="width:140px" onchange="saveSetting('weeklyReviewDay',this.value)">
+          ${['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map(d=>`<option value="${d}" ${s.weeklyReviewDay===d?'selected':''}>${d[0].toUpperCase()+d.slice(1)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section-title" style="margin-top:16px">Privacy & Data</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div><div class="settings-row-label">All data stored locally</div><div class="settings-row-sub">Nothing leaves this device. Ever.</div></div>
+        <span class="tag tag-action">✓ On-device</span>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">No analytics or tracking</div></div>
+        <span class="tag tag-action">✓ Private</span>
+      </div>
+    </div>
+
+    <div class="settings-section-title" style="margin-top:16px">Stats</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div class="settings-row-label">Total items</div><span>${itemCount}</span>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">Completed</div><span>${doneCount}</span>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">Projects</div><span>${projCount}</span>
+      </div>
+    </div>
+
+    <div class="settings-section-title" style="margin-top:16px">Data</div>
+    <div class="settings-group">
+      <div class="settings-row">
+        <div><div class="settings-row-label">Export Data</div><div class="settings-row-sub">Download your data as JSON</div></div>
+        <button class="btn btn-secondary btn-sm" onclick="exportData()">Export</button>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">Import Data</div><div class="settings-row-sub">Restore from a previous export</div></div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-input').click()">Import</button>
+      </div>
+      <div class="settings-row" style="border-top:1px solid var(--border)">
+        <div><div class="settings-row-label" style="color:var(--red)">Clear All Data</div><div class="settings-row-sub">Cannot be undone</div></div>
+        <button class="btn btn-danger btn-sm" onclick="clearAllData()">Clear</button>
+      </div>
+    </div>
+
+    <div style="padding:16px 0;text-align:center;font-size:12px;color:var(--text3)">
+      Cadence — Executive Operating System · All data stored locally on this device
+    </div>
+    <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(this)">
+  `;
+}
+
+function saveSetting(key, val) {
+  db.settings[key] = val;
+  saveDB();
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `cadence-backup-${today()}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('Exported');
+}
+
+function importData(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.workItems) { alert('Invalid Cadence backup file'); return; }
+      if (!confirm('This will replace all your current data. Continue?')) return;
+      db = data; saveDB(); updateBadges(); navigate(currentScreen);
+      toast('Imported successfully');
+    } catch { alert('Could not read file'); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('Delete ALL data? This cannot be undone.')) return;
+  db = defaultDB(); saveDB(); updateBadges(); navigate('today');
+  toast('All data cleared');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUICK CAPTURE
+// ═══════════════════════════════════════════════════════════════════════════
+function openQuickCapture() {
+  document.getElementById('quick-text').value = '';
+  document.getElementById('quick-type').value = 'task';
+  document.getElementById('quick-priority').value = 'medium';
+  openModal('modal-quick');
+  setTimeout(() => document.getElementById('quick-text').focus(), 100);
+}
+
+function saveQuickCapture() {
+  const text = document.getElementById('quick-text').value.trim();
+  if (!text) { alert('Please enter something'); return; }
+  // try to auto-classify
+  const first = text.split('\n')[0].slice(0,120);
+  const results = classify(text);
+  const type = results.length > 0 ? results[0].type : document.getElementById('quick-type').value;
+  const priority = results.length > 0 ? results[0].priority : document.getElementById('quick-priority').value;
+
+  db.workItems.push({
+    id: uid(),
+    title: first,
+    type,
+    priority,
+    dueDate: null, projectId: null, personId: null,
+    notes: text.length > first.length ? text.slice(first.length).trim() : '',
+    done: false, inboxed: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  saveDB(); closeModal('modal-quick'); updateBadges();
+  toast('Added to Inbox');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+});
+
+// close modal on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(el => closeModal(el.id));
+});
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function populateProjectSelect(id, selected) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<option value="">No project</option>' + db.projects.map(p => `<option value="${p.id}" ${p.id===selected?'selected':''}>${esc(p.name)}</option>`).join('');
+}
+
+function populatePersonSelect(id, selected) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<option value="">No person</option>' + db.people.map(p => `<option value="${p.id}" ${p.id===selected?'selected':''}>${esc(p.name)}</option>`).join('');
+}
+
+// keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey) {
+    if (e.key === 'n') { e.preventDefault(); openAddItem(); }
+    if (e.key === 'k') { e.preventDefault(); navigate('search'); }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVICE WORKER
+// ═══════════════════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════════
+navigate('today');
+</script>
+</body>
+</html>
