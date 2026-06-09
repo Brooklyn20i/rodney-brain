@@ -104,5 +104,24 @@ core.add_task(db, "Draft Q3 board deck", type="task",
 core.save(db)                     # set CADENCE_GIT_AUTOCOMMIT=1 to version it
 ```
 
-`CADENCE_GIT_AUTOCOMMIT=1` makes every write a git commit, so the human's
-cockpit (and any other agent) sees the change and you keep an audit trail.
+`CADENCE_GIT_AUTOCOMMIT=1` makes every write a git commit, so you keep an
+audit trail of agent changes.
+
+> ⚠️ **This repo is public** (it hosts the PWA on GitHub Pages). The live
+> `cadence_data.json` is **git-ignored** so confidential work data is never
+> pushed. Only enable `CADENCE_GIT_AUTOCOMMIT` when `CADENCE_DATA` points at a
+> store inside a **private** repo or a local-only location. Never force-add the
+> data file to this public repo.
+
+## Sharing the store between devices (human on iPad + agent elsewhere)
+
+Because the live store is intentionally not in the public repo, pick one shared
+location both sides can reach, e.g.:
+
+- a file on a private synced drive (iCloud/Dropbox) that the agent host can read, or
+- a **private** companion repo dedicated to the data, with autocommit on, or
+- run the Streamlit cockpit and the agent on the same machine pointed at one
+  `CADENCE_DATA` path.
+
+The iPad PWA keeps its own local copy; use its **Export/Import JSON** (Settings)
+to seed or reconcile with the shared store until you wire up a private sync.
