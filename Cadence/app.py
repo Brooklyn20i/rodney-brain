@@ -20,7 +20,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-DATA_FILE = Path(__file__).parent / "cadence_data.json"
+# Shared store — same file agents read/write (override with CADENCE_DATA).
+# This is what makes the cockpit a shared surface for humans and agents.
+DATA_FILE = Path(os.environ.get("CADENCE_DATA", Path(__file__).parent / "cadence_data.json"))
 
 # ── Palette / CSS ─────────────────────────────────────────────────────────────
 st.markdown("""
