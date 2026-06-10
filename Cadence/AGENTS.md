@@ -149,10 +149,47 @@ audit trail of agent changes.
 Because the live store is intentionally not in the public repo, pick one shared
 location both sides can reach, e.g.:
 
+- **Private GitHub Gist (what the PWA uses)** — see below. Recommended.
 - a file on a private synced drive (iCloud/Dropbox) that the agent host can read, or
 - a **private** companion repo dedicated to the data, with autocommit on, or
 - run the Streamlit cockpit and the agent on the same machine pointed at one
   `CADENCE_DATA` path.
 
-The iPad PWA keeps its own local copy; use its **Export/Import JSON** (Settings)
-to seed or reconcile with the shared store until you wire up a private sync.
+### Private Gist sync (PWA ↔ agent)
+
+The iPad/iPhone PWA syncs through a single **private gist** (Settings → Sync).
+The gist holds one file, `cadence_data.json`, with the PWA schema (camelCase:
+`workItems`, `projects`, `people`, `decisions`, `notes`, `outbox`, `deleted`).
+**Screenshots are never uploaded** — captures stay on the device.
+
+To act on what the human queues in the PWA, read and write that gist with the
+same GitHub token (needs `gist` scope) and gist id:
+
+```python
+import requests, json, datetime
+H = {"Authorization": f"Bearer {TOKEN}", "Accept": "application/vnd.github+json"}
+g = requests.get(f"https://api.github.com/gists/{GIST_ID}", headers=H).json()
+store = json.loads(g["files"]["cadence_data.json"]["content"])
+
+# Drain the outbox: send each queued email via your Gmail tool, then mark sent.
+for m in store["outbox"]:
+    if m["status"] == "queued":
+        # ...send via Gmail (m["to"], m["subject"], m["body"], m.get("cc"))...
+        now = datetime.datetime.utcnow().isoformat() + "Z"
+        m["status"], m["via"], m["sentAt"], m["updatedAt"] = "sent", "gmail", now, now
+
+# Attach a Drive file to a project: append {id,url,title,createdAt} to project["links"].
+# Write back:
+requests.patch(f"https://api.github.com/gists/{GIST_ID}", headers=H,
+               data=json.dumps({"files": {"cadence_data.json":
+                   {"content": json.dumps(store, indent=2)}}}))
+```
+
+Always bump a record's `updatedAt` when you change it, and add its id to
+`deleted` (with a timestamp) instead of dropping a record, so the PWA's merge
+keeps your change. The PWA pulls on launch and whenever it returns to the
+foreground, so the human sees agent changes automatically.
+
+The Streamlit cockpit + MCP server still use the snake_case `cadence_data.json`
+store; to unify, run a small adapter mapping between the two schemas (or point
+both at the same gist through such an adapter).

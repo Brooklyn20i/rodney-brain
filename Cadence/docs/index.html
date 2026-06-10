@@ -304,6 +304,54 @@
   /* ─ quick capture floating btn ─ */
   #fab { position: fixed; bottom: 28px; right: 28px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 24px; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(27,94,158,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; transition: transform 0.15s; }
   #fab:active { transform: scale(0.93); }
+
+  /* ── Sync status chip ──────────────────────────────────────────────── */
+  #sync-status { display: flex; align-items: center; gap: 7px; padding: 8px 10px; margin-top: 4px; font-size: 11px; color: rgba(255,255,255,0.5); cursor: pointer; border-radius: 8px; }
+  #sync-status:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
+
+  /* ── Notes ─────────────────────────────────────────────────────────── */
+  .note-list-item { padding: 11px 12px; border-radius: var(--radius-sm); margin-bottom: 4px; cursor: pointer; border: 1px solid transparent; }
+  .note-list-item:hover { background: var(--surface2); }
+  .note-list-item.selected { background: var(--blue-bg); border-color: var(--accent); }
+  .note-list-item .nli-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note-list-item .nli-sub { font-size: 12px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note-toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+  .nt-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; min-width: 32px; height: 32px; padding: 0 8px; font-size: 14px; cursor: pointer; color: var(--text); font-weight: 600; }
+  .nt-btn:hover { border-color: var(--accent); color: var(--accent); }
+  #note-textarea { width: 100%; min-height: 100%; border: none; outline: none; resize: none; font-size: 15px; line-height: 1.7; font-family: 'SF Mono', ui-monospace, Menlo, monospace; background: transparent; color: var(--text); padding: 4px; }
+  .note-preview { font-size: 15px; line-height: 1.6; }
+  .note-preview h3 { font-size: 17px; font-weight: 700; margin: 14px 0 6px; }
+  .note-preview .np-bullet { display: flex; gap: 8px; padding: 2px 0; }
+  .note-preview .np-bullet::before { content: '•'; color: var(--accent); }
+  .note-preview .np-check { display: flex; gap: 8px; padding: 3px 0; align-items: flex-start; cursor: pointer; }
+  .note-preview .np-check.done { color: var(--text2); text-decoration: line-through; }
+
+  /* ── Outbox ────────────────────────────────────────────────────────── */
+  .email-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; }
+  .email-item .ei-subject { font-size: 14px; font-weight: 600; }
+  .email-item .ei-to { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .email-item .ei-body { font-size: 13px; color: var(--text2); margin-top: 6px; max-height: 60px; overflow: hidden; white-space: pre-wrap; }
+  .est-queued { background: var(--blue-bg); color: var(--blue); }
+  .est-sent { background: var(--green-bg); color: var(--green); }
+  .est-draft { background: var(--surface2); color: var(--text2); }
+  .est-cancelled { background: var(--red-bg); color: var(--red); }
+
+  /* ── Project health / milestones / links ───────────────────────────── */
+  .health-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .health-green { background: var(--green-bg); color: var(--green); }
+  .health-amber { background: var(--orange-bg); color: var(--orange); }
+  .health-red { background: var(--red-bg); color: var(--red); }
+  .milestone-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .milestone-row:last-child { border-bottom: none; }
+  .milestone-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  .milestone-row .ms-title { flex: 1; font-size: 14px; }
+  .milestone-row .ms-title.done { text-decoration: line-through; color: var(--text2); }
+  .update-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .update-row:last-child { border-bottom: none; }
+  .update-row .ur-date { font-size: 11px; color: var(--text3); }
+  .update-row .ur-text { font-size: 13px; margin-top: 2px; }
+  .link-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; }
+  .link-row a { color: var(--accent); font-size: 13px; text-decoration: none; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -316,6 +364,9 @@
     <div class="nav-section-label">Day</div>
     <a class="nav-item active" data-screen="today">
       <span class="nav-icon">☀</span> Today
+    </a>
+    <a class="nav-item" data-screen="notes">
+      <span class="nav-icon">✎</span> Notes
     </a>
     <a class="nav-item" data-screen="capture">
       <span class="nav-icon">⊡</span> Capture
@@ -338,6 +389,10 @@
       <span class="nav-icon">⚖</span> Decisions
       <span class="nav-badge purple" id="badge-decisions">0</span>
     </a>
+    <a class="nav-item" data-screen="outbox">
+      <span class="nav-icon">✉</span> Outbox
+      <span class="nav-badge blue" id="badge-outbox" style="display:none"></span>
+    </a>
 
     <div class="nav-sep"></div>
     <div id="sidebar-footer">
@@ -350,6 +405,7 @@
       <a class="nav-item" data-screen="settings">
         <span class="nav-icon">⚙</span> Settings
       </a>
+      <div id="sync-status" onclick="syncNow()" title="Tap to sync now"></div>
     </div>
   </nav>
   <div id="sidebar-overlay"></div>
@@ -405,6 +461,38 @@
           <span class="section-count" style="background:var(--orange)" id="count-due-today">0</span>
         </div>
         <div id="due-today-list"></div>
+      </div>
+    </div>
+
+    <!-- ── NOTES ──────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-notes">
+      <div class="split-view">
+        <div class="split-left">
+          <div class="split-panel-header">
+            <h3>Notes</h3>
+            <button class="btn btn-primary btn-sm" onclick="newNote()">+ New</button>
+          </div>
+          <div class="split-panel-body" id="notes-list"></div>
+        </div>
+        <div class="split-right">
+          <div class="split-panel-header">
+            <input type="text" id="note-title" placeholder="Untitled note" oninput="onNoteTitle()"
+                   style="border:none;font-size:16px;font-weight:600;padding:4px 0;background:transparent" disabled>
+            <div id="note-actions"></div>
+          </div>
+          <div id="note-toolbar" class="note-toolbar" style="display:none">
+            <button class="nt-btn" onclick="noteInsert('heading')" title="Heading">H</button>
+            <button class="nt-btn" onclick="noteInsert('bullet')" title="Bullet">•</button>
+            <button class="nt-btn" onclick="noteInsert('check')" title="Checkbox">☐</button>
+            <button class="nt-btn" onclick="noteIndent(1)" title="Indent">⇥</button>
+            <button class="nt-btn" onclick="noteIndent(-1)" title="Outdent">⇤</button>
+            <span style="flex:1"></span>
+            <button class="nt-btn" id="note-preview-btn" onclick="toggleNotePreview()" title="Preview">👁 Preview</button>
+          </div>
+          <div class="split-panel-body" id="note-editor-body">
+            <div class="empty-state"><div class="icon">✎</div><p>Select or create a note</p><small>Bullet points, checklists & headings — Tab to indent</small></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -491,6 +579,11 @@
       <div class="screen-content">
         <div id="decisions-list"></div>
       </div>
+    </div>
+
+    <!-- ── OUTBOX ──────────────────────────────────────────────────────────── -->
+    <div class="screen" id="screen-outbox">
+      <div class="screen-content" id="outbox-content"></div>
     </div>
 
     <!-- ── REVIEW ──────────────────────────────────────────────────────────── -->
@@ -606,16 +699,38 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Colour</label>
-        <select id="proj-color">
-          <option value="#1B5E9E">Blue</option>
-          <option value="#6B3FA0">Purple</option>
-          <option value="#1A7F37">Green</option>
-          <option value="#E07D00">Orange</option>
-          <option value="#D93025">Red</option>
-          <option value="#0E7490">Teal</option>
+        <label>Health</label>
+        <select id="proj-health">
+          <option value="green">🟢 On track</option>
+          <option value="amber">🟠 At risk</option>
+          <option value="red">🔴 Off track</option>
         </select>
       </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="proj-owner" placeholder="Who's accountable?" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Target Date</label>
+        <input type="date" id="proj-target">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Next Action</label>
+      <input type="text" id="proj-next" placeholder="The single next step" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Colour</label>
+      <select id="proj-color">
+        <option value="#1B5E9E">Blue</option>
+        <option value="#6B3FA0">Purple</option>
+        <option value="#1A7F37">Green</option>
+        <option value="#E07D00">Orange</option>
+        <option value="#D93025">Red</option>
+        <option value="#0E7490">Teal</option>
+      </select>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-project')">Cancel</button>
@@ -733,6 +848,59 @@
   </div>
 </div>
 
+<!-- Compose Email (queued to Outbox; the agent sends via Gmail) -->
+<div class="modal-overlay" id="modal-email">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-email-title">Compose Email</h2>
+      <button class="modal-close" onclick="closeModal('modal-email')">✕</button>
+    </div>
+    <input type="hidden" id="em-id">
+    <div class="form-row">
+      <div class="form-group"><label>To</label><input type="text" id="em-to" placeholder="name@example.com" autocomplete="off"></div>
+      <div class="form-group"><label>Cc (optional)</label><input type="text" id="em-cc" placeholder="" autocomplete="off"></div>
+    </div>
+    <div class="form-group"><label>Subject</label><input type="text" id="em-subject" autocomplete="off"></div>
+    <div class="form-group"><label>Message</label><textarea id="em-body" rows="8" placeholder="Write your email…"></textarea></div>
+    <div class="form-group">
+      <label>Related project (optional)</label>
+      <select id="em-project"></select>
+    </div>
+    <div style="background:var(--blue-bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text2);margin-bottom:4px">
+      ✉ This is queued in your Outbox. Your agent (with Gmail access) sends it and marks it sent — it syncs to all your devices.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-email')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEmail()">Queue to send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project status update -->
+<div class="modal-overlay" id="modal-update">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Post Status Update</h2>
+      <button class="modal-close" onclick="closeModal('modal-update')">✕</button>
+    </div>
+    <input type="hidden" id="upd-project-id">
+    <div class="form-group"><label>Update</label><textarea id="upd-text" rows="4" placeholder="What changed? What's the latest?"></textarea></div>
+    <div class="form-group">
+      <label>Set health</label>
+      <select id="upd-health">
+        <option value="">— leave unchanged —</option>
+        <option value="green">🟢 On track</option>
+        <option value="amber">🟠 At risk</option>
+        <option value="red">🔴 Off track</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-update')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveUpdate()">Post</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -743,7 +911,7 @@
 const DB_KEY = 'cadence_v1';
 
 function loadDB() {
-  try { return JSON.parse(localStorage.getItem(DB_KEY)) || defaultDB(); }
+  try { return migrate(JSON.parse(localStorage.getItem(DB_KEY)) || defaultDB()); }
   catch { return defaultDB(); }
 }
 
@@ -754,6 +922,10 @@ function defaultDB() {
     people: [],
     decisions: [],
     captures: [],
+    notes: [],
+    outbox: [],
+    deleted: {},        // id -> ISO timestamp tombstones (so deletes survive a merge)
+    syncedAt: null,
     settings: {
       userName: '',
       dailyReviewTime: '08:00',
@@ -763,7 +935,170 @@ function defaultDB() {
   };
 }
 
-function saveDB() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+// Backfill new fields onto stores created by earlier versions.
+function migrate(d) {
+  d.workItems = d.workItems || [];
+  d.projects  = d.projects  || [];
+  d.people    = d.people    || [];
+  d.decisions = d.decisions || [];
+  d.captures  = d.captures  || [];
+  d.notes     = d.notes     || [];
+  d.outbox    = d.outbox    || [];
+  d.deleted   = d.deleted   || {};
+  d.settings  = d.settings  || { userName:'', dailyReviewTime:'08:00', weeklyReviewDay:'friday', focusHours:3 };
+  d.projects.forEach(p => {
+    if (!p.health)     p.health = 'green';        // green | amber | red
+    if (!p.milestones) p.milestones = [];
+    if (!p.updates)    p.updates = [];            // dated status log
+    if (!p.links)      p.links = [];              // Drive files / URLs
+  });
+  return d;
+}
+
+function saveDB() {
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  scheduleSync();
+}
+
+// Mark a record id as deleted so the deletion propagates through a sync merge
+// instead of the record reappearing from the other device.
+function tombstone(id) { db.deleted[id] = new Date().toISOString(); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYNC — private GitHub Gist as the shared store (opt-in)
+// Phone, iPad and the agent all read/write ONE private gist. Screenshots are
+// NEVER uploaded — they stay on the device, preserving the privacy contract.
+// ═══════════════════════════════════════════════════════════════════════════
+const SYNC_KEY = 'cadence_sync';
+const GIST_FILE = 'cadence_data.json';
+let syncCfg = loadSyncCfg();
+let syncing = false;
+let syncTimer = null;
+
+function loadSyncCfg() {
+  try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveSyncCfg() { localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }
+
+function setSyncStatus(state, text) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const dot = { ok:'var(--green)', syncing:'var(--orange)', error:'var(--red)', off:'var(--text3)' }[state] || 'var(--text3)';
+  el.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${dot};display:inline-block"></span><span>${esc(text)}</span>`;
+}
+
+// The slice of the store we sync. Captures (screenshots) are excluded on purpose.
+function syncPayload() {
+  return {
+    workItems: db.workItems, projects: db.projects, people: db.people,
+    decisions: db.decisions, notes: db.notes, outbox: db.outbox,
+    deleted: db.deleted, settings: db.settings,
+    syncedAt: new Date().toISOString(),
+  };
+}
+
+function recTime(r) { return r.updatedAt || r.completedAt || r.createdAt || ''; }
+
+// Merge a collection by id: newest wins; tombstones remove.
+function mergeCollection(local, remote, deleted) {
+  const byId = {};
+  (local || []).forEach(r => { if (r && r.id) byId[r.id] = r; });
+  (remote || []).forEach(r => {
+    if (!r || !r.id) return;
+    const ex = byId[r.id];
+    if (!ex || recTime(r) > recTime(ex)) byId[r.id] = r;
+  });
+  Object.keys(deleted || {}).forEach(id => {
+    const r = byId[id];
+    if (r && deleted[id] >= recTime(r)) delete byId[id];
+  });
+  return Object.values(byId);
+}
+
+function mergeRemote(remote) {
+  if (!remote) return;
+  // Union the tombstone maps (latest timestamp per id wins).
+  const deleted = { ...(db.deleted || {}) };
+  Object.keys(remote.deleted || {}).forEach(id => {
+    if (!deleted[id] || remote.deleted[id] > deleted[id]) deleted[id] = remote.deleted[id];
+  });
+  db.workItems = mergeCollection(db.workItems, remote.workItems, deleted);
+  db.projects  = mergeCollection(db.projects,  remote.projects,  deleted);
+  db.people    = mergeCollection(db.people,    remote.people,    deleted);
+  db.decisions = mergeCollection(db.decisions, remote.decisions, deleted);
+  db.notes     = mergeCollection(db.notes,     remote.notes,     deleted);
+  db.outbox    = mergeCollection(db.outbox,    remote.outbox,    deleted);
+  db.deleted   = deleted;
+  // Settings: take remote only if this device has none set yet.
+  if (remote.settings && !((db.settings||{}).userName)) db.settings = { ...db.settings, ...remote.settings };
+  migrate(db);
+}
+
+async function gistFetch(path, opts = {}) {
+  const res = await fetch('https://api.github.com/gists' + path, {
+    ...opts,
+    headers: {
+      'Authorization': 'Bearer ' + syncCfg.token,
+      'Accept': 'application/vnd.github+json',
+      ...(opts.headers || {}),
+    },
+  });
+  if (!res.ok) throw new Error('GitHub ' + res.status + (res.status===401?' (bad token)':res.status===404?' (gist not found)':''));
+  return res.json();
+}
+
+// Pull + merge + push, in one pass. Safe to call often; coalesced by a flag.
+async function syncNow(opts = {}) {
+  if (!syncCfg.token) { setSyncStatus('off', 'Sync off'); return; }
+  if (syncing) return;
+  syncing = true;
+  setSyncStatus('syncing', 'Syncing…');
+  try {
+    // First run with a token but no gist: create the private gist.
+    if (!syncCfg.gistId) {
+      const created = await gistFetch('', {
+        method: 'POST',
+        body: JSON.stringify({
+          description: 'Cadence — private store (do not share)',
+          public: false,
+          files: { [GIST_FILE]: { content: JSON.stringify(syncPayload(), null, 2) } },
+        }),
+      });
+      syncCfg.gistId = created.id; saveSyncCfg();
+    } else {
+      // Pull remote and merge in.
+      const g = await gistFetch('/' + syncCfg.gistId);
+      const file = g.files && g.files[GIST_FILE];
+      if (file && file.content) {
+        try { mergeRemote(JSON.parse(file.content)); } catch {}
+      }
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      // Push the merged result back.
+      await gistFetch('/' + syncCfg.gistId, {
+        method: 'PATCH',
+        body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(syncPayload(), null, 2) } } }),
+      });
+    }
+    syncCfg.lastSync = new Date().toISOString(); saveSyncCfg();
+    setSyncStatus('ok', 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    if (!opts.silent) toast('Synced ✓');
+    updateBadges();
+    if (!opts.noRender) navigate(currentScreen);
+  } catch (e) {
+    setSyncStatus('error', 'Sync failed');
+    if (!opts.silent) toast('Sync failed: ' + e.message);
+  } finally {
+    syncing = false;
+  }
+}
+
+// Debounced background sync after local edits.
+function scheduleSync() {
+  if (!syncCfg.token) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow({ silent: true, noRender: true }), 2500);
+}
 
 let db = loadDB();
 let currentScreen = 'today';
@@ -794,8 +1129,8 @@ function isDueToday(d) { return d === today(); }
 // NAV
 // ═══════════════════════════════════════════════════════════════════════════
 const SCREEN_TITLES = {
-  today: 'Today', capture: 'Capture', inbox: 'Inbox',
-  projects: 'Projects', people: 'People', decisions: 'Decisions',
+  today: 'Today', notes: 'Notes', capture: 'Capture', inbox: 'Inbox',
+  projects: 'Projects', people: 'People', decisions: 'Decisions', outbox: 'Outbox',
   review: 'Weekly Review', search: 'Search', settings: 'Settings'
 };
 
@@ -819,6 +1154,11 @@ function navigate(screen) {
     today_date_el.textContent = d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     headerActions.innerHTML = `<button class="btn btn-primary" onclick="openAddItem()">+ Quick Add</button>`;
     renderToday();
+  } else if (screen === 'notes') {
+    renderNotes();
+  } else if (screen === 'outbox') {
+    headerActions.innerHTML = `<button class="btn btn-primary" onclick="openCompose()">+ Compose</button>`;
+    renderOutbox();
   } else if (screen === 'inbox') {
     headerActions.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="processAllInbox()">Process All</button>`;
     renderInbox();
@@ -877,6 +1217,10 @@ function updateBadges() {
   const pel = document.getElementById('badge-people');
   pel.textContent = waiting;
   pel.style.display = waiting > 0 ? '' : 'none';
+
+  const queued = (db.outbox || []).filter(m => m.status === 'queued').length;
+  const oel = document.getElementById('badge-outbox');
+  if (oel) { oel.textContent = queued; oel.style.display = queued > 0 ? '' : 'none'; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1113,6 +1457,7 @@ function saveWorkItem() {
 function deleteItem(id) {
   if (!confirm('Delete this item?')) return;
   db.workItems = db.workItems.filter(w => w.id !== id);
+  tombstone(id);
   saveDB(); updateBadges();
   if (currentScreen === 'today') renderToday();
   else if (currentScreen === 'inbox') renderInbox();
@@ -1218,6 +1563,10 @@ function openAddProject() {
   document.getElementById('proj-name').value = '';
   document.getElementById('proj-goal').value = '';
   document.getElementById('proj-status').value = 'active';
+  document.getElementById('proj-health').value = 'green';
+  document.getElementById('proj-owner').value = '';
+  document.getElementById('proj-target').value = '';
+  document.getElementById('proj-next').value = '';
   document.getElementById('proj-color').value = '#1B5E9E';
   document.getElementById('modal-project-title').textContent = 'New Project';
   openModal('modal-project');
@@ -1230,6 +1579,10 @@ function openEditProject(id) {
   document.getElementById('proj-name').value = p.name;
   document.getElementById('proj-goal').value = p.goal || '';
   document.getElementById('proj-status').value = p.status || 'active';
+  document.getElementById('proj-health').value = p.health || 'green';
+  document.getElementById('proj-owner').value = p.owner || '';
+  document.getElementById('proj-target').value = p.targetDate || '';
+  document.getElementById('proj-next').value = p.nextAction || '';
   document.getElementById('proj-color').value = p.color || '#1B5E9E';
   document.getElementById('modal-project-title').textContent = 'Edit Project';
   openModal('modal-project');
@@ -1239,13 +1592,22 @@ function saveProject() {
   const id = document.getElementById('proj-id').value;
   const name = document.getElementById('proj-name').value.trim();
   if (!name) { alert('Please enter a project name'); return; }
+  const existing = id ? (db.projects.find(p=>p.id===id)||{}) : {};
   const item = {
     id: id || uid(),
     name,
     goal: document.getElementById('proj-goal').value.trim(),
     status: document.getElementById('proj-status').value,
+    health: document.getElementById('proj-health').value,
+    owner: document.getElementById('proj-owner').value.trim(),
+    targetDate: document.getElementById('proj-target').value || null,
+    nextAction: document.getElementById('proj-next').value.trim(),
     color: document.getElementById('proj-color').value,
-    createdAt: id ? (db.projects.find(p=>p.id===id)||{}).createdAt : new Date().toISOString(),
+    milestones: existing.milestones || [],
+    updates: existing.updates || [],
+    links: existing.links || [],
+    createdAt: existing.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   if (id) {
     const idx = db.projects.findIndex(p => p.id === id);
@@ -1265,20 +1627,35 @@ function renderProjectsList() {
     el.innerHTML = '<div class="empty-state"><div class="icon">▤</div><p>No projects yet</p></div>';
     return;
   }
-  el.innerHTML = db.projects.map(p => {
+  // active first, then on-hold, then completed
+  const order = { active:0, onHold:1, completed:2 };
+  const sorted = [...db.projects].sort((a,b) => (order[a.status]??9) - (order[b.status]??9));
+  el.innerHTML = sorted.map(p => {
     const count = db.workItems.filter(w => w.projectId === p.id && !w.done).length;
-    const done = db.workItems.filter(w => w.projectId === p.id && w.done).length;
-    const total = count + done;
-    const pct = total > 0 ? Math.round(done/total*100) : 0;
+    const pct = projectProgress(p);
     return `<div class="project-item ${selectedProjectId===p.id?'selected':''}" onclick="selectProject('${p.id}')">
-      <div class="project-dot" style="background:${p.color||'#1B5E9E'}"></div>
+      <div class="project-dot" style="background:${healthColor(p.health)}"></div>
       <div class="project-info">
         <div class="project-name">${esc(p.name)}</div>
-        <div class="project-meta">${count} open · ${pct}% done</div>
+        <div class="project-meta">${healthDot(p.health)} ${count} open · ${pct}% done${p.targetDate ? ' · '+fmtDate(p.targetDate) : ''}</div>
         <div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
       </div>
     </div>`;
   }).join('');
+}
+
+function projectProgress(p) {
+  const ms = p.milestones || [];
+  if (ms.length) return Math.round(ms.filter(m=>m.done).length / ms.length * 100);
+  const items = db.workItems.filter(w => w.projectId === p.id);
+  const done = items.filter(w => w.done).length;
+  return items.length ? Math.round(done / items.length * 100) : 0;
+}
+function healthColor(h) { return { green:'#1A7F37', amber:'#E07D00', red:'#D93025' }[h] || '#1A7F37'; }
+function healthDot(h) { return { green:'🟢', amber:'🟠', red:'🔴' }[h] || '🟢'; }
+function healthPill(h) {
+  const label = { green:'On track', amber:'At risk', red:'Off track' }[h] || 'On track';
+  return `<span class="health-pill health-${h||'green'}">${healthDot(h)} ${label}</span>`;
 }
 
 function selectProject(id) {
@@ -1293,18 +1670,71 @@ function renderProjectDetail(id) {
   document.getElementById('project-detail-title').textContent = p.name;
   document.getElementById('project-detail-actions').innerHTML = `
     <button class="btn btn-secondary btn-sm" onclick="openEditProject('${p.id}')">Edit</button>
-    <button class="btn btn-primary btn-sm" onclick="openAddItem({projectId:'${p.id}'})">+ Add Item</button>`;
+    <button class="btn btn-primary btn-sm" onclick="openAddItem({projectId:'${p.id}'})">+ Item</button>`;
 
   const items = db.workItems.filter(w => w.projectId === id);
   const open = items.filter(w => !w.done);
   const closed = items.filter(w => w.done);
+  const pct = projectProgress(p);
+  const ms = p.milestones || [];
+  const updates = (p.updates || []).slice().reverse();
+  const links = p.links || [];
 
   let html = '';
-  if (p.goal) html += `<div class="detail-section"><div class="card-meta" style="font-style:italic">${esc(p.goal)}</div></div>`;
 
-  html += `<div class="detail-section"><h3>Open (${open.length})</h3>`;
+  // ── Executive summary card ──
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      ${healthPill(p.health)}
+      <button class="btn btn-secondary btn-sm" onclick="openUpdate('${p.id}')">Post update</button>
+    </div>
+    ${p.goal ? `<div class="card-meta" style="font-style:italic;margin-bottom:8px">${esc(p.goal)}</div>` : ''}
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2)">
+      ${p.owner ? `<div><strong>Owner:</strong> ${esc(p.owner)}</div>` : ''}
+      ${p.targetDate ? `<div><strong>Target:</strong> ${fmtDate(p.targetDate)}</div>` : ''}
+      <div><strong>Progress:</strong> ${pct}%</div>
+    </div>
+    ${p.nextAction ? `<div style="margin-top:10px;padding:8px 10px;background:var(--blue-bg);border-radius:8px;font-size:13px"><strong>Next:</strong> ${esc(p.nextAction)}</div>` : ''}
+    <div class="progress-bar" style="margin-top:10px"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+  </div>`;
+
+  // ── Milestones ──
+  html += `<div class="detail-section">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>Milestones (${ms.filter(m=>m.done).length}/${ms.length})</h3>
+      <button class="btn btn-ghost btn-sm" onclick="addMilestone('${p.id}')">+ Add</button>
+    </div>`;
+  if (ms.length === 0) html += '<div class="card-meta">No milestones yet</div>';
+  else html += ms.map(m => `<div class="milestone-row">
+      <input type="checkbox" ${m.done?'checked':''} onchange="toggleMilestone('${p.id}','${m.id}',this.checked)">
+      <span class="ms-title ${m.done?'done':''}">${esc(m.title)}</span>
+      ${m.dueDate ? dueLabel(m.dueDate) : ''}
+    </div>`).join('');
+  html += '</div>';
+
+  // ── Open items ──
+  html += `<div class="detail-section"><h3>Open Items (${open.length})</h3>`;
   if (open.length === 0) html += '<div class="card-meta">No open items</div>';
   else html += open.map(w => workItemRow(w)).join('');
+  html += '</div>';
+
+  // ── Status log ──
+  html += `<div class="detail-section"><h3>Status Updates</h3>`;
+  if (updates.length === 0) html += '<div class="card-meta">No updates posted yet</div>';
+  else html += updates.slice(0,8).map(u => `<div class="update-row">
+      <div class="ur-date">${new Date(u.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})} · ${esc(u.author||'you')}${u.health?' · '+healthDot(u.health):''}</div>
+      <div class="ur-text">${esc(u.text)}</div>
+    </div>`).join('');
+  html += '</div>';
+
+  // ── Files & links (Drive) ──
+  html += `<div class="detail-section">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>Files &amp; Links</h3>
+      <button class="btn btn-ghost btn-sm" onclick="addLink('${p.id}')">+ Add</button>
+    </div>`;
+  if (links.length === 0) html += '<div class="card-meta">No files linked. Ask your agent to attach a Drive file, or add a URL.</div>';
+  else html += links.map(l => `<div class="link-row">🔗 <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title||l.url)}</a></div>`).join('');
   html += '</div>';
 
   if (closed.length > 0) {
@@ -1314,6 +1744,51 @@ function renderProjectDetail(id) {
   }
 
   document.getElementById('project-detail-body').innerHTML = html;
+}
+
+// ── Milestones / updates / links ──────────────────────────────────────────
+function addMilestone(pid) {
+  const title = prompt('Milestone title:');
+  if (!title || !title.trim()) return;
+  const due = prompt('Due date (YYYY-MM-DD), or leave blank:') || '';
+  const p = db.projects.find(p => p.id === pid); if (!p) return;
+  (p.milestones = p.milestones || []).push({ id: uid(), title: title.trim(), dueDate: /^\d{4}-\d{2}-\d{2}$/.test(due.trim())?due.trim():null, done: false, createdAt: new Date().toISOString() });
+  p.updatedAt = new Date().toISOString();
+  saveDB(); renderProjectDetail(pid); renderProjectsList();
+}
+function toggleMilestone(pid, mid, done) {
+  const p = db.projects.find(p => p.id === pid); if (!p) return;
+  const m = (p.milestones||[]).find(m => m.id === mid); if (!m) return;
+  m.done = done; p.updatedAt = new Date().toISOString();
+  saveDB(); renderProjectDetail(pid); renderProjectsList();
+}
+function addLink(pid) {
+  const url = prompt('URL (e.g. a Google Drive link):');
+  if (!url || !url.trim()) return;
+  const title = prompt('Label (optional):') || '';
+  const p = db.projects.find(p => p.id === pid); if (!p) return;
+  (p.links = p.links || []).push({ id: uid(), url: url.trim(), title: title.trim(), createdAt: new Date().toISOString() });
+  p.updatedAt = new Date().toISOString();
+  saveDB(); renderProjectDetail(pid);
+}
+function openUpdate(pid) {
+  document.getElementById('upd-project-id').value = pid;
+  document.getElementById('upd-text').value = '';
+  document.getElementById('upd-health').value = '';
+  openModal('modal-update');
+  setTimeout(() => document.getElementById('upd-text').focus(), 100);
+}
+function saveUpdate() {
+  const pid = document.getElementById('upd-project-id').value;
+  const text = document.getElementById('upd-text').value.trim();
+  const health = document.getElementById('upd-health').value;
+  if (!text) { alert('Write an update'); return; }
+  const p = db.projects.find(p => p.id === pid); if (!p) return;
+  (p.updates = p.updates || []).push({ id: uid(), text, author: db.settings.userName || 'you', health: health || null, createdAt: new Date().toISOString() });
+  if (health) p.health = health;
+  p.updatedAt = new Date().toISOString();
+  saveDB(); closeModal('modal-update'); renderProjectDetail(pid); renderProjectsList();
+  toast('Update posted');
 }
 
 function workItemRow(w) {
@@ -1359,6 +1834,7 @@ function savePerson() {
     role: document.getElementById('per-role').value.trim(),
     notes: document.getElementById('per-notes').value.trim(),
     createdAt: id ? (db.people.find(p=>p.id===id)||{}).createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   if (id) {
     const idx = db.people.findIndex(p => p.id === id);
@@ -1407,6 +1883,7 @@ function renderPersonDetail(id) {
   document.getElementById('person-detail-title').textContent = p.name;
   document.getElementById('person-detail-actions').innerHTML = `
     <button class="btn btn-secondary btn-sm" onclick="openEditPerson('${p.id}')">Edit</button>
+    <button class="btn btn-secondary btn-sm" onclick="openCompose({subject:'',body:'Hi ${esc(p.name.split(' ')[0])},\\n\\n'})">✉ Email</button>
     <button class="btn btn-primary btn-sm" onclick="openAddItem({personId:'${p.id}',type:'followUp'})">+ Follow Up</button>`;
 
   const items = db.workItems.filter(w => w.personId === id && !w.done);
@@ -1751,15 +2228,35 @@ function renderSettings() {
       </div>
     </div>
 
+    <div class="settings-section-title" style="margin-top:16px">Sync across devices</div>
+    <div class="settings-group">
+      <div class="settings-row" style="display:block">
+        <div class="settings-row-label">Private GitHub Gist sync</div>
+        <div class="settings-row-sub" style="margin-bottom:10px">Syncs your phone, iPad &amp; agent through one private gist. Paste a GitHub token with <strong>gist</strong> scope. Screenshots are never uploaded.</div>
+        <input type="password" id="set-gh-token" value="${esc(syncCfg.token||'')}" placeholder="GitHub token (ghp_… or github_pat_…)" style="width:100%;margin-bottom:8px" oninput="saveSyncToken(this.value)">
+        <input type="text" id="set-gist-id" value="${esc(syncCfg.gistId||'')}" placeholder="Gist ID (auto-created on first sync; paste it on your other device)" style="width:100%;margin-bottom:8px" oninput="saveGistId(this.value)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="connectSync()">${syncCfg.gistId?'Sync now':'Connect & create gist'}</button>
+          ${syncCfg.token?`<button class="btn btn-secondary btn-sm" onclick="disconnectSync()">Disconnect</button>`:''}
+        </div>
+        ${syncCfg.lastSync?`<div class="settings-row-sub" style="margin-top:8px">Last sync: ${new Date(syncCfg.lastSync).toLocaleString('en-GB')}</div>`:''}
+        ${syncCfg.gistId?`<div class="settings-row-sub" style="margin-top:4px">On your other device, paste this Gist ID: <strong>${esc(syncCfg.gistId)}</strong></div>`:''}
+      </div>
+    </div>
+
     <div class="settings-section-title" style="margin-top:16px">Privacy & Data</div>
     <div class="settings-group">
       <div class="settings-row">
-        <div><div class="settings-row-label">All data stored locally</div><div class="settings-row-sub">Nothing leaves this device. Ever.</div></div>
-        <span class="tag tag-action">✓ On-device</span>
+        <div><div class="settings-row-label">Screenshots stay on-device</div><div class="settings-row-sub">Captured images &amp; OCR text are never synced or uploaded.</div></div>
+        <span class="tag tag-action">✓ Local only</span>
       </div>
       <div class="settings-row">
-        <div><div class="settings-row-label">No analytics or tracking</div></div>
+        <div><div class="settings-row-label">No analytics or third-party tracking</div></div>
         <span class="tag tag-action">✓ Private</span>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-row-label">Sync is opt-in</div><div class="settings-row-sub">${syncCfg.token?'On — via your private gist':'Off — data stays on this device'}</div></div>
+        <span class="tag ${syncCfg.token?'tag-info':'tag-action'}">${syncCfg.token?'☁ Syncing':'✓ Off'}</span>
       </div>
     </div>
 
@@ -1922,6 +2419,291 @@ document.addEventListener('keydown', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// NOTES — outliner with bullets, checkboxes, headings & indentation
+// ═══════════════════════════════════════════════════════════════════════════
+let selectedNoteId = null;
+let notePreview = false;
+let noteSaveTimer = null;
+
+function renderNotes() {
+  renderNotesList();
+  if (selectedNoteId && db.notes.find(n => n.id === selectedNoteId)) openNote(selectedNoteId);
+}
+
+function renderNotesList() {
+  const el = document.getElementById('notes-list');
+  const notes = [...db.notes].sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  if (notes.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px 12px"><small>No notes yet. Tap "+ New".</small></div>';
+    return;
+  }
+  el.innerHTML = notes.map(n => {
+    const sub = (n.body||'').split('\n').map(l => l.replace(/^[\s#>-]*(\[.\])?\s*/,'').trim()).find(l => l) || 'Empty';
+    const when = n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+    return `<div class="note-list-item ${selectedNoteId===n.id?'selected':''}" onclick="openNote('${n.id}')">
+      <div class="nli-title">${esc(n.title || 'Untitled note')}</div>
+      <div class="nli-sub">${when ? when+' · ' : ''}${esc(sub.slice(0,50))}</div>
+    </div>`;
+  }).join('');
+}
+
+function newNote() {
+  const n = { id: uid(), title: '', body: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  db.notes.push(n); saveDB();
+  selectedNoteId = n.id; notePreview = false;
+  renderNotesList(); openNote(n.id);
+  setTimeout(() => document.getElementById('note-title').focus(), 100);
+}
+
+function openNote(id) {
+  const n = db.notes.find(n => n.id === id); if (!n) return;
+  selectedNoteId = id;
+  const titleEl = document.getElementById('note-title');
+  titleEl.disabled = false; titleEl.value = n.title || '';
+  document.getElementById('note-toolbar').style.display = 'flex';
+  document.getElementById('note-actions').innerHTML = `<button class="btn btn-danger btn-sm" onclick="deleteNote('${id}')">Delete</button>`;
+  renderNotesList();
+  notePreview ? renderNotePreview(n) : renderNoteEditor(n);
+}
+
+function renderNoteEditor(n) {
+  document.getElementById('note-preview-btn').textContent = '👁 Preview';
+  document.getElementById('note-editor-body').innerHTML =
+    `<textarea id="note-textarea" placeholder="Start typing…  '- ' bullet · '- [ ] ' checkbox · '# ' heading · Tab to indent">${esc(n.body||'')}</textarea>`;
+  const ta = document.getElementById('note-textarea');
+  ta.addEventListener('input', onNoteInput);
+  ta.addEventListener('keydown', onNoteKey);
+  ta.focus();
+}
+
+function onNoteInput() {
+  clearTimeout(noteSaveTimer);
+  noteSaveTimer = setTimeout(() => {
+    const n = db.notes.find(n => n.id === selectedNoteId); if (!n) return;
+    const ta = document.getElementById('note-textarea'); if (!ta) return;
+    n.body = ta.value; n.updatedAt = new Date().toISOString();
+    saveDB(); renderNotesList();
+  }, 500);
+}
+
+function onNoteTitle() {
+  const n = db.notes.find(n => n.id === selectedNoteId); if (!n) return;
+  n.title = document.getElementById('note-title').value; n.updatedAt = new Date().toISOString();
+  clearTimeout(noteSaveTimer);
+  noteSaveTimer = setTimeout(() => { saveDB(); renderNotesList(); }, 500);
+}
+
+function onNoteKey(e) {
+  const ta = e.target;
+  if (e.key === 'Tab') { e.preventDefault(); noteIndent(e.shiftKey ? -1 : 1); return; }
+  if (e.key === 'Enter') {
+    const val = ta.value, pos = ta.selectionStart;
+    const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+    const line = val.slice(lineStart, pos);
+    const m = line.match(/^(\s*)(- \[[ x]\] |- |\d+\. )/);
+    if (m) {
+      const content = line.slice(m[0].length);
+      e.preventDefault();
+      if (content.trim() === '') {            // empty item → exit the list
+        ta.value = val.slice(0, lineStart) + val.slice(pos);
+        ta.selectionStart = ta.selectionEnd = lineStart; onNoteInput(); return;
+      }
+      let marker = m[2];
+      if (/\[[ x]\]/.test(marker)) marker = '- [ ] ';   // checkbox continues unchecked
+      const ins = '\n' + m[1] + marker;
+      ta.value = val.slice(0, pos) + ins + val.slice(pos);
+      ta.selectionStart = ta.selectionEnd = pos + ins.length; onNoteInput();
+    }
+  }
+}
+
+function noteIndent(dir) {
+  const ta = document.getElementById('note-textarea'); if (!ta) return;
+  const val = ta.value, pos = ta.selectionStart;
+  const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+  if (dir > 0) {
+    ta.value = val.slice(0, lineStart) + '  ' + val.slice(lineStart);
+    ta.selectionStart = ta.selectionEnd = pos + 2;
+  } else if (val.slice(lineStart, lineStart + 2) === '  ') {
+    ta.value = val.slice(0, lineStart) + val.slice(lineStart + 2);
+    ta.selectionStart = ta.selectionEnd = Math.max(lineStart, pos - 2);
+  }
+  ta.focus(); onNoteInput();
+}
+
+function noteInsert(kind) {
+  const ta = document.getElementById('note-textarea');
+  if (!ta) { if (selectedNoteId) { notePreview = false; openNote(selectedNoteId); } return; }
+  const markers = { heading: '# ', bullet: '- ', check: '- [ ] ' };
+  const mk = markers[kind] || '- ';
+  const val = ta.value, pos = ta.selectionStart;
+  const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+  const ind = (val.slice(lineStart).match(/^\s*/) || [''])[0];
+  const insertAt = lineStart + ind.length;
+  ta.value = val.slice(0, insertAt) + mk + val.slice(insertAt);
+  ta.selectionStart = ta.selectionEnd = Math.max(pos, insertAt) + mk.length;
+  ta.focus(); onNoteInput();
+}
+
+function toggleNotePreview() {
+  notePreview = !notePreview;
+  const n = db.notes.find(n => n.id === selectedNoteId); if (!n) return;
+  notePreview ? renderNotePreview(n) : renderNoteEditor(n);
+}
+
+function renderNotePreview(n) {
+  document.getElementById('note-preview-btn').textContent = '✎ Edit';
+  const html = noteToHtml(n.body || '');
+  document.getElementById('note-editor-body').innerHTML =
+    `<div class="note-preview">${html || '<div class="card-meta">Empty note</div>'}</div>`;
+}
+
+function noteToHtml(text) {
+  return text.split('\n').map((raw, idx) => {
+    const indent = (raw.match(/^(\s*)/)[1] || '').length;
+    const pad = indent ? `style="padding-left:${indent*10}px"` : '';
+    const line = raw.trim();
+    if (!line) return '';
+    let m;
+    if (m = line.match(/^#{1,3}\s+(.*)/)) return `<h3 ${pad}>${esc(m[1])}</h3>`;
+    if (m = line.match(/^- \[([ x])\]\s+(.*)/)) {
+      const done = m[1] === 'x';
+      return `<div class="np-check ${done?'done':''}" ${pad} onclick="toggleNoteCheck('${selectedNoteId}',${idx})"><span>${done?'☑':'☐'}</span><span>${esc(m[2])}</span></div>`;
+    }
+    if (m = line.match(/^-\s+(.*)/)) return `<div class="np-bullet" ${pad}><span>${esc(m[1])}</span></div>`;
+    return `<div ${pad}>${esc(line)}</div>`;
+  }).join('');
+}
+
+function toggleNoteCheck(id, lineIdx) {
+  const n = db.notes.find(n => n.id === id); if (!n) return;
+  const lines = n.body.split('\n');
+  const l = lines[lineIdx]; if (l == null) return;
+  lines[lineIdx] = /\[x\]/.test(l) ? l.replace('[x]','[ ]') : l.replace('[ ]','[x]');
+  n.body = lines.join('\n'); n.updatedAt = new Date().toISOString();
+  saveDB(); renderNotePreview(n); renderNotesList();
+}
+
+function deleteNote(id) {
+  if (!confirm('Delete this note?')) return;
+  db.notes = db.notes.filter(n => n.id !== id); tombstone(id); selectedNoteId = null;
+  saveDB();
+  document.getElementById('note-title').value = '';
+  document.getElementById('note-title').disabled = true;
+  document.getElementById('note-toolbar').style.display = 'none';
+  document.getElementById('note-actions').innerHTML = '';
+  document.getElementById('note-editor-body').innerHTML = '<div class="empty-state"><div class="icon">✎</div><p>Select or create a note</p></div>';
+  renderNotesList();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OUTBOX — compose email here; the agent sends it via Gmail and marks it sent
+// ═══════════════════════════════════════════════════════════════════════════
+function renderOutbox() {
+  const el = document.getElementById('outbox-content');
+  const msgs = [...(db.outbox||[])].sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+  let html = `<div class="card" style="margin-bottom:16px;background:var(--blue-bg);border-color:#C8DEF5">
+    <div style="font-size:13px;color:var(--text2)">Compose here — your agent (with Gmail access) sends it and marks it sent. It syncs across all your devices. <strong>Cadence never emails directly.</strong></div></div>`;
+  if (msgs.length === 0) {
+    el.innerHTML = html + '<div class="empty-state"><div class="icon">✉</div><p>Outbox empty</p><small>Compose an email to queue it</small></div>';
+    return;
+  }
+  const sec = (title, arr, color) => arr.length
+    ? `<div class="section-header"><h2>${title}</h2><span class="section-count" style="background:${color}">${arr.length}</span></div>` + arr.map(emailCard).join('')
+    : '';
+  html += sec('Queued', msgs.filter(m=>m.status==='queued'), 'var(--accent)');
+  html += sec('Sent', msgs.filter(m=>m.status==='sent'), 'var(--green)');
+  html += sec('Other', msgs.filter(m=>m.status!=='queued'&&m.status!=='sent'), 'var(--text3)');
+  el.innerHTML = html;
+}
+
+function emailCard(m) {
+  const stCls = {queued:'est-queued', sent:'est-sent', draft:'est-draft', cancelled:'est-cancelled'}[m.status] || 'est-draft';
+  const proj = m.relatedProject ? db.projects.find(p => p.id === m.relatedProject || p.name === m.relatedProject) : null;
+  return `<div class="email-item">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div class="ei-subject">${esc(m.subject||'(no subject)')}</div>
+        <div class="ei-to">To: ${esc(m.to||'')}${m.cc?' · Cc: '+esc(m.cc):''}${proj?' · '+esc(proj.name):''}</div>
+      </div>
+      <span class="tag ${stCls}">${esc(m.status)}</span>
+    </div>
+    <div class="ei-body">${esc(m.body||'')}</div>
+    <div class="card-actions">
+      ${m.status==='queued' ? `<button class="btn btn-sm" style="background:var(--green-bg);color:var(--green)" onclick="markSent('${m.id}')">Mark sent</button>` : ''}
+      ${m.status==='queued' ? `<button class="btn btn-secondary btn-sm" onclick="editEmail('${m.id}')">Edit</button>` : ''}
+      ${m.status!=='sent' ? `<button class="btn btn-danger btn-sm" onclick="deleteEmail('${m.id}')">Delete</button>` : ''}
+    </div>
+    ${m.sentAt ? `<div class="card-meta" style="margin-top:6px">Sent ${new Date(m.sentAt).toLocaleString('en-GB')}${m.via?' · '+esc(m.via):''}</div>` : ''}
+  </div>`;
+}
+
+function openCompose(opts = {}) {
+  document.getElementById('em-id').value = opts.id || '';
+  document.getElementById('em-to').value = opts.to || '';
+  document.getElementById('em-cc').value = opts.cc || '';
+  document.getElementById('em-subject').value = opts.subject || '';
+  document.getElementById('em-body').value = opts.body || '';
+  populateProjectSelect('em-project', opts.relatedProject || '');
+  document.getElementById('modal-email-title').textContent = opts.id ? 'Edit Email' : 'Compose Email';
+  openModal('modal-email');
+  setTimeout(() => document.getElementById('em-to').focus(), 100);
+}
+
+function editEmail(id) {
+  const m = db.outbox.find(m => m.id === id); if (!m) return;
+  openCompose({ id:m.id, to:m.to, cc:m.cc, subject:m.subject, body:m.body, relatedProject:m.relatedProject });
+}
+
+function saveEmail() {
+  const id = document.getElementById('em-id').value;
+  const to = document.getElementById('em-to').value.trim();
+  if (!to) { alert('Add a recipient'); return; }
+  const fields = {
+    to,
+    cc: document.getElementById('em-cc').value.trim(),
+    subject: document.getElementById('em-subject').value.trim(),
+    body: document.getElementById('em-body').value,
+    relatedProject: document.getElementById('em-project').value || null,
+    updatedAt: new Date().toISOString(),
+  };
+  if (id) {
+    const m = db.outbox.find(m => m.id === id); if (m) Object.assign(m, fields);
+  } else {
+    db.outbox.push({ id: uid(), status: 'queued', createdBy: db.settings.userName || 'you',
+                     createdAt: new Date().toISOString(), sentAt: null, via: null, ...fields });
+  }
+  saveDB(); closeModal('modal-email'); renderOutbox(); updateBadges();
+  toast('Queued to Outbox');
+}
+
+function markSent(id) {
+  const m = db.outbox.find(m => m.id === id); if (!m) return;
+  m.status = 'sent'; m.sentAt = new Date().toISOString(); m.via = 'manual'; m.updatedAt = new Date().toISOString();
+  saveDB(); renderOutbox(); updateBadges(); toast('Marked sent');
+}
+
+function deleteEmail(id) {
+  if (!confirm('Delete this email?')) return;
+  db.outbox = db.outbox.filter(m => m.id !== id); tombstone(id);
+  saveDB(); renderOutbox(); updateBadges();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYNC SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+function saveSyncToken(v) { syncCfg.token = v.trim(); saveSyncCfg(); }
+function saveGistId(v) { syncCfg.gistId = v.trim(); saveSyncCfg(); }
+function connectSync() {
+  if (!syncCfg.token) { toast('Paste a GitHub token first'); return; }
+  syncNow();
+}
+function disconnectSync() {
+  if (!confirm('Stop syncing on this device? Local data stays; the gist is untouched.')) return;
+  syncCfg = {}; saveSyncCfg(); setSyncStatus('off', 'Sync off'); renderSettings(); toast('Sync disconnected');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SERVICE WORKER
 // ═══════════════════════════════════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
@@ -1931,6 +2713,17 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════════════════════
+if (syncCfg.token) {
+  setSyncStatus('ok', 'Sync ready');
+  syncNow({ silent: true });          // pull latest from the gist on launch
+} else {
+  setSyncStatus('off', 'Sync off');
+}
+// Re-pull when the app comes back to the foreground (e.g. switching devices).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && syncCfg.token && !syncing) syncNow({ silent: true });
+});
+
 navigate('today');
 </script>
 </body>
