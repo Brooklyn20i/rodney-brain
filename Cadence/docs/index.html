@@ -2239,7 +2239,11 @@ function renderSettings() {
             <button class="btn btn-secondary btn-sm" onclick="syncNow()">Sync now</button>
             <button class="btn btn-secondary btn-sm" onclick="disconnectSync()">Disconnect</button>
           </div>
-          ${syncCfg.lastSync?`<div class="settings-row-sub" style="margin-top:10px">Last sync: ${new Date(syncCfg.lastSync).toLocaleString('en-GB')}</div>`:''}
+          <div class="settings-row-sub" style="margin-top:10px;padding:8px 10px;background:var(--surface2);border-radius:8px">
+            <strong>Shared store ID</strong> (must be identical on both devices):<br>
+            <span style="font-family:monospace;font-size:12px;word-break:break-all;color:var(--text)">${esc(syncCfg.gistId||'(none)')}</span>
+          </div>
+          ${syncCfg.lastSync?`<div class="settings-row-sub" style="margin-top:6px">Last sync: ${new Date(syncCfg.lastSync).toLocaleString('en-GB')}</div>`:''}
         ` : `
           <div class="settings-row-label">Set up sync (once)</div>
           <div class="settings-row-sub" style="margin:6px 0 12px">Phone &amp; iPad will share everything through your own private store. Screenshots never sync.</div>
@@ -2774,6 +2778,19 @@ if (syncCfg.token) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && syncCfg.token && !syncing) syncNow({ silent: true });
 });
+
+// Gentle auto-refresh so the other device's changes appear on their own,
+// but never while you're typing or have a dialog open.
+const NO_AUTOSYNC = ['notes', 'capture', 'settings'];
+setInterval(() => {
+  if (!syncCfg.token || syncing) return;
+  if (document.visibilityState !== 'visible') return;
+  if (NO_AUTOSYNC.includes(currentScreen)) return;
+  if (document.querySelector('.modal-overlay.open')) return;
+  const ae = document.activeElement;
+  if (ae && /^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName)) return;
+  syncNow({ silent: true });
+}, 15000);
 
 navigate('today');
 </script>
