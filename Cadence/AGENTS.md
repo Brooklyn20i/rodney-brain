@@ -81,15 +81,46 @@ Register with your MCP client:
 | Tool | Purpose |
 |------|---------|
 | `get_today` | Cockpit view: focus, top 3, overdue, due today, waiting-on, decisions |
+| `get_brief` | Markdown executive brief — generate and email it each morning |
 | `get_weekly_review` | Review metrics, inbox, overdue, stale projects |
-| `list_tasks` | Filter by status/type/project/person/overdue/due_today |
-| `get_inbox` | Untriaged captured items |
+| `list_tasks` / `get_inbox` / `search` | Find work |
 | `list_projects` / `list_people` / `list_decisions` | Browse |
-| `search` | Full-text across everything |
-| `add_task` | Create a work item (defaults to inbox) |
-| `update_task` / `complete_task` / `delete_task` | Modify items |
-| `add_project` / `add_person` / `add_decision` | Create records |
-| `resolve_decision` | Record an outcome and close a decision |
+| `add_task` / `update_task` / `complete_task` / `delete_task` | Work items |
+| `add_comment` | Progress notes on a task (shows author) |
+| `add_project` / `update_project` | Projects incl. `health`, `owner`, `target_date`, `next_action` |
+| `add_milestone` / `complete_milestone` | Project checkpoints — drive % progress |
+| `add_project_update` | Post a status update, optionally moving health 🟢🟠🔴 |
+| `add_link` | Attach a URL (e.g. Drive file) to a project or task |
+| `get_person_prep` / `add_talking_point` | 1:1 preparation per person |
+| `get_pending_emails` / `queue_email` / `mark_email_sent` | The email outbox |
+| `get_activity` / `log_action` | Shared audit trail |
+| `add_person` / `add_decision` / `resolve_decision` | Records |
+
+## Gmail / Drive / Calendar — the agent bridge
+
+Cadence itself never calls Google. **You** (the agent) do, with whatever Gmail/
+Drive/Calendar tools you already have. The store is the staging area and the
+audit trail:
+
+**Sending email** (human composed it in the cockpit):
+1. `get_pending_emails()` → for each message
+2. Send it with your Gmail tool (to/cc/subject/body are all in the record)
+3. `mark_email_sent(email_id, via="gmail")` — never skip this
+
+**Drafting email for the human**: `queue_email(..., status defaults to queued)`
+— if they asked you to draft-for-review, tell them it's waiting in ✉ Outbox.
+
+**Drive files**: when asked to find/attach a document, search with your Drive
+tool, then `add_link("project", "<project name>", url, title)`. The file shows
+up under the project's *Files & Links* tab.
+
+**Morning brief routine** (recommended): `get_brief()` → optionally prepend
+today's calendar events from your Calendar tool → email it to the human →
+`log_action("sent morning brief")`.
+
+**Weekly project sweep**: for each active project, check progress
+(`list_tasks(project=...)`, milestones), then `add_project_update(project,
+text, health=...)` so the human sees a dated status trail with RAG health.
 
 ## Connecting without MCP
 

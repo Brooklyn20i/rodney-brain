@@ -198,6 +198,158 @@ def resolve_decision(decision_id: str, outcome: str, status: str = "decided") ->
     return item
 
 
+# ── Executive brief ───────────────────────────────────────────────────────────
+@mcp.tool()
+def get_brief() -> str:
+    """Generate the markdown executive brief (focus, top 3, overdue, waiting,
+    decisions, project health). Send it to the human by email each morning:
+    call this, then send via your Gmail tool, then log_action('sent brief')."""
+    return core.generate_brief(core.load())
+
+
+# ── Project management ────────────────────────────────────────────────────────
+@mcp.tool()
+def update_project(project: str, name: str | None = None, goal: str | None = None,
+                   status: str | None = None, owner: str | None = None,
+                   target_date: str | None = None, next_action: str | None = None,
+                   health: str | None = None) -> dict:
+    """Update project fields. project = name or id.
+    status: active|onHold|completed. health: green|amber|red."""
+    db = core.load()
+    fields = {k: v for k, v in {"name": name, "goal": goal, "status": status,
+                                "owner": owner, "target_date": target_date,
+                                "next_action": next_action, "health": health}.items()
+              if v is not None}
+    p = core.update_project(db, project, **fields)
+    core.log_activity(db, "agent", "update_project", f"{p['name']}: {list(fields)}")
+    core.save(db)
+    return p
+
+
+@mcp.tool()
+def add_milestone(project: str, title: str, due_date: str | None = None) -> dict:
+    """Add a milestone to a project (project = name or id, due_date ISO)."""
+    db = core.load()
+    m = core.add_milestone(db, project, title, due_date=due_date)
+    core.log_activity(db, "agent", "add_milestone", f"{project}: {title}")
+    core.save(db)
+    return m
+
+
+@mcp.tool()
+def complete_milestone(project: str, milestone_id: str) -> dict:
+    """Mark a project milestone done."""
+    db = core.load()
+    m = core.set_milestone(db, project, milestone_id, done=True)
+    core.log_activity(db, "agent", "complete_milestone", m["title"])
+    core.save(db)
+    return m
+
+
+@mcp.tool()
+def add_project_update(project: str, text: str, health: str | None = None,
+                       author: str = "agent") -> dict:
+    """Post a status update to a project's log; optionally set health
+    (green|amber|red) at the same time. Use this after reviewing a project."""
+    db = core.load()
+    u = core.add_project_update(db, project, text, author=author, health=health)
+    core.log_activity(db, author, "project_update", f"{project}: {text[:80]}")
+    core.save(db)
+    return u
+
+
+@mcp.tool()
+def add_comment(task_id: str, text: str, author: str = "agent") -> dict:
+    """Add a comment to a task — progress notes, context, what you did."""
+    db = core.load()
+    c = core.add_comment(db, task_id, text, author=author)
+    core.save(db)
+    return c
+
+
+@mcp.tool()
+def add_link(kind: str, target_id: str, url: str, title: str = "") -> dict:
+    """Attach a link to a 'project' or 'task' — e.g. a Google Drive file you
+    found with your Drive tools, a doc, a dashboard. kind: project|task.
+    For projects, target_id may be the project name."""
+    db = core.load()
+    link = core.add_link(db, kind, target_id, url, title=title)
+    core.log_activity(db, "agent", "add_link", f"{kind} {target_id}: {title or url}")
+    core.save(db)
+    return link
+
+
+# ── People / 1:1 prep ─────────────────────────────────────────────────────────
+@mcp.tool()
+def get_person_prep(person: str) -> dict:
+    """1:1 preparation pack for a person (name or id): open talking points,
+    what you're waiting on them for, follow-ups, and other open items."""
+    return core.get_person_prep(core.load(), person)
+
+
+@mcp.tool()
+def add_talking_point(person: str, text: str, author: str = "agent") -> dict:
+    """Add a talking point to raise in the next 1:1 with this person."""
+    db = core.load()
+    tp = core.add_talking_point(db, person, text, author=author)
+    core.save(db)
+    return tp
+
+
+# ── Outbox: email via the agent bridge ────────────────────────────────────────
+@mcp.tool()
+def get_pending_emails() -> list[dict]:
+    """Emails the human queued in the cockpit, waiting for an agent with Gmail
+    access to send. Workflow: send each via your Gmail tool, then call
+    mark_email_sent(email_id)."""
+    return core.list_outbox(core.load(), status="queued")
+
+
+@mcp.tool()
+def queue_email(to: str, subject: str, body: str, cc: str = "",
+                created_by: str = "agent",
+                related_task_id: str | None = None,
+                related_project: str | None = None) -> dict:
+    """Draft an email into the shared outbox (status=queued). Use this when
+    composing on the human's behalf so they can review it in the cockpit before
+    it is sent — or send immediately yourself if they asked you to."""
+    db = core.load()
+    m = core.queue_email(db, to, subject, body, cc=cc, created_by=created_by,
+                         related_task_id=related_task_id,
+                         related_project=related_project)
+    core.log_activity(db, created_by, "queue_email", f"to {to}: {subject}")
+    core.save(db)
+    return m
+
+
+@mcp.tool()
+def mark_email_sent(email_id: str, via: str = "gmail") -> dict:
+    """Mark an outbox email as sent AFTER you have actually sent it
+    (e.g. with your Gmail tool). Records timestamp and channel."""
+    db = core.load()
+    m = core.mark_email(db, email_id, "sent", via=via)
+    core.log_activity(db, "agent", "email_sent", f"to {m['to']}: {m['subject']}")
+    core.save(db)
+    return m
+
+
+# ── Activity ──────────────────────────────────────────────────────────────────
+@mcp.tool()
+def get_activity(limit: int = 20) -> list[dict]:
+    """Recent activity log — what humans and agents have done in the cockpit."""
+    return core.load().get("activity", [])[:limit]
+
+
+@mcp.tool()
+def log_action(action: str, detail: str = "", actor: str = "agent") -> dict:
+    """Record something you did outside the store (sent an email, filed a doc
+    in Drive, booked a meeting) so the human sees it in the activity feed."""
+    db = core.load()
+    entry = core.log_activity(db, actor, action, detail)
+    core.save(db)
+    return entry
+
+
 # ── Reference resource ───────────────────────────────────────────────────────
 @mcp.resource("cadence://schema")
 def schema() -> str:

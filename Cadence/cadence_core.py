@@ -33,22 +33,44 @@ ITEM_TYPES = ("task", "decision", "followUp", "waitingFor", "risk", "action")
 PRIORITIES = ("high", "medium", "low")
 PROJECT_STATUSES = ("active", "onHold", "completed")
 DECISION_STATUSES = ("pending", "decided", "deferred")
+HEALTH_STATUSES = ("green", "amber", "red")
+EMAIL_STATUSES = ("draft", "queued", "sent", "cancelled")
 
-EMPTY_DB: dict[str, list] = {"work_items": [], "projects": [], "people": [], "decisions": []}
+EMPTY_DB: dict[str, list] = {"work_items": [], "projects": [], "people": [],
+                             "decisions": [], "outbox": [], "activity": []}
 
 
 # ── IO ────────────────────────────────────────────────────────────────────────
 def load() -> dict[str, Any]:
-    """Read the shared store. Always returns a well-formed dict."""
+    """Read the shared store. Always returns a well-formed, migrated dict."""
     if DATA_FILE.exists():
         try:
             data = json.loads(DATA_FILE.read_text())
             for key in EMPTY_DB:
                 data.setdefault(key, [])
-            return data
+            return _migrate(data)
         except Exception:
             pass
     return json.loads(json.dumps(EMPTY_DB))
+
+
+def _migrate(data: dict) -> dict:
+    """Fill defaults so records written by older versions keep working."""
+    for p in data["projects"]:
+        p.setdefault("health", "green")
+        p.setdefault("owner", "")
+        p.setdefault("target_date", None)
+        p.setdefault("next_action", "")
+        p.setdefault("milestones", [])
+        p.setdefault("updates", [])
+        p.setdefault("links", [])
+    for w in data["work_items"]:
+        w.setdefault("comments", [])
+        w.setdefault("links", [])
+    for p in data["people"]:
+        p.setdefault("email", "")
+        p.setdefault("talking_points", [])
+    return data
 
 
 def save(db: dict[str, Any]) -> None:
@@ -196,12 +218,250 @@ def delete_task(db, task_id) -> bool:
     return len(db["work_items"]) < before
 
 
-def add_project(db, name, goal="", status="active", color="#1B5E9E") -> dict:
+def add_project(db, name, goal="", status="active", color="#1B5E9E",
+                owner="", target_date=None, next_action="", health="green") -> dict:
     _validate(status, PROJECT_STATUSES, "status")
+    _validate(health, HEALTH_STATUSES, "health")
     item = {"id": new_id(), "name": name.strip(), "goal": goal, "status": status,
-            "color": color, "created_at": now_iso()}
+            "color": color, "owner": owner, "target_date": target_date or None,
+            "next_action": next_action, "health": health,
+            "milestones": [], "updates": [], "links": [],
+            "created_at": now_iso()}
     db["projects"].append(item)
     return item
+
+
+def update_project(db, project, **fields) -> dict:
+    pid = _resolve_project(db, project)
+    p = next((x for x in db["projects"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No project matching {project!r}")
+    if "status" in fields:
+        _validate(fields["status"], PROJECT_STATUSES, "status")
+    if "health" in fields:
+        _validate(fields["health"], HEALTH_STATUSES, "health")
+    for k, v in fields.items():
+        if k in ("name", "goal", "status", "color", "owner",
+                 "target_date", "next_action", "health"):
+            p[k] = v
+    return p
+
+
+def add_milestone(db, project, title, due_date=None) -> dict:
+    pid = _resolve_project(db, project)
+    p = next((x for x in db["projects"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No project matching {project!r}")
+    m = {"id": new_id(), "title": title.strip(), "due_date": due_date or None,
+         "done": False, "created_at": now_iso()}
+    p["milestones"].append(m)
+    return m
+
+
+def set_milestone(db, project, milestone_id, done=True) -> dict:
+    pid = _resolve_project(db, project)
+    p = next((x for x in db["projects"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No project matching {project!r}")
+    m = next((x for x in p["milestones"] if x["id"] == milestone_id), None)
+    if not m:
+        raise ValueError(f"No milestone with id {milestone_id!r}")
+    m["done"] = done
+    return m
+
+
+def add_project_update(db, project, text, author="human", health=None) -> dict:
+    """Post a status update to a project; optionally move its health at the same time."""
+    pid = _resolve_project(db, project)
+    p = next((x for x in db["projects"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No project matching {project!r}")
+    if health:
+        _validate(health, HEALTH_STATUSES, "health")
+        p["health"] = health
+    u = {"id": new_id(), "date": today_str(), "text": text.strip(),
+         "author": author, "health": p.get("health", "green"), "created_at": now_iso()}
+    p["updates"].insert(0, u)
+    return u
+
+
+def project_progress(db, project_id) -> int:
+    """Percent complete: milestones if any, else work items."""
+    p = next((x for x in db["projects"] if x["id"] == project_id), None)
+    if not p:
+        return 0
+    ms = p.get("milestones", [])
+    if ms:
+        return round(100 * sum(1 for m in ms if m.get("done")) / len(ms))
+    items = [w for w in db["work_items"] if w.get("project_id") == project_id]
+    if not items:
+        return 0
+    return round(100 * sum(1 for w in items if w.get("done")) / len(items))
+
+
+def add_link(db, kind, target_id, url, title="") -> dict:
+    """Attach a link (Drive file, doc, anything) to a 'project' or 'task'."""
+    coll = db["projects"] if kind == "project" else db["work_items"]
+    rec = next((x for x in coll if x["id"] == target_id), None)
+    if rec is None and kind == "project":
+        pid = _resolve_project(db, target_id)
+        rec = next((x for x in coll if x["id"] == pid), None)
+    if rec is None:
+        raise ValueError(f"No {kind} matching {target_id!r}")
+    link = {"id": new_id(), "url": url, "title": title or url, "added_at": now_iso()}
+    rec.setdefault("links", []).append(link)
+    return link
+
+
+def add_comment(db, task_id, text, author="human") -> dict:
+    w = next((x for x in db["work_items"] if x["id"] == task_id), None)
+    if not w:
+        raise ValueError(f"No task with id {task_id!r}")
+    c = {"id": new_id(), "text": text.strip(), "author": author, "created_at": now_iso()}
+    w.setdefault("comments", []).append(c)
+    w["updated_at"] = now_iso()
+    return c
+
+
+def add_talking_point(db, person, text, author="human") -> dict:
+    pid = _resolve_person(db, person)
+    p = next((x for x in db["people"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No person matching {person!r}")
+    tp = {"id": new_id(), "text": text.strip(), "done": False,
+          "author": author, "created_at": now_iso()}
+    p.setdefault("talking_points", []).append(tp)
+    return tp
+
+
+def resolve_talking_point(db, person, point_id, done=True) -> dict:
+    pid = _resolve_person(db, person)
+    p = next((x for x in db["people"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No person matching {person!r}")
+    tp = next((x for x in p.get("talking_points", []) if x["id"] == point_id), None)
+    if not tp:
+        raise ValueError(f"No talking point with id {point_id!r}")
+    tp["done"] = done
+    return tp
+
+
+def get_person_prep(db, person) -> dict:
+    """Everything you need before a 1:1: open items + talking points."""
+    pid = _resolve_person(db, person)
+    p = next((x for x in db["people"] if x["id"] == pid), None)
+    if not p:
+        raise ValueError(f"No person matching {person!r}")
+    open_items = [enrich(db, w) for w in db["work_items"]
+                  if w.get("person_id") == pid and not w.get("done")]
+    return {
+        "person": {k: p[k] for k in ("id", "name", "role", "email", "notes")},
+        "talking_points": [t for t in p.get("talking_points", []) if not t.get("done")],
+        "waiting_on_them": [w for w in open_items if w["type"] == "waitingFor"],
+        "follow_ups": [w for w in open_items if w["type"] == "followUp"],
+        "other_open_items": [w for w in open_items
+                             if w["type"] not in ("waitingFor", "followUp")],
+    }
+
+
+# ── Outbox: cockpit queues email, an agent with Gmail access sends it ─────────
+def queue_email(db, to, subject, body, cc="", status="queued",
+                created_by="human", related_task_id=None, related_project=None) -> dict:
+    _validate(status, EMAIL_STATUSES, "status")
+    msg = {"id": new_id(), "to": to.strip(), "cc": cc.strip(), "subject": subject.strip(),
+           "body": body, "status": status,
+           "related_task_id": related_task_id,
+           "related_project_id": _resolve_project(db, related_project),
+           "created_by": created_by, "created_at": now_iso(),
+           "sent_at": None, "sent_via": None}
+    db["outbox"].append(msg)
+    return msg
+
+
+def list_outbox(db, status=None) -> list[dict]:
+    msgs = db.get("outbox", [])
+    if status:
+        msgs = [m for m in msgs if m.get("status") == status]
+    return sorted(msgs, key=lambda m: m.get("created_at", ""), reverse=True)
+
+
+def mark_email(db, email_id, status, via="") -> dict:
+    _validate(status, EMAIL_STATUSES, "status")
+    m = next((x for x in db.get("outbox", []) if x["id"] == email_id), None)
+    if not m:
+        raise ValueError(f"No outbox message with id {email_id!r}")
+    m["status"] = status
+    if status == "sent":
+        m["sent_at"] = now_iso()
+        m["sent_via"] = via or "agent"
+    return m
+
+
+# ── Activity log: the audit trail both sides can read ────────────────────────
+def log_activity(db, actor, action, detail="") -> dict:
+    entry = {"id": new_id(), "ts": now_iso(), "actor": actor,
+             "action": action, "detail": detail}
+    db.setdefault("activity", []).insert(0, entry)
+    del db["activity"][200:]
+    return entry
+
+
+# ── Executive brief ───────────────────────────────────────────────────────────
+_HEALTH_ICON = {"green": "🟢", "amber": "🟠", "red": "🔴"}
+
+
+def generate_brief(db) -> str:
+    """Markdown daily brief: copy it, or have an agent email it to you."""
+    t = get_today(db)
+    lines = [f"# Executive Brief — {datetime.now().strftime('%A %d %B %Y')}", ""]
+    if t["focus"]:
+        lines += [f"**Suggested focus:** {t['focus']['title']}", ""]
+
+    lines.append("## Top 3 priorities")
+    for w in t["top3"]:
+        due = f", due {w['due_date']}" if w.get("due_date") else ""
+        lines.append(f"1. {w['title']}  _({w['type']}, {w['priority']}{due})_")
+    if not t["top3"]:
+        lines.append("_Nothing open._")
+
+    if t["overdue"]:
+        lines.append("\n## ⚠ Overdue")
+        for w in t["overdue"]:
+            lines.append(f"- {w['title']} (due {w['due_date']})")
+
+    if t["due_today"]:
+        lines.append("\n## Due today")
+        for w in t["due_today"]:
+            lines.append(f"- {w['title']}")
+
+    if t["waiting_on_others"]:
+        lines.append("\n## Waiting on others")
+        for w in t["waiting_on_others"]:
+            who = f" — {w['person']}" if w.get("person") else ""
+            lines.append(f"- {w['title']}{who}")
+
+    if t["decisions_needed"]:
+        lines.append("\n## Decisions needed")
+        for d in t["decisions_needed"]:
+            due = f" (due {d['due_date']})" if d.get("due_date") else ""
+            lines.append(f"- {d['title']}{due}")
+
+    active = [p for p in db["projects"] if p.get("status") == "active"]
+    if active:
+        lines.append("\n## Projects")
+        for p in active:
+            icon = _HEALTH_ICON.get(p.get("health", "green"), "🟢")
+            pct = project_progress(db, p["id"])
+            nxt = f" — next: {p['next_action']}" if p.get("next_action") else ""
+            tgt = f", target {p['target_date']}" if p.get("target_date") else ""
+            lines.append(f"- {icon} **{p['name']}** ({pct}%{tgt}){nxt}")
+
+    queued = len(list_outbox(db, status="queued"))
+    if queued:
+        lines.append(f"\n_{queued} email(s) queued in the outbox awaiting send._")
+    if t["inbox_count"]:
+        lines.append(f"\n_{t['inbox_count']} item(s) in the inbox to triage._")
+    return "\n".join(lines)
 
 
 def add_person(db, name, role="", notes="") -> dict:

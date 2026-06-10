@@ -93,18 +93,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Data layer ────────────────────────────────────────────────────────────────
+# ── Data layer (shared with agents via cadence_core) ─────────────────────────
+import cadence_core as core
 
 def load_data():
-    if DATA_FILE.exists():
-        try:
-            return json.loads(DATA_FILE.read_text())
-        except Exception:
-            pass
-    return {"work_items": [], "projects": [], "people": [], "decisions": []}
+    return core.load()
 
 def save_data():
-    DATA_FILE.write_text(json.dumps(st.session_state.db, indent=2))
+    core.save(st.session_state.db)
 
 def init_db():
     if "db" not in st.session_state:
@@ -199,23 +195,35 @@ with st.sidebar:
     st.markdown("---")
     inbox_count = len([w for w in db["work_items"] if w.get("inboxed") and not w.get("done")])
     dec_count   = len([d for d in db["decisions"] if d.get("status") == "pending"])
+    queued_count = len(core.list_outbox(db, status="queued"))
 
     page = st.radio(
         "",
-        options=["today", "capture", "inbox", "projects", "people", "decisions", "review", "search", "settings"],
+        options=["today", "brief", "capture", "inbox", "projects", "people",
+                 "decisions", "outbox", "review", "search", "settings"],
         format_func=lambda x: {
             "today":     "☀  Today",
+            "brief":     "📋  Brief",
             "capture":   "⊡  Capture",
             "inbox":     f"↓  Inbox  ({inbox_count})" if inbox_count else "↓  Inbox",
             "projects":  "▤  Projects",
             "people":    "✦  People",
             "decisions": f"⚖  Decisions  ({dec_count})" if dec_count else "⚖  Decisions",
+            "outbox":    f"✉  Outbox  ({queued_count})" if queued_count else "✉  Outbox",
             "review":    "✓  Review",
             "search":    "⌕  Search",
             "settings":  "⚙  Settings",
         }[x],
         label_visibility="collapsed",
     )
+
+    st.markdown("---")
+    # Agents write to the same store from outside this session; pull their
+    # changes in without restarting.
+    if st.button("↻  Sync", use_container_width=True):
+        st.session_state.db = load_data()
+        st.rerun()
+    st.caption("Sync picks up changes made by your agent.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TODAY
@@ -232,6 +240,18 @@ if page == "today":
 
     active = [w for w in db["work_items"] if not w.get("done")]
     scored = sorted(active, key=priority_score, reverse=True)
+
+    # ── KPI strip
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Open", len(active))
+    overdue_n = len([w for w in active if is_overdue(w.get("due_date"))])
+    k2.metric("Overdue", overdue_n, delta=-overdue_n if overdue_n else None, delta_color="inverse")
+    k3.metric("Inbox", len([w for w in active if w.get("inboxed")]))
+    k4.metric("Decisions", len([d for d in db["decisions"] if d.get("status") == "pending"]))
+    red_projects = len([p for p in db["projects"]
+                        if p.get("status") == "active" and p.get("health") == "red"])
+    k5.metric("Projects at risk", red_projects,
+              delta=-red_projects if red_projects else None, delta_color="inverse")
 
     # ── Focus block
     top3 = scored[:3]
@@ -315,6 +335,20 @@ if page == "today":
                 w["done"] = done; save_data(); st.rerun()
         with _c2:
             st.markdown(f"{type_tag(w.get('type','task'))} <b>{w['title']}</b>", unsafe_allow_html=True)
+
+    # ── Agent activity feed
+    activity = db.get("activity", [])
+    agent_items = [w for w in db["work_items"]
+                   if str(w.get("source", "")).startswith("agent") and w.get("inboxed")]
+    if activity or agent_items:
+        with st.expander(f"🤖 Agent activity ({len(activity)} events"
+                         f"{', ' + str(len(agent_items)) + ' items awaiting triage' if agent_items else ''})"):
+            for w in agent_items[:5]:
+                st.markdown(f"- **New from {w.get('source')}**: {w['title']} _(in your Inbox)_")
+            for a in activity[:12]:
+                ts = a.get("ts", "")[:16].replace("T", " ")
+                st.markdown(f"- `{ts}` **{a.get('actor')}** — {a.get('action')}"
+                            f"{': ' + a['detail'] if a.get('detail') else ''}")
 
     # ── Quick Add dialog
     if st.session_state.get("show_quick_add"):
@@ -515,8 +549,13 @@ elif page == "projects":
                 done_count  = len([w for w in items if w.get("done")])
                 total = open_count + done_count
                 pct = int(done_count / total * 100) if total else 0
-                active_label = {"active": "●", "onHold": "◐", "completed": "○"}[p.get("status", "active")]
-                btn_label = f"{active_label} {p['name']}  ({open_count} open)"
+                if p.get("status") == "completed":
+                    h_icon = "✓"
+                elif p.get("status") == "onHold":
+                    h_icon = "⏸"
+                else:
+                    h_icon = {"green": "🟢", "amber": "🟠", "red": "🔴"}.get(p.get("health", "green"), "🟢")
+                btn_label = f"{h_icon} {p['name']}  ({open_count} open)"
                 if st.button(btn_label, key=f"selp_{p['id']}", use_container_width=True):
                     st.session_state.selected_project = p["id"]
                     st.rerun()
@@ -527,67 +566,181 @@ elif page == "projects":
             if not proj:
                 st.markdown('<div class="empty-state">← Select a project</div>', unsafe_allow_html=True)
             else:
-                c1, c2 = st.columns([3, 1])
-                with c1:
-                    st.subheader(proj["name"])
-                with c2:
-                    if st.button("Edit", key="edit_proj"):
-                        st.session_state.editing_project = proj["id"]
-
+                HEALTH_ICON = {"green": "🟢", "amber": "🟠", "red": "🔴"}
+                st.subheader(f"{HEALTH_ICON.get(proj.get('health','green'))} {proj['name']}")
+                meta_bits = []
+                if proj.get("owner"):
+                    meta_bits.append(f"Owner: {proj['owner']}")
+                if proj.get("target_date"):
+                    meta_bits.append(f"Target: {fmt_date(proj['target_date'])}")
                 if proj.get("goal"):
-                    st.caption(proj["goal"])
+                    meta_bits.append(proj["goal"])
+                if meta_bits:
+                    st.caption("  ·  ".join(meta_bits))
 
                 proj_items = [w for w in db["work_items"] if w.get("project_id") == sel_id]
                 open_items = [w for w in proj_items if not w.get("done")]
                 done_items = [w for w in proj_items if w.get("done")]
-                total = len(proj_items)
-                pct = int(len(done_items) / total * 100) if total else 0
-                st.progress(pct / 100, text=f"{pct}% complete · {len(done_items)}/{total} done")
+                pct = core.project_progress(db, sel_id)
+                st.progress(pct / 100, text=f"{pct}% complete")
 
-                # Add item to project
-                if st.button("+ Add Item", key="add_proj_item", type="primary"):
-                    st.session_state.show_add_proj_item = sel_id
+                if proj.get("next_action"):
+                    st.markdown(f"""<div class="cadence-focus-card" style="padding:10px 16px">
+                      <span style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:#1B5E9E">Next action</span><br>
+                      <b>{proj['next_action']}</b></div>""", unsafe_allow_html=True)
 
-                if st.session_state.get("show_add_proj_item") == sel_id:
-                    with st.form("proj_item_form", clear_on_submit=True):
-                        title = st.text_input("Title *")
-                        cc1, cc2 = st.columns(2)
+                tab_over, tab_mile, tab_items, tab_updates, tab_files = st.tabs(
+                    ["Overview", f"Milestones ({len(proj.get('milestones', []))})",
+                     f"Items ({len(open_items)})",
+                     f"Updates ({len(proj.get('updates', []))})",
+                     f"Files & Links ({len(proj.get('links', []))})"])
+
+                with tab_over:
+                    oc1, oc2, oc3 = st.columns(3)
+                    with oc1:
+                        new_health = st.selectbox(
+                            "Health", ["green", "amber", "red"],
+                            index=["green", "amber", "red"].index(proj.get("health", "green")),
+                            format_func=lambda h: {"green": "🟢 On track", "amber": "🟠 At risk",
+                                                   "red": "🔴 Off track"}[h],
+                            key=f"health_{sel_id}")
+                    with oc2:
+                        new_owner = st.text_input("Owner", value=proj.get("owner", ""),
+                                                  key=f"owner_{sel_id}")
+                    with oc3:
+                        cur_target = (date.fromisoformat(proj["target_date"])
+                                      if proj.get("target_date") else None)
+                        new_target = st.date_input("Target date", value=cur_target,
+                                                   key=f"target_{sel_id}")
+                    new_next = st.text_input("Next action — the one thing that moves this forward",
+                                             value=proj.get("next_action", ""),
+                                             key=f"next_{sel_id}")
+                    if st.button("Save overview", key=f"save_over_{sel_id}", type="primary"):
+                        core.update_project(db, sel_id, health=new_health, owner=new_owner,
+                                            target_date=new_target.isoformat() if new_target else None,
+                                            next_action=new_next)
+                        core.log_activity(db, "human", "update_project", proj["name"])
+                        save_data(); st.rerun()
+
+                with tab_mile:
+                    with st.form(f"add_mile_{sel_id}", clear_on_submit=True):
+                        mc1, mc2, mc3 = st.columns([3, 1.4, 1])
+                        with mc1:
+                            m_title = st.text_input("Milestone", label_visibility="collapsed",
+                                                    placeholder="New milestone…")
+                        with mc2:
+                            m_due = st.date_input("Due", value=None, label_visibility="collapsed")
+                        with mc3:
+                            m_sub = st.form_submit_button("Add", type="primary",
+                                                          use_container_width=True)
+                        if m_sub and m_title.strip():
+                            core.add_milestone(db, sel_id, m_title,
+                                               due_date=m_due.isoformat() if m_due else None)
+                            save_data(); st.rerun()
+                    for m in proj.get("milestones", []):
+                        mm1, mm2 = st.columns([0.06, 0.94])
+                        with mm1:
+                            m_done = st.checkbox("", value=m.get("done", False),
+                                                 key=f"ms_{m['id']}")
+                            if m_done != m.get("done", False):
+                                core.set_milestone(db, sel_id, m["id"], done=m_done)
+                                save_data(); st.rerun()
+                        with mm2:
+                            label = f"~~{m['title']}~~" if m.get("done") else f"**{m['title']}**"
+                            due_txt = f" — {fmt_date(m['due_date'])}" if m.get("due_date") else ""
+                            st.markdown(f"{label}{due_txt}", unsafe_allow_html=True)
+                    if not proj.get("milestones"):
+                        st.caption("No milestones yet. Break the project into 3–6 checkpoints.")
+
+                with tab_updates:
+                    with st.form(f"add_update_{sel_id}", clear_on_submit=True):
+                        u_text = st.text_area("Status update", height=70,
+                                              placeholder="What changed? What's blocked? What's next?")
+                        uc1, uc2 = st.columns([1, 1])
+                        with uc1:
+                            u_health = st.selectbox("Set health", ["(keep)", "green", "amber", "red"])
+                        with uc2:
+                            st.write("")
+                            u_sub = st.form_submit_button("Post update", type="primary")
+                        if u_sub and u_text.strip():
+                            core.add_project_update(db, sel_id, u_text, author="human",
+                                                    health=None if u_health == "(keep)" else u_health)
+                            save_data(); st.rerun()
+                    for u in proj.get("updates", []):
+                        icon = HEALTH_ICON.get(u.get("health", "green"), "")
+                        st.markdown(f"""<div class="cadence-card" style="padding:10px 14px">
+                          <span style="font-size:11px;color:#6B6B6B">{u.get('date','')} · {u.get('author','')}</span>
+                          {icon}<br>{u.get('text','')}</div>""", unsafe_allow_html=True)
+                    if not proj.get("updates"):
+                        st.caption("No updates yet — your agent can post these too.")
+
+                with tab_files:
+                    with st.form(f"add_link_{sel_id}", clear_on_submit=True):
+                        lc1, lc2, lc3 = st.columns([2, 2, 1])
+                        with lc1:
+                            l_title = st.text_input("Title", label_visibility="collapsed",
+                                                    placeholder="Link title")
+                        with lc2:
+                            l_url = st.text_input("URL", label_visibility="collapsed",
+                                                  placeholder="https://… (Drive, docs, dashboards)")
+                        with lc3:
+                            l_sub = st.form_submit_button("Add", use_container_width=True)
+                        if l_sub and l_url.strip():
+                            core.add_link(db, "project", sel_id, l_url.strip(), title=l_title.strip())
+                            save_data(); st.rerun()
+                    uploaded_f = st.file_uploader("Import a file into the cockpit",
+                                                  key=f"up_{sel_id}")
+                    if uploaded_f:
+                        files_dir = DATA_FILE.parent / "files" / sel_id
+                        files_dir.mkdir(parents=True, exist_ok=True)
+                        dest = files_dir / uploaded_f.name
+                        dest.write_bytes(uploaded_f.getbuffer())
+                        core.add_link(db, "project", sel_id, str(dest), title=f"📎 {uploaded_f.name}")
+                        core.log_activity(db, "human", "import_file", uploaded_f.name)
+                        save_data()
+                        st.success(f"Imported {uploaded_f.name}")
+                    for link in proj.get("links", []):
+                        if str(link["url"]).startswith(("http://", "https://")):
+                            st.markdown(f"- [{link['title']}]({link['url']})")
+                        else:
+                            st.markdown(f"- {link['title']} `{link['url']}`")
+                    if not proj.get("links"):
+                        st.caption("Attach Drive links here, or ask your agent: "
+                                   "“find the Q3 deck in Drive and attach it to this project”.")
+
+                with tab_items:
+                    with st.form(f"proj_item_form_{sel_id}", clear_on_submit=True):
+                        title = st.text_input("Title", placeholder="Add an item to this project…")
+                        cc1, cc2, cc3 = st.columns(3)
                         with cc1:
                             itype = st.selectbox("Type", list(TYPE_OPTIONS.keys()), format_func=lambda x: TYPE_OPTIONS[x])
                         with cc2:
                             ipri = st.selectbox("Priority", ["high","medium","low"], index=1, format_func=str.capitalize)
-                        idue = st.date_input("Due date", value=None, key="proj_due")
-                        if st.form_submit_button("Add", type="primary") and title.strip():
-                            db["work_items"].append({
-                                "id": new_id(), "title": title.strip(), "type": itype,
-                                "priority": ipri, "due_date": idue.isoformat() if idue else None,
-                                "project_id": sel_id, "person_id": None, "notes": "",
-                                "done": False, "inboxed": False,
-                                "created_at": datetime.now().isoformat(),
-                            })
-                            save_data()
-                            st.session_state.show_add_proj_item = None
-                            st.rerun()
-                        if st.form_submit_button("Cancel"):
-                            st.session_state.show_add_proj_item = None
-                            st.rerun()
+                        with cc3:
+                            idue = st.date_input("Due date", value=None, key=f"proj_due_{sel_id}")
+                        if st.form_submit_button("Add item", type="primary") and title.strip():
+                            core.add_task(db, title, type=itype, priority=ipri,
+                                          due_date=idue.isoformat() if idue else None,
+                                          project=sel_id, inboxed=False, source="human")
+                            save_data(); st.rerun()
 
-                st.markdown("**Open**")
-                if not open_items:
-                    st.caption("No open items.")
-                for w in open_items:
-                    wc1, wc2 = st.columns([0.05, 0.95])
-                    with wc1:
-                        done = st.checkbox("", key=f"pd_{w['id']}", value=False)
-                        if done:
-                            w["done"] = True; save_data(); st.rerun()
-                    with wc2:
-                        st.markdown(f"{type_tag(w.get('type','task'))} {w['title']} {due_html(w.get('due_date'))}", unsafe_allow_html=True)
+                    if not open_items:
+                        st.caption("No open items.")
+                    for w in open_items:
+                        wc1, wc2 = st.columns([0.05, 0.95])
+                        with wc1:
+                            done = st.checkbox("", key=f"pd_{w['id']}", value=False)
+                            if done:
+                                w["done"] = True; save_data(); st.rerun()
+                        with wc2:
+                            src = (f' <span style="font-size:10px;color:#6B3FA0">🤖</span>'
+                                   if str(w.get("source", "")).startswith("agent") else "")
+                            st.markdown(f"{type_tag(w.get('type','task'))} {w['title']}{src} {due_html(w.get('due_date'))}", unsafe_allow_html=True)
 
-                if done_items:
-                    with st.expander(f"Completed ({len(done_items)})"):
-                        for w in done_items:
-                            st.markdown(f"~~{w['title']}~~")
+                    if done_items:
+                        with st.expander(f"Completed ({len(done_items)})"):
+                            for w in done_items:
+                                st.markdown(f"~~{w['title']}~~")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PEOPLE
@@ -602,14 +755,18 @@ elif page == "people":
     if st.session_state.get("show_add_person"):
         with st.form("add_person_form", clear_on_submit=True):
             st.subheader("Add Person")
-            pn1, pn2 = st.columns(2)
+            pn1, pn2, pn3 = st.columns(3)
             with pn1:
                 pname = st.text_input("Name *")
             with pn2:
                 prole = st.text_input("Role", placeholder="e.g. CFO, Tech Lead")
+            with pn3:
+                pemail = st.text_input("Email", placeholder="name@company.com")
             pnotes = st.text_area("Notes", height=70)
             if st.form_submit_button("Add Person", type="primary") and pname.strip():
-                db["people"].append({"id": new_id(), "name": pname.strip(), "role": prole, "notes": pnotes,
+                db["people"].append({"id": new_id(), "name": pname.strip(), "role": prole,
+                                     "email": pemail.strip(), "notes": pnotes,
+                                     "talking_points": [],
                                      "created_at": datetime.now().isoformat()})
                 save_data()
                 st.session_state.show_add_person = False
@@ -639,8 +796,9 @@ elif page == "people":
                 st.markdown("← Select a person")
             else:
                 st.subheader(person["name"])
-                if person.get("role"):
-                    st.caption(person["role"])
+                cap_bits = [b for b in (person.get("role"), person.get("email")) if b]
+                if cap_bits:
+                    st.caption("  ·  ".join(cap_bits))
                 if person.get("notes"):
                     st.info(person["notes"])
 
@@ -649,8 +807,45 @@ elif page == "people":
                 followups = [w for w in per_items if w.get("type") == "followUp"]
                 other = [w for w in per_items if w.get("type") not in ("waitingFor", "followUp")]
 
-                if st.button("+ Add Follow Up", type="primary"):
-                    st.session_state.show_add_per_item = per_id
+                # ── 1:1 prep: talking points
+                st.markdown("**🗣 Talking points for next 1:1**")
+                open_tps = [t for t in person.get("talking_points", []) if not t.get("done")]
+                for tp in open_tps:
+                    tc1, tc2 = st.columns([0.06, 0.94])
+                    with tc1:
+                        tp_done = st.checkbox("", key=f"tp_{tp['id']}")
+                        if tp_done:
+                            core.resolve_talking_point(db, per_id, tp["id"])
+                            save_data(); st.rerun()
+                    with tc2:
+                        who = " 🤖" if str(tp.get("author", "")).startswith("agent") else ""
+                        st.markdown(f"{tp['text']}{who}")
+                if not open_tps:
+                    st.caption("Nothing queued — add points as they occur to you during the week.")
+                with st.form(f"tp_form_{per_id}", clear_on_submit=True):
+                    tpc1, tpc2 = st.columns([4, 1])
+                    with tpc1:
+                        tp_text = st.text_input("Talking point", label_visibility="collapsed",
+                                                placeholder="Raise in next 1:1…")
+                    with tpc2:
+                        tp_sub = st.form_submit_button("Add", use_container_width=True)
+                    if tp_sub and tp_text.strip():
+                        core.add_talking_point(db, per_id, tp_text, author="human")
+                        save_data(); st.rerun()
+
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    if st.button("+ Add Follow Up", type="primary", use_container_width=True):
+                        st.session_state.show_add_per_item = per_id
+                with bc2:
+                    if st.button("✉ Draft email", use_container_width=True):
+                        st.session_state.prefill_email = {
+                            "to": person.get("email", ""),
+                            "subject": "",
+                            "body": f"Hi {person['name'].split()[0]},\n\n",
+                        }
+                        st.session_state.nav_hint = "outbox"
+                        st.info("Draft started — open ✉ Outbox in the sidebar to finish and queue it.")
 
                 if st.session_state.get("show_add_per_item") == per_id:
                     with st.form("per_item_form", clear_on_submit=True):
@@ -760,6 +955,97 @@ elif page == "decisions":
                 with sb2:
                     if st.button("Delete", key=f"dec_del_{d['id']}"):
                         db["decisions"] = [i for i in db["decisions"] if i["id"] != d["id"]]
+                        save_data(); st.rerun()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BRIEF
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "brief":
+    st.title("Executive Brief")
+    st.caption("A one-page snapshot of everything that matters today. "
+               "Copy it, download it, or ask your agent to email it to you each morning.")
+
+    brief_md = core.generate_brief(db)
+    st.markdown(brief_md)
+    st.markdown("---")
+    bc1, bc2, bc3 = st.columns(3)
+    with bc1:
+        st.download_button("⬇ Download (.md)", data=brief_md,
+                           file_name=f"brief-{today_str()}.md", mime="text/markdown",
+                           use_container_width=True)
+    with bc2:
+        if st.button("✉ Queue to my email", use_container_width=True):
+            st.session_state.prefill_email = {
+                "to": "", "subject": f"Executive Brief — {today_str()}", "body": brief_md}
+            st.info("Draft created — open ✉ Outbox to add your address and queue it.")
+    with bc3:
+        with st.popover("Show raw markdown", use_container_width=True):
+            st.code(brief_md, language="markdown")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OUTBOX
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "outbox":
+    st.title("Outbox")
+    st.caption("Compose here; your agent sends via Gmail and marks each message sent. "
+               "Nothing leaves this store until an agent you control sends it.")
+
+    prefill = st.session_state.pop("prefill_email", {})
+    with st.form("compose_email", clear_on_submit=True):
+        st.subheader("Compose")
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            e_to = st.text_input("To", value=prefill.get("to", ""),
+                                 placeholder="name@company.com")
+        with ec2:
+            e_cc = st.text_input("Cc", placeholder="optional")
+        e_subject = st.text_input("Subject", value=prefill.get("subject", ""))
+        e_body = st.text_area("Body", value=prefill.get("body", ""), height=220)
+        fc1, fc2 = st.columns([1, 1])
+        with fc1:
+            q_sub = st.form_submit_button("Queue for agent to send", type="primary",
+                                          use_container_width=True)
+        with fc2:
+            d_sub = st.form_submit_button("Save as draft", use_container_width=True)
+        if (q_sub or d_sub) and e_to.strip() and e_subject.strip():
+            core.queue_email(db, e_to, e_subject, e_body, cc=e_cc,
+                             status="queued" if q_sub else "draft", created_by="human")
+            core.log_activity(db, "human", "queue_email" if q_sub else "draft_email",
+                              f"to {e_to}: {e_subject}")
+            save_data()
+            st.success("Queued — your agent will pick it up." if q_sub else "Draft saved.")
+            st.rerun()
+
+    STATUS_BADGE = {"queued": ("Queued", "#E07D00"), "draft": ("Draft", "#6B6B6B"),
+                    "sent": ("Sent", "#1A7F37"), "cancelled": ("Cancelled", "#D93025")}
+    msgs = core.list_outbox(db)
+    if not msgs:
+        st.info("No messages yet. Compose above, or your agent can draft emails "
+                "for your review with its queue_email tool.")
+    for m in msgs:
+        label, colr = STATUS_BADGE.get(m["status"], ("?", "#6B6B6B"))
+        with st.expander(f"{m['subject']}  →  {m['to']}   [{label}]",
+                         expanded=(m["status"] == "draft")):
+            st.markdown(
+                f'<span class="tag" style="background:{colr}20;color:{colr}">{label}</span> '
+                f'<span style="font-size:12px;color:#6B6B6B">by {m.get("created_by","?")} '
+                f'· {m.get("created_at","")[:16].replace("T"," ")}'
+                + (f' · sent {m["sent_at"][:16].replace("T"," ")} via {m.get("sent_via","")}'
+                   if m.get("sent_at") else "")
+                + "</span>", unsafe_allow_html=True)
+            if m.get("cc"):
+                st.caption(f"Cc: {m['cc']}")
+            st.text(m["body"])
+            if m["status"] in ("draft", "queued"):
+                xc1, xc2 = st.columns([1, 1])
+                with xc1:
+                    if m["status"] == "draft":
+                        if st.button("Queue for send", key=f"qq_{m['id']}", type="primary"):
+                            core.mark_email(db, m["id"], "queued")
+                            save_data(); st.rerun()
+                with xc2:
+                    if st.button("Cancel message", key=f"cx_{m['id']}"):
+                        core.mark_email(db, m["id"], "cancelled")
                         save_data(); st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -902,6 +1188,22 @@ elif page == "settings":
                         save_data(); st.success("Imported."); st.rerun()
             except Exception:
                 st.error("Could not read file.")
+
+    st.subheader("Integrations (via your agent)")
+    st.markdown("""
+    <div class="cadence-card">
+      <b>Gmail / Google Drive / Calendar — the agent bridge</b>
+      <div style="color:#6B6B6B;font-size:13px;margin-top:6px">
+        Cadence never talks to Google directly — your agent does, with the access
+        you've already granted it. The cockpit stages the work; the agent executes:
+        <ul style="margin:8px 0 0 18px">
+          <li><b>Email</b>: compose in ✉ Outbox → agent sends via Gmail → marked sent here</li>
+          <li><b>Drive</b>: ask your agent to find a file and attach it — it appears under a project's Files &amp; Links</li>
+          <li><b>Calendar</b>: ask your agent to include today's meetings when it emails your Brief</li>
+        </ul>
+        Setup is in <code>AGENTS.md</code> — point your agent's MCP config at <code>cadence_mcp.py</code>.
+      </div>
+    </div>""", unsafe_allow_html=True)
 
     st.subheader("Danger Zone")
     if st.button("🗑 Clear All Data", type="secondary"):
