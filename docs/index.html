@@ -2228,19 +2228,32 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="settings-section-title" style="margin-top:16px">Sync across devices</div>
+    <div class="settings-section-title" style="margin-top:16px">Sync phone &amp; iPad</div>
     <div class="settings-group">
       <div class="settings-row" style="display:block">
-        <div class="settings-row-label">Private GitHub Gist sync</div>
-        <div class="settings-row-sub" style="margin-bottom:10px">Syncs your phone, iPad &amp; agent through one private gist. Paste a GitHub token with <strong>gist</strong> scope. Screenshots are never uploaded.</div>
-        <input type="password" id="set-gh-token" value="${esc(syncCfg.token||'')}" placeholder="GitHub token (ghp_… or github_pat_…)" style="width:100%;margin-bottom:8px" oninput="saveSyncToken(this.value)">
-        <input type="text" id="set-gist-id" value="${esc(syncCfg.gistId||'')}" placeholder="Gist ID (auto-created on first sync; paste it on your other device)" style="width:100%;margin-bottom:8px" oninput="saveGistId(this.value)">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" onclick="connectSync()">${syncCfg.gistId?'Sync now':'Connect & create gist'}</button>
-          ${syncCfg.token?`<button class="btn btn-secondary btn-sm" onclick="disconnectSync()">Disconnect</button>`:''}
-        </div>
-        ${syncCfg.lastSync?`<div class="settings-row-sub" style="margin-top:8px">Last sync: ${new Date(syncCfg.lastSync).toLocaleString('en-GB')}</div>`:''}
-        ${syncCfg.gistId?`<div class="settings-row-sub" style="margin-top:4px">On your other device, paste this Gist ID: <strong>${esc(syncCfg.gistId)}</strong></div>`:''}
+        ${syncCfg.gistId ? `
+          <div style="background:var(--green-bg);color:var(--green);border-radius:8px;padding:10px 12px;font-size:13px;font-weight:600;margin-bottom:12px">✓ Sync is on for this device.</div>
+          <div class="settings-row-sub" style="margin-bottom:10px">To link your <strong>other</strong> device, copy this link and open it there once — it sets everything up automatically.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="copyPairLink()">📋 Copy link for my other device</button>
+            <button class="btn btn-secondary btn-sm" onclick="syncNow()">Sync now</button>
+            <button class="btn btn-secondary btn-sm" onclick="disconnectSync()">Disconnect</button>
+          </div>
+          ${syncCfg.lastSync?`<div class="settings-row-sub" style="margin-top:10px">Last sync: ${new Date(syncCfg.lastSync).toLocaleString('en-GB')}</div>`:''}
+        ` : `
+          <div class="settings-row-label">Set up sync (once)</div>
+          <div class="settings-row-sub" style="margin:6px 0 12px">Phone &amp; iPad will share everything through your own private store. Screenshots never sync.</div>
+          <ol style="font-size:13px;color:var(--text);line-height:1.6;padding-left:18px;margin-bottom:12px">
+            <li><a href="https://github.com/settings/tokens/new?scopes=gist&description=Cadence%20Sync" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Tap here to create a key</a>, scroll down, tap <strong>Generate token</strong>, then copy it.</li>
+            <li>Paste it below and tap <strong>Connect</strong>.</li>
+            <li>Come back here and tap <em>Copy link for my other device</em>.</li>
+          </ol>
+          <input type="password" id="set-gh-token" value="${esc(syncCfg.token||'')}" placeholder="Paste your key here (ghp_… or github_pat_…)" style="width:100%;margin-bottom:8px" oninput="saveSyncToken(this.value)">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-primary btn-sm" onclick="connectSync()">Connect</button>
+            <span style="font-size:12px;color:var(--text2)">Already set up your other device? <a href="#" onclick="pastePair();return false" style="color:var(--accent)">Paste pairing code</a></span>
+          </div>
+        `}
       </div>
     </div>
 
@@ -2695,8 +2708,40 @@ function deleteEmail(id) {
 function saveSyncToken(v) { syncCfg.token = v.trim(); saveSyncCfg(); }
 function saveGistId(v) { syncCfg.gistId = v.trim(); saveSyncCfg(); }
 function connectSync() {
-  if (!syncCfg.token) { toast('Paste a GitHub token first'); return; }
+  if (!syncCfg.token) { toast('Paste your key first'); return; }
   syncNow();
+}
+
+// ── Pairing: bundle token + gist id into one link/code for the 2nd device ──
+function pairCode() {
+  if (!syncCfg.token || !syncCfg.gistId) return '';
+  return btoa(JSON.stringify({ t: syncCfg.token, g: syncCfg.gistId }))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function pairLink() { return location.origin + location.pathname + '#pair=' + pairCode(); }
+function copyPairLink() {
+  const link = pairLink();
+  if (!link.includes('#pair=')) { toast('Connect this device first'); return; }
+  const done = () => toast('Link copied — open it on your other device, then delete the message');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(done).catch(() => prompt('Copy this link and open it on your other device:', link));
+  } else {
+    prompt('Copy this link and open it on your other device:', link);
+  }
+}
+function applyPairCode(raw) {
+  try {
+    const s = String(raw).trim().replace(/^.*#pair=/, '');
+    const obj = JSON.parse(atob(s.replace(/-/g,'+').replace(/_/g,'/')));
+    if (obj.t && obj.g) {
+      syncCfg.token = obj.t; syncCfg.gistId = obj.g; saveSyncCfg();
+      setSyncStatus('syncing', 'Pairing…'); toast('Paired — syncing…'); syncNow();
+    } else { toast('That code looks wrong'); }
+  } catch { toast('Could not read that code'); }
+}
+function pastePair() {
+  const code = prompt('Paste your pairing code or link:');
+  if (code) applyPairCode(code);
 }
 function disconnectSync() {
   if (!confirm('Stop syncing on this device? Local data stays; the gist is untouched.')) return;
@@ -2713,6 +2758,12 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════════════════════════
+// If opened via a pairing link from the first device, auto-configure sync.
+if (location.hash.indexOf('#pair=') === 0) {
+  applyPairCode(location.hash);
+  history.replaceState(null, '', location.pathname);
+}
+
 if (syncCfg.token) {
   setSyncStatus('ok', 'Sync ready');
   syncNow({ silent: true });          // pull latest from the gist on launch
