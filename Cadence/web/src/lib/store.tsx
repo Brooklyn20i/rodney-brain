@@ -13,6 +13,8 @@ interface Ctx {
   data: CadenceData;
   signIn: (email: string) => Promise<{ error?: string }>;
   verifyOtp: (email: string, token: string) => Promise<{ error?: string }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
@@ -34,7 +36,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<CadenceData>(emptyData());
   const [ready, setReady] = useState(false);
 
-  // ── Auth bootstrap ──
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -42,7 +43,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ── Load one or all tables from the server ──
   const reload = useCallback(async (table?: Table) => {
     const tables = table ? [table] : TABLES;
     const results = await Promise.all(tables.map(async (t) => {
@@ -59,7 +59,6 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ── Load + subscribe to realtime whenever the session changes ──
   useEffect(() => {
     if (!session) { setData(emptyData()); return; }
     reload();
@@ -78,6 +77,18 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
 
   const verifyOtp = async (email: string, token: string) => {
     const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+    return { error: error?.message };
+  };
+
+  const signInWithPassword = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
     return { error: error?.message };
   };
 
@@ -108,7 +119,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, verifyOtp, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, verifyOtp, signInWithPassword, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
       {children}
     </CadenceCtx.Provider>
   );
