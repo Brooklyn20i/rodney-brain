@@ -99,12 +99,14 @@ body {
 /* ── Forms ── */
 label.field { display: block; font-size: 12px; font-weight: 600; color: var(--text2);
   margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
-input[type=text], input[type=email], input[type=date], textarea, select {
+input[type=text], input[type=email], input[type=password], input[type=date], textarea, select {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface); font-size: 14px; color: var(--text); outline: none; font-family: inherit; }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.1); }
 textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 .form-group { margin-bottom: 14px; } .form-row { display: flex; gap: 10px; } .form-row > * { flex: 1; }
+.form-error { color: var(--red) !important; font-size: 13px !important; margin-bottom: 12px !important; }
+.form-notice { color: var(--green) !important; font-size: 13px !important; margin-bottom: 12px !important; }
 
 /* ── Modal ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
@@ -122,6 +124,10 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
   padding: 32px; width: 380px; max-width: 100%; }
 .login-card h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
 .login-card p { font-size: 14px; color: var(--text2); margin-bottom: 20px; }
+.login-card code { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 4px; }
+.login-secondary-action { width: 100%; justify-content: center; margin-top: 12px; }
+.error-card pre { white-space: pre-wrap; word-break: break-word; background: var(--red-bg); color: var(--red);
+  border-radius: var(--radius-sm); padding: 10px; margin-bottom: 16px; font-size: 12px; }
 
 /* ── Mobile ── */
 .menu-btn { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text); }

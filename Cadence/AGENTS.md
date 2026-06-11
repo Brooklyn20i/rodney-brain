@@ -1,5 +1,29 @@
 # Cadence — Agent Guide
 
+## Current source-of-truth note
+
+Cadence now has two tracks in this repository:
+
+- `Cadence/web/` is the current React + Supabase web/PWA client.
+- The local JSON/MCP guidance below is legacy/useful for local-agent experiments,
+  but it is **not** the production web app data path.
+
+For `Cadence/web/` work:
+
+1. Run commands from `Cadence/web`.
+2. Use `npm run typecheck`, `npm run build`, and for GitHub Pages output
+   `npm run build:docs`.
+3. Never hardcode personal email addresses, passwords, Supabase service-role
+   keys, tokens, or `.env` contents in source.
+4. Browser code may use `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; safety
+   depends on Supabase RLS, not secrecy of the anon key.
+5. Treat email/outbox sending as approval-gated: queue/draft is acceptable;
+   autonomous send requires explicit human approval.
+6. Keep product scope narrow until the core loop is reliable: capture → triage →
+   today execution → weekly review.
+
+---
+
 Cadence is a shared cockpit for high-consequence work. A human drives it through
 the Streamlit app (or the iPad PWA); agents drive it through the **MCP server**
 or by editing the **shared data file** directly. Both sides read and write the
