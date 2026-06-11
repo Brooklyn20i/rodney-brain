@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.json.tmp
+# Live store holds confidential work data — never commit to this public repo.
+# Use cadence_data.seed.json as the template; the live file stays local.
+cadence_data.json
+# Imported files may be confidential — keep them out of the public repo too.
+files/

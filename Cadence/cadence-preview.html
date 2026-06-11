@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cadence — App Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --accent: #38608C;
+    --accent-light: #4A7AAE;
+    --bg: #F2F2F7;
+    --bg2: #FFFFFF;
+    --bg3: #F2F2F7;
+    --label: #1C1C1E;
+    --label2: #3C3C43CC;
+    --label3: #3C3C4399;
+    --sep: #C6C6C8;
+    --red: #FF3B30;
+    --orange: #FF9500;
+    --green: #34C759;
+    --blue: #007AFF;
+    --purple: #AF52DE;
+    --teal: #30B0C7;
+    --indigo: #5856D6;
+    --sidebar-w: 260px;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #4A7AAE;
+      --bg: #000000;
+      --bg2: #1C1C1E;
+      --bg3: #2C2C2E;
+      --label: #FFFFFF;
+      --label2: rgba(235,235,245,0.6);
+      --label3: rgba(235,235,245,0.3);
+      --sep: #38383A;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--label);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Layout ── */
+  .app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg2);
+    border-right: 1px solid var(--sep);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    padding: 20px 20px 8px;
+    color: var(--label);
+  }
+
+  .sidebar-section {
+    padding: 6px 12px;
+  }
+
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--label);
+    transition: background 0.12s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sidebar-item:hover { background: var(--bg3); }
+  .sidebar-item.active { background: var(--accent); color: white; }
+  .sidebar-item.active .icon { color: white; }
+
+  .icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .sidebar-item.active .icon { color: white; }
+
+  .badge {
+    margin-left: auto;
+    background: var(--red);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+  }
+
+  .sidebar-item.active .badge { background: rgba(255,255,255,0.3); }
+
+  /* ── Detail ── */
+  .detail {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .screen { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .screen.active { display: flex; }
+
+  /* ── Nav bar ── */
+  .nav-bar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--sep);
+    padding: 16px 24px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .nav-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .nav-subtitle { font-size: 15px; color: var(--label2); margin-top: 2px; }
+
+  .nav-actions { display: flex; gap: 10px; }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    transition: opacity 0.12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-secondary { background: var(--bg3); color: var(--accent); }
+  .btn-ghost { background: transparent; color: var(--accent); padding: 8px; }
+
+  /* ── Scroll area ── */
+  .scroll { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--label);
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .card-subtitle {
+    font-size: 13px;
+    color: var(--label2);
+    margin-bottom: 8px;
+  }
+
+  .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Badges ── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+  }
+
+  .tag-task     { color: #007AFF; background: rgba(0,122,255,0.12); }
+  .tag-followup { color: #FF9500; background: rgba(255,149,0,0.12); }
+  .tag-waiting  { color: #AF52DE; background: rgba(175,82,222,0.12); }
+  .tag-decision { color: #5856D6; background: rgba(88,86,214,0.12); }
+  .tag-risk     { color: #FF3B30; background: rgba(255,59,48,0.12); }
+  .tag-meeting  { color: #30B0C7; background: rgba(48,176,199,0.12); }
+  .tag-idea     { color: #34C759; background: rgba(52,199,89,0.12); }
+
+  .priority-high   { color: #FF3B30; background: rgba(255,59,48,0.12); }
+  .priority-medium { color: #FF9500; background: rgba(255,149,0,0.12); }
+  .priority-low    { color: #007AFF; background: rgba(0,122,255,0.12); }
+
+  .status-open     { color: #FF9500; background: rgba(255,149,0,0.12); }
+  .status-decided  { color: #34C759; background: rgba(52,199,89,0.12); }
+  .status-deferred { color: #8E8E93; background: rgba(142,142,147,0.12); }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--label2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 20px 0 10px;
+  }
+
+  .section-header:first-child { margin-top: 0; }
+
+  .section-count {
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+
+  /* ── Today specific ── */
+  .today-header {
+    padding: 20px 24px 0;
+  }
+
+  .today-date {
+    font-size: 15px;
+    color: var(--label2);
+    margin-top: 4px;
+    margin-bottom: 16px;
+  }
+
+  .horizontal-scroll {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 0 24px 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+  }
+  .horizontal-scroll::-webkit-scrollbar { display: none; }
+
+  .h-card {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 16px;
+    min-width: 280px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+  }
+
+  .focus-block {
+    margin: 0 24px 16px;
+    padding: 14px 16px;
+    background: rgba(56,96,140,0.08);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(56,96,140,0.15);
+  }
+
+  .focus-icon { font-size: 24px; }
+
+  .focus-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .focus-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--label);
+    margin-top: 2px;
+  }
+
+  /* ── Capture screen ── */
+  .capture-layout {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .capture-queue {
+    width: 300px;
+    border-right: 1px solid var(--sep);
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .queue-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--sep);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--label2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .queue-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--sep);
+    cursor: pointer;
+    transition: background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .queue-item:hover, .queue-item.selected { background: rgba(56,96,140,0.06); }
+
+  .queue-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    background: var(--bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .queue-info { flex: 1; min-width: 0; }
+  .queue-name { font-size: 15px; font-weight: 600; color: var(--label); margin-bottom: 4px; }
+
+  .status-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-ready { background: var(--label3); }
+  .dot-done { background: var(--green); }
+  .dot-processing { background: var(--orange); }
+
+  .ocr-panel {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .screenshot-panel {
+    flex: 1;
+    background: var(--bg3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--sep);
+  }
+
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--sep);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+
+  .panel-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--label2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .confidence {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .screenshot-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  .screenshot-mock {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+    padding: 12px;
+    max-width: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .screenshot-content {
+    font-size: 11px;
+    line-height: 1.7;
+    color: #222;
+    font-family: -apple-system, monospace;
+    white-space: pre-wrap;
+  }
+
+  .text-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+
+  .ocr-text {
+    flex: 1;
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--label);
+    font-family: 'SF Mono', 'Menlo', monospace;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+
+  .action-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--sep);
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* ── Inbox list ── */
+  .list-item {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: opacity 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .list-item:hover { opacity: 0.9; }
+
+  .list-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .list-item-title { font-size: 16px; font-weight: 600; line-height: 1.3; flex: 1; }
+  .list-item-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .date-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--label2);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .date-overdue { color: var(--red); }
+
+  .source-icon { font-size: 12px; color: var(--label3); }
+
+  /* ── Projects ── */
+  .project-row {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .project-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .project-next-action { font-size: 13px; color: var(--label2); margin-bottom: 8px; }
+  .project-next-action::before { content: "→ "; color: var(--accent); font-weight: 700; }
+  .no-next-action { color: var(--red); }
+  .no-next-action::before { content: "⚠ "; color: var(--red); font-weight: 700; }
+
+  .status-active   { color: #007AFF; background: rgba(0,122,255,0.12); }
+  .status-on-hold  { color: #FF9500; background: rgba(255,149,0,0.12); }
+  .status-complete { color: #34C759; background: rgba(52,199,89,0.12); }
+
+  /* ── Review ── */
+  .review-tab-bar {
+    display: flex;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--sep);
+    padding: 12px 24px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .review-tab {
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition: all 0.12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .review-tab.active { background: var(--accent); color: white; }
+  .review-tab:not(.active) { background: var(--bg3); color: var(--label); }
+
+  .review-row {
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    box-shadow: var(--shadow);
+  }
+
+  .review-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+  .review-ok { color: var(--green); }
+  .review-warn { color: var(--red); }
+
+  .complete-btn-bar {
+    padding: 16px 24px;
+    border-top: 1px solid var(--sep);
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 16px;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .empty-icon { font-size: 52px; opacity: 0.3; }
+  .empty-title { font-size: 22px; font-weight: 700; }
+  .empty-body { font-size: 16px; color: var(--label2); max-width: 320px; line-height: 1.5; }
+
+  /* ── Two-pane screens (Projects, People, Decisions) ── */
+  .two-pane { flex: 1; display: flex; overflow: hidden; }
+  .pane-list {
+    width: 340px;
+    border-right: 1px solid var(--sep);
+    overflow-y: auto;
+    padding: 16px;
+    flex-shrink: 0;
+    background: var(--bg2);
+  }
+  .pane-detail { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg); }
+
+  /* ── Settings ── */
+  .settings-section { margin-bottom: 24px; }
+  .settings-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--label2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 4px;
+    margin-bottom: 8px;
+  }
+  .settings-card { background: var(--bg2); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--sep);
+    gap: 12px;
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-info { flex: 1; }
+  .settings-row-title { font-size: 16px; font-weight: 500; color: var(--label); }
+  .settings-row-sub { font-size: 13px; color: var(--label2); margin-top: 2px; }
+
+  .toggle {
+    width: 51px;
+    height: 31px;
+    border-radius: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+  }
+  .toggle.on { background: var(--green); }
+  .toggle.off { background: var(--label3); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 27px;
+    height: 27px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    transition: left 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .toggle.on::after { left: 22px; }
+  .toggle.off::after { left: 2px; }
+
+  .privacy-banner {
+    background: rgba(52,199,89,0.08);
+    border: 1px solid rgba(52,199,89,0.2);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .privacy-icon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
+
+  /* ── FAB ── */
+  .fab {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    background: var(--accent);
+    color: white;
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(56,96,140,0.4);
+    cursor: pointer;
+    border: none;
+    transition: transform 0.1s;
+    z-index: 100;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .fab:active { transform: scale(0.95); }
+
+  /* ── Misc ── */
+  .divider { height: 1px; background: var(--sep); margin: 8px 0; }
+  .spacer { flex: 1; }
+
+  .people-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: white;
+  }
+
+  /* Screen-specific scroll areas */
+  .today-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 768px) {
+    :root { --sidebar-w: 100%; }
+    .sidebar { display: none; }
+    .sidebar.mobile-open { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 200; }
+    .mobile-menu-btn { display: flex; }
+    .capture-queue { width: 100%; }
+    .two-pane { flex-direction: column; }
+    .pane-list { width: 100%; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--sep); }
+  }
+  @media (min-width: 769px) {
+    .mobile-menu-btn { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ════════════════════════════════════════
+       SIDEBAR
+       ════════════════════════════════════════ -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-title">Cadence</div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-item" onclick="show('today')" id="nav-today">
+        <div class="icon">☀️</div>
+        <span>Today</span>
+      </div>
+      <div class="sidebar-item" onclick="show('capture')" id="nav-capture">
+        <div class="icon">⊡</div>
+        <span>Capture</span>
+      </div>
+      <div class="sidebar-item" onclick="show('inbox')" id="nav-inbox">
+        <div class="icon">📥</div>
+        <span>Inbox</span>
+        <span class="badge">7</span>
+      </div>
+    </div>
+
+    <div class="divider" style="margin: 0 16px;"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-item" onclick="show('projects')" id="nav-projects">
+        <div class="icon">📁</div>
+        <span>Projects</span>
+      </div>
+      <div class="sidebar-item" onclick="show('people')" id="nav-people">
+        <div class="icon">👥</div>
+        <span>People</span>
+        <span class="badge">3</span>
+      </div>
+      <div class="sidebar-item" onclick="show('decisions')" id="nav-decisions">
+        <div class="icon">⚖️</div>
+        <span>Decisions</span>
+      </div>
+    </div>
+
+    <div class="divider" style="margin: 0 16px;"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-item" onclick="show('review')" id="nav-review">
+        <div class="icon">✅</div>
+        <span>Review</span>
+      </div>
+      <div class="sidebar-item" onclick="show('search')" id="nav-search">
+        <div class="icon">🔍</div>
+        <span>Search</span>
+      </div>
+      <div class="sidebar-item" onclick="show('settings')" id="nav-settings">
+        <div class="icon">⚙️</div>
+        <span>Settings</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ════════════════════════════════════════
+       DETAIL AREA
+       ════════════════════════════════════════ -->
+  <main class="detail">
+
+    <!-- ── TODAY ── -->
+    <div class="screen active" id="screen-today">
+      <div class="nav-bar">
+        <div>
+          <div class="nav-title">Today</div>
+          <div class="nav-subtitle">Monday, 9 June 2026</div>
+        </div>
+        <div class="nav-actions">
+          <button class="btn btn-primary" onclick="show('capture')">⊡ Quick Capture</button>
+        </div>
+      </div>
+
+      <div class="today-scroll">
+        <div style="padding: 20px 24px 0;">
+
+          <!-- Focus block -->
+          <div class="focus-block">
+            <div class="focus-icon">🧠</div>
+            <div>
+              <div class="focus-label">Suggested Focus</div>
+              <div class="focus-text">Prepare board presentation materials</div>
+            </div>
+          </div>
+
+          <!-- Top 3 -->
+          <div class="section-header">⭐ Top 3 Priorities <span class="section-count">3</span></div>
+        </div>
+
+        <div class="horizontal-scroll">
+          <div class="h-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+              <span class="tag tag-decision">⚖️ Decision</span>
+              <span class="tag priority-high">High</span>
+            </div>
+            <div class="card-title">Approve Q3 budget increase for engineering</div>
+            <div style="margin-top:8px;" class="date-label date-overdue">⚠ Due yesterday</div>
+          </div>
+          <div class="h-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+              <span class="tag tag-task">✓ Task</span>
+              <span class="tag priority-high">High</span>
+            </div>
+            <div class="card-title">Prepare board presentation materials</div>
+            <div style="margin-top:8px;" class="date-label">📅 Today</div>
+          </div>
+          <div class="h-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+              <span class="tag tag-followup">↗ Follow Up</span>
+              <span class="tag priority-medium">Medium</span>
+            </div>
+            <div class="card-title">Chase Sarah on vendor contract review</div>
+            <div style="margin-top:8px;" class="date-label">📅 Today</div>
+          </div>
+        </div>
+
+        <div style="padding: 0 24px;">
+          <!-- Overdue -->
+          <div class="section-header">⚠️ Overdue <span class="section-count">2</span></div>
+        </div>
+
+        <div class="horizontal-scroll">
+          <div class="h-card">
+            <div style="margin-bottom:8px"><span class="tag tag-risk">⚠ Risk</span></div>
+            <div class="card-title">Integration deadline may slip — escalate to James</div>
+            <div style="margin-top:8px;" class="date-label date-overdue">⚠ 3 days overdue</div>
+          </div>
+          <div class="h-card">
+            <div style="margin-bottom:8px"><span class="tag tag-meeting">👥 Meeting Action</span></div>
+            <div class="card-title">Send revised project timeline to stakeholders</div>
+            <div style="margin-top:8px;" class="date-label date-overdue">⚠ 1 day overdue</div>
+          </div>
+        </div>
+
+        <div style="padding: 0 24px;">
+          <!-- Waiting -->
+          <div class="section-header">⏳ Waiting on Others <span class="section-count">3</span></div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Legal review of supplier agreement</div>
+            </div>
+            <div class="list-item-meta">
+              <span class="tag tag-waiting">⏳ Waiting For</span>
+              <span class="date-label">Waiting 5 days</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Finance sign-off on headcount plan</div>
+            </div>
+            <div class="list-item-meta">
+              <span class="tag tag-waiting">⏳ Waiting For</span>
+              <span class="date-label">Waiting 2 days</span>
+            </div>
+          </div>
+
+          <!-- Decisions -->
+          <div class="section-header">⚖️ Decisions Needed <span class="section-count">2</span></div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Approve Q3 budget increase for engineering</div>
+              <span class="tag status-open">Open</span>
+            </div>
+            <div class="list-item-meta"><span class="date-label date-overdue">⚠ Overdue</span></div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Choose primary cloud vendor — AWS vs GCP</div>
+              <span class="tag status-open">Open</span>
+            </div>
+            <div class="list-item-meta"><span class="date-label">📅 Due Friday</span></div>
+          </div>
+        </div>
+
+        <div style="height: 40px;"></div>
+      </div>
+    </div>
+
+    <!-- ── CAPTURE ── -->
+    <div class="screen" id="screen-capture">
+      <div class="nav-bar">
+        <div class="nav-title">Capture</div>
+        <div class="nav-actions">
+          <button class="btn btn-secondary">📷 From Photos</button>
+          <button class="btn btn-secondary">📂 Import File</button>
+          <button class="btn btn-primary">Process All</button>
+        </div>
+      </div>
+      <div class="capture-layout">
+        <!-- Queue -->
+        <div class="capture-queue">
+          <div class="queue-header">
+            Queue <span class="section-count">3</span>
+          </div>
+          <div class="queue-item selected" onclick="selectQueue(this)">
+            <div class="queue-thumb">📧</div>
+            <div class="queue-info">
+              <div class="queue-name">Email thread — Legal</div>
+              <div class="status-dot"><span class="dot dot-done"></span><span style="color:var(--green);font-size:12px;font-weight:600">Text extracted</span></div>
+            </div>
+          </div>
+          <div class="queue-item" onclick="selectQueue(this)">
+            <div class="queue-thumb">📊</div>
+            <div class="queue-info">
+              <div class="queue-name">Dashboard screenshot</div>
+              <div class="status-dot"><span class="dot dot-ready"></span><span style="color:var(--label2);font-size:12px;">Ready to process</span></div>
+            </div>
+          </div>
+          <div class="queue-item" onclick="selectQueue(this)">
+            <div class="queue-thumb">💬</div>
+            <div class="queue-info">
+              <div class="queue-name">Slack thread export</div>
+              <div class="status-dot"><span class="dot dot-ready"></span><span style="color:var(--label2);font-size:12px;">Ready to process</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- OCR Panel -->
+        <div class="ocr-panel">
+          <div class="screenshot-panel">
+            <div class="panel-header">
+              <span class="panel-label">Original</span>
+              <span class="confidence">✓ 96% confidence</span>
+            </div>
+            <div class="screenshot-area">
+              <div class="screenshot-mock">
+                <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:8px">From: sarah.chen@company.com<br>Subject: Vendor contract — action needed</div>
+                <div class="screenshot-content">Hi,
+
+Quick update on the supplier agreement.
+Legal needs sign-off by Friday EOD.
+
+Key points:
+• Follow up with James on SLA terms
+• Waiting for finance approval on terms
+• Decision needed: approve revised rates
+• Risk: if delayed, contract lapses 15 June
+
+Please advise asap.
+
+Thanks,
+Sarah</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-panel">
+            <div class="panel-header">
+              <span class="panel-label">Extracted Text</span>
+            </div>
+            <div class="ocr-text">From: sarah.chen@company.com
+Subject: Vendor contract — action needed
+
+Hi,
+
+Quick update on the supplier agreement.
+Legal needs sign-off by Friday EOD.
+
+Key points:
+• Follow up with James on SLA terms
+• Waiting for finance approval on terms
+• Decision needed: approve revised rates
+• Risk: if delayed, contract lapses 15 June
+
+Please advise asap.
+
+Thanks,
+Sarah</div>
+            <div class="action-bar">
+              <button class="btn btn-primary" style="flex:1">➕ Create Item</button>
+              <button class="btn btn-secondary" style="flex:1">⧉ Create Multiple</button>
+              <button class="btn btn-secondary">•••</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INBOX ── -->
+    <div class="screen" id="screen-inbox">
+      <div class="nav-bar">
+        <div class="nav-title">Inbox</div>
+        <div class="nav-actions">
+          <button class="btn btn-primary">+ New</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <div class="section-header">📥 7 items to triage</div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Follow up with Sarah on Q3 budget proposal</div>
+            <span class="tag priority-high">High</span>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-followup">↗ Follow Up</span>
+            <span class="date-label date-overdue">⚠ Overdue</span>
+            <span class="source-icon">⊡</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Decision needed: approve new vendor contract rates</div>
+            <span class="tag priority-high">High</span>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-decision">⚖️ Decision</span>
+            <span class="date-label">📅 Fri 12 Jun</span>
+            <span class="source-icon">⊡</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Waiting for legal sign off on supplier agreement</div>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-waiting">⏳ Waiting For</span>
+            <span class="date-label">📅 Fri 12 Jun</span>
+            <span class="source-icon">⊡</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Risk: integration deadline may slip to next week</div>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-risk">⚠ Risk</span>
+            <span class="date-label date-overdue">⚠ Overdue</span>
+            <span class="source-icon">⊡</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">James to send revised project timeline</div>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-meeting">👥 Meeting Action</span>
+            <span class="date-label date-overdue">⚠ Overdue</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Review board presentation deck before Thursday</div>
+            <span class="tag priority-medium">Medium</span>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-task">✓ Task</span>
+            <span class="date-label">📅 Thu 11 Jun</span>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="list-item-header">
+            <div class="list-item-title">Idea: consolidate reporting dashboards into single view</div>
+          </div>
+          <div class="list-item-meta">
+            <span class="tag tag-idea">💡 Idea</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PROJECTS ── -->
+    <div class="screen" id="screen-projects">
+      <div class="nav-bar">
+        <div class="nav-title">Projects</div>
+        <div class="nav-actions">
+          <button class="btn btn-primary">+ New Project</button>
+        </div>
+      </div>
+      <div class="two-pane">
+        <div class="pane-list">
+          <div class="section-header">Active <span class="section-count">4</span></div>
+          <div class="project-row">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="project-name">Board Presentation Q2</div>
+              <span class="tag status-active">Active</span>
+            </div>
+            <div class="project-next-action">Finalise financial slides with CFO</div>
+            <div class="list-item-meta">
+              <span class="tag priority-high">High</span>
+              <span class="date-label">📅 12 Jun</span>
+            </div>
+          </div>
+          <div class="project-row">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="project-name">Vendor Renegotiation</div>
+              <span class="tag status-active">Active</span>
+            </div>
+            <div class="project-next-action">Get legal sign-off on revised terms</div>
+            <div class="list-item-meta">
+              <span class="tag priority-medium">Medium</span>
+              <span class="date-label">📅 20 Jun</span>
+            </div>
+          </div>
+          <div class="project-row">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="project-name">Platform Integration</div>
+              <span class="tag status-active">Active</span>
+            </div>
+            <div class="project-next-action no-next-action">No next action — needs attention</div>
+            <div class="list-item-meta">
+              <span class="tag priority-high">High</span>
+              <span class="date-label date-overdue">⚠ At risk</span>
+            </div>
+          </div>
+          <div class="project-row">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="project-name">Headcount Planning</div>
+              <span class="tag status-on-hold">On Hold</span>
+            </div>
+            <div class="project-next-action">Await finance approval</div>
+          </div>
+        </div>
+        <div class="pane-detail">
+          <div style="font-size:22px;font-weight:700;margin-bottom:4px">Board Presentation Q2</div>
+          <div style="font-size:15px;color:var(--label2);margin-bottom:20px">Deliver a clear, data-driven board presentation that secures approval for the Q3 plan</div>
+
+          <div class="card" style="border-left:4px solid var(--accent)">
+            <div style="font-size:11px;font-weight:700;color:var(--label2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Next Action</div>
+            <div style="font-size:16px;font-weight:600">Finalise financial slides with CFO</div>
+          </div>
+
+          <div class="section-header">Work Items <span class="section-count">5</span></div>
+          <div class="list-item">
+            <div class="list-item-title">Prepare executive summary slide</div>
+            <div class="list-item-meta"><span class="tag tag-task">✓ Task</span><span class="date-label">📅 Today</span></div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-title">Get signoff from CFO on numbers</div>
+            <div class="list-item-meta"><span class="tag tag-followup">↗ Follow Up</span></div>
+          </div>
+
+          <div class="section-header">Decisions <span class="section-count">1</span></div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Approve Q3 headcount increase</div>
+              <span class="tag status-open">Open</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PEOPLE ── -->
+    <div class="screen" id="screen-people">
+      <div class="nav-bar">
+        <div class="nav-title">People</div>
+        <div class="nav-actions">
+          <button class="btn btn-primary">+ Add Person</button>
+        </div>
+      </div>
+      <div class="two-pane">
+        <div class="pane-list">
+          <div class="section-header">Needs Follow-up <span class="section-count">3</span></div>
+          <div class="list-item" style="flex-direction:row;align-items:center;gap:12px">
+            <div class="people-avatar" style="background:#FF6B6B">SC</div>
+            <div style="flex:1">
+              <div class="list-item-title">Sarah Chen</div>
+              <div style="font-size:13px;color:var(--label2)">Legal Director · Acme Corp</div>
+              <div class="list-item-meta" style="margin-top:4px">
+                <span style="font-size:12px;color:var(--orange)">↗ 2 follow-ups</span>
+              </div>
+            </div>
+            <div style="font-size:20px">⚠️</div>
+          </div>
+          <div class="list-item" style="flex-direction:row;align-items:center;gap:12px">
+            <div class="people-avatar" style="background:#4ECDC4">JW</div>
+            <div style="flex:1">
+              <div class="list-item-title">James Walker</div>
+              <div style="font-size:13px;color:var(--label2)">Engineering Lead</div>
+              <div class="list-item-meta" style="margin-top:4px">
+                <span style="font-size:12px;color:var(--purple)">⏳ 3 waiting</span>
+              </div>
+            </div>
+            <div style="font-size:20px">⚠️</div>
+          </div>
+          <div class="divider"></div>
+          <div class="section-header">All People <span class="section-count">6</span></div>
+          <div class="list-item" style="flex-direction:row;align-items:center;gap:12px">
+            <div class="people-avatar" style="background:#45B7D1">MR</div>
+            <div style="flex:1">
+              <div class="list-item-title">Mark Roberts</div>
+              <div style="font-size:13px;color:var(--label2)">CFO</div>
+            </div>
+          </div>
+          <div class="list-item" style="flex-direction:row;align-items:center;gap:12px">
+            <div class="people-avatar" style="background:#96CEB4">PL</div>
+            <div style="flex:1">
+              <div class="list-item-title">Priya Lal</div>
+              <div style="font-size:13px;color:var(--label2)">Head of Product</div>
+            </div>
+          </div>
+        </div>
+        <div class="pane-detail">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+            <div class="people-avatar" style="background:#FF6B6B;width:64px;height:64px;border-radius:32px;font-size:26px">SC</div>
+            <div>
+              <div style="font-size:24px;font-weight:700">Sarah Chen</div>
+              <div style="font-size:15px;color:var(--label2)">Legal Director · Acme Corp</div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:16px">
+            <div style="font-size:11px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">⚠ Follow-up needed</div>
+            <div style="font-size:15px;font-weight:600">Follow up on vendor contract by Fri 12 Jun</div>
+          </div>
+          <div class="section-header">Open Commitments <span class="section-count">2</span></div>
+          <div class="list-item">
+            <div class="list-item-title">Chase Sarah on vendor contract review</div>
+            <div class="list-item-meta"><span class="tag tag-followup">↗ Follow Up</span><span class="date-label date-overdue">⚠ Overdue</span></div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-title">Get legal sign-off on SLA terms</div>
+            <div class="list-item-meta"><span class="tag tag-followup">↗ Follow Up</span><span class="date-label">📅 Fri 12 Jun</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DECISIONS ── -->
+    <div class="screen" id="screen-decisions">
+      <div class="nav-bar">
+        <div class="nav-title">Decisions</div>
+        <div class="nav-actions">
+          <button class="btn btn-secondary">Filter</button>
+          <button class="btn btn-primary">+ New</button>
+        </div>
+      </div>
+      <div class="two-pane">
+        <div class="pane-list">
+          <div class="section-header">Open <span class="section-count">3</span></div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Approve Q3 budget increase for engineering</div>
+              <span class="tag status-open">Open</span>
+            </div>
+            <div class="list-item-meta">
+              <span class="date-label date-overdue">⚠ Overdue</span>
+              <span style="font-size:12px;color:var(--label2)">Owner: You</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Choose primary cloud vendor — AWS vs GCP</div>
+              <span class="tag status-open">Open</span>
+            </div>
+            <div class="list-item-meta">
+              <span class="date-label">📅 Fri 12 Jun</span>
+              <span style="font-size:12px;color:var(--label2)">Owner: James</span>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="list-item-header">
+              <div class="list-item-title">Approve revised vendor contract rates</div>
+              <span class="tag status-open">Open</span>
+            </div>
+            <div class="list-item-meta"><span class="date-label">📅 Fri 12 Jun</span></div>
+          </div>
+          <div class="divider"></div>
+          <div class="section-header">Decided <span class="section-count">1</span></div>
+          <div class="list-item" style="opacity:0.6">
+            <div class="list-item-header">
+              <div class="list-item-title">Select office lease renewal terms</div>
+              <span class="tag status-decided">Decided</span>
+            </div>
+          </div>
+        </div>
+        <div class="pane-detail">
+          <div style="font-size:22px;font-weight:700;margin-bottom:8px">Approve Q3 budget increase for engineering</div>
+          <div class="list-item-meta" style="margin-bottom:20px">
+            <span class="tag status-open">Open</span>
+            <span class="date-label date-overdue">⚠ Overdue</span>
+            <span style="font-size:13px;color:var(--label2)">Owner: You</span>
+          </div>
+
+          <div class="section-header">Context</div>
+          <div class="card">Engineering headcount request for 4 additional engineers to meet H2 delivery commitments. CFO has reviewed the numbers. Awaiting final approval before HR can proceed with recruitment.</div>
+
+          <div class="section-header">Options</div>
+          <div class="card">
+            <div style="margin-bottom:8px"><strong>A.</strong> Approve full headcount (+4 engineers, £380k)</div>
+            <div style="margin-bottom:8px"><strong>B.</strong> Approve partial (+2 engineers, £190k) and review in Q4</div>
+            <div><strong>C.</strong> Defer to next board meeting</div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px">
+            <button class="btn btn-primary" style="flex:1">✓ Mark as Decided</button>
+            <button class="btn btn-secondary" style="flex:1">⏸ Defer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REVIEW ── -->
+    <div class="screen" id="screen-review">
+      <div class="nav-bar">
+        <div class="nav-title">Review</div>
+      </div>
+      <div class="review-tab-bar">
+        <button class="review-tab active" onclick="setReviewTab('daily',this)">Daily</button>
+        <button class="review-tab" onclick="setReviewTab('weekly',this)">Weekly</button>
+      </div>
+
+      <div class="scroll" id="review-daily">
+        <div class="section-header">⚠️ Overdue <span class="section-count">2</span></div>
+        <div class="review-row">
+          <span class="review-icon review-warn">⚠</span>
+          <div style="flex:1">Approve Q3 budget increase — decision overdue</div>
+          <span class="tag tag-decision">Decision</span>
+        </div>
+        <div class="review-row">
+          <span class="review-icon review-warn">⚠</span>
+          <div style="flex:1">Integration deadline risk — escalate to James</div>
+          <span class="tag tag-risk">Risk</span>
+        </div>
+
+        <div class="section-header">📅 Due Today <span class="section-count">2</span></div>
+        <div class="review-row">
+          <span class="review-icon">☀️</span>
+          <div style="flex:1">Prepare board presentation materials</div>
+          <span class="tag tag-task">Task</span>
+        </div>
+        <div class="review-row">
+          <span class="review-icon">☀️</span>
+          <div style="flex:1">Chase Sarah on vendor contract</div>
+          <span class="tag tag-followup">Follow Up</span>
+        </div>
+
+        <div class="section-header">⏳ Waiting On <span class="section-count">3</span></div>
+        <div class="review-row">
+          <span class="review-icon">⏳</span>
+          <div style="flex:1">Legal review of supplier agreement</div>
+          <span style="font-size:12px;color:var(--label2)">5 days</span>
+        </div>
+        <div class="review-row">
+          <span class="review-icon">⏳</span>
+          <div style="flex:1">Finance sign-off on headcount plan</div>
+          <span style="font-size:12px;color:var(--label2)">2 days</span>
+        </div>
+        <div class="review-row">
+          <span class="review-icon">⏳</span>
+          <div style="flex:1">James: revised project timeline</div>
+          <span style="font-size:12px;color:var(--label2)">1 day</span>
+        </div>
+
+        <div class="section-header">⚖️ Decisions Needed <span class="section-count">2</span></div>
+        <div class="review-row">
+          <span class="review-icon">⚖️</span>
+          <div style="flex:1">Q3 budget approval</div>
+          <span class="tag status-open">Overdue</span>
+        </div>
+        <div class="review-row">
+          <span class="review-icon">⚖️</span>
+          <div style="flex:1">Cloud vendor selection</div>
+          <span class="date-label">📅 Fri</span>
+        </div>
+      </div>
+
+      <div class="scroll" id="review-weekly" style="display:none">
+        <div class="section-header">📁 Projects Without Next Action <span class="section-count">1</span></div>
+        <div class="review-row">
+          <span class="review-icon review-warn">⚠</span>
+          <div style="flex:1">Platform Integration</div>
+          <span style="font-size:12px;color:var(--orange)">Add next action →</span>
+        </div>
+
+        <div class="section-header">🕐 Stale Projects <span class="section-count">0</span></div>
+        <div class="review-row">
+          <span class="review-icon review-ok">✓</span>
+          <div style="flex:1;color:var(--label2)">All active projects reviewed recently</div>
+        </div>
+
+        <div class="section-header">⏳ Waiting >7 Days <span class="section-count">1</span></div>
+        <div class="review-row">
+          <span class="review-icon">⏳</span>
+          <div style="flex:1">Legal review of supplier agreement</div>
+          <span style="font-size:12px;color:var(--orange)">7 days</span>
+        </div>
+
+        <div class="section-header">✅ Completed This Week <span class="section-count">4</span></div>
+        <div class="review-row"><span class="review-icon review-ok">✓</span><div style="flex:1">Submitted Q2 monthly report</div></div>
+        <div class="review-row"><span class="review-icon review-ok">✓</span><div style="flex:1">1:1 with Priya — headcount discussed</div></div>
+        <div class="review-row"><span class="review-icon review-ok">✓</span><div style="flex:1">Reviewed platform architecture proposal</div></div>
+        <div class="review-row"><span class="review-icon review-ok">✓</span><div style="flex:1">Signed off on marketing budget</div></div>
+      </div>
+
+      <div class="complete-btn-bar">
+        <button class="btn btn-primary" style="width:100%;justify-content:center;border-radius:12px;padding:14px;">✓ Mark Review Complete</button>
+      </div>
+    </div>
+
+    <!-- ── SEARCH ── -->
+    <div class="screen" id="screen-search">
+      <div class="nav-bar">
+        <div class="nav-title">Search</div>
+      </div>
+      <div style="padding:16px 24px;background:var(--bg2);border-bottom:1px solid var(--sep)">
+        <div style="background:var(--bg3);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:16px;color:var(--label2)">
+          🔍 <span>Search items, projects, people, decisions…</span>
+        </div>
+      </div>
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">Search Everything</div>
+        <div class="empty-body">Find work items, projects, people, decisions, and extracted OCR text across all of Cadence.</div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="screen" id="screen-settings">
+      <div class="nav-bar">
+        <div class="nav-title">Settings</div>
+      </div>
+      <div class="scroll">
+        <div class="settings-section">
+          <div class="privacy-banner">
+            <div class="privacy-icon">🔒</div>
+            <div>
+              <div style="font-size:15px;font-weight:700;margin-bottom:3px">All data is local</div>
+              <div style="font-size:13px;color:var(--label2)">No data is shared with any service. OCR, classification, and storage all happen on this device.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-label">Screenshot Storage</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Keep Original Screenshots</div>
+                <div class="settings-row-sub">Screenshots are saved to the app's local storage.</div>
+              </div>
+              <div class="toggle on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Delete Screenshot After OCR</div>
+                <div class="settings-row-sub">Original image is deleted once text has been extracted.</div>
+              </div>
+              <div class="toggle off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-label">OCR Text</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Keep Extracted Text</div>
+                <div class="settings-row-sub">OCR text is retained in the capture record.</div>
+              </div>
+              <div class="toggle on" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Delete OCR Text After Item Creation</div>
+                <div class="settings-row-sub">Extracted text is removed once work items are created.</div>
+              </div>
+              <div class="toggle off" onclick="this.classList.toggle('on');this.classList.toggle('off')"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-label">Review</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-title">Default Review</div>
+              </div>
+              <div style="color:var(--accent);font-size:15px;font-weight:600">Daily ›</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-label">About Cadence</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-title">Version</div>
+              <div style="color:var(--label2)">1.0</div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-title">Build</div>
+              <div style="color:var(--label2)">1</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+function show(name) {
+  // Update screens
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+
+  // Update nav
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  const navItem = document.getElementById('nav-' + name);
+  if (navItem) navItem.classList.add('active');
+
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('mobile-open');
+}
+
+function setReviewTab(tab, btn) {
+  document.querySelectorAll('.review-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('review-daily').style.display = tab === 'daily' ? 'block' : 'none';
+  document.getElementById('review-weekly').style.display = tab === 'weekly' ? 'block' : 'none';
+}
+
+function selectQueue(el) {
+  document.querySelectorAll('.queue-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// Start on Today
+show('today');
+document.getElementById('nav-today').classList.add('active');
+</script>
+</body>
+</html>
