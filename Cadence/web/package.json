@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "build": "npm run typecheck && vite build",
+    "build:docs": "npm run typecheck && vite build --outDir ../../docs --emptyOutDir && touch ../../docs/.nojekyll",
     "preview": "vite preview"
   },
   "dependencies": {
