@@ -12,6 +12,7 @@ interface Ctx {
   session: Session | null;
   data: CadenceData;
   signIn: (email: string) => Promise<{ error?: string }>;
+  verifyOtp: (email: string, token: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
@@ -71,10 +72,12 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   }, [session, reload]);
 
   const signIn = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href },
-    });
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    return { error: error?.message };
+  };
+
+  const verifyOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
     return { error: error?.message };
   };
 
@@ -105,7 +108,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, verifyOtp, signOut, insert, update, remove, reload, logActivity }}>
       {children}
     </CadenceCtx.Provider>
   );
