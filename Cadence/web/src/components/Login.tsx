@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
 
 export function Login() {
-  const { configured, signIn } = useCadence();
+  const { configured, signIn, verifyOtp } = useCadence();
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -21,25 +22,30 @@ export function Login() {
     );
   }
 
-  const submit = async (e: React.FormEvent) => {
+  const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr('');
     const { error } = await signIn(email.trim());
     setBusy(false);
-    if (error) setErr(error); else setSent(true);
+    if (error) setErr(error); else setStep('code');
+  };
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    const { error } = await verifyOtp(email.trim(), code.trim());
+    setBusy(false);
+    if (error) setErr(error);
   };
 
   return (
     <div className="login-wrap">
       <div className="login-card">
         <h1>Cadence</h1>
-        {sent ? (
-          <p>Check your email — we sent a sign-in link to <strong>{email}</strong>.
-            Open it on this device to continue.</p>
-        ) : (
+        {step === 'email' ? (
           <>
-            <p>Sign in to your executive cockpit. We'll email you a one-tap link — no password.</p>
-            <form onSubmit={submit}>
+            <p>Sign in to your executive cockpit. We'll email you a 6-digit code — no password.</p>
+            <form onSubmit={sendCode}>
               <div className="form-group">
                 <label className="field">Email</label>
                 <input type="email" required value={email} placeholder="you@example.com"
@@ -47,7 +53,27 @@ export function Login() {
               </div>
               {err && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy}>
-                {busy ? 'Sending…' : 'Email me a sign-in link'}
+                {busy ? 'Sending…' : 'Email me a code'}
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p>Check your email for a 6-digit code sent to <strong>{email}</strong> and enter it below.</p>
+            <form onSubmit={verify}>
+              <div className="form-group">
+                <label className="field">6-digit code</label>
+                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} required
+                  value={code} placeholder="123456" autoFocus
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+              </div>
+              {err && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy || code.length < 6}>
+                {busy ? 'Verifying…' : 'Sign in'}
+              </button>
+              <button type="button" className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+                onClick={() => { setStep('email'); setCode(''); setErr(''); }}>
+                Use a different email
               </button>
             </form>
           </>
