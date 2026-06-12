@@ -10,8 +10,10 @@ interface Ctx {
   ready: boolean;
   configured: boolean;
   session: Session | null;
+  needsPasswordSet: boolean;
   data: CadenceData;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
@@ -31,13 +33,22 @@ export function useCadence(): Ctx {
 
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
   const [data, setData] = useState<CadenceData>(emptyData());
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setSession(s);
+        setNeedsPasswordSet(true);
+      } else {
+        setNeedsPasswordSet(false);
+        setSession(s);
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -58,7 +69,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!session) { setData(emptyData()); return; }
+    if (!session || needsPasswordSet) { setData(emptyData()); return; }
     reload();
     const ch = supabase.channel('cadence-rt');
     TABLES.forEach((t) =>
@@ -66,10 +77,16 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     );
     ch.subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [session, reload]);
+  }, [session, needsPasswordSet, reload]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message };
+  };
+
+  const setPassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) setNeedsPasswordSet(false);
     return { error: error?.message };
   };
 
@@ -107,7 +124,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
       {children}
     </CadenceCtx.Provider>
   );
