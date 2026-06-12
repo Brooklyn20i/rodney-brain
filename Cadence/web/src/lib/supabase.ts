@@ -11,5 +11,14 @@ export const isConfigured = Boolean(url && anonKey);
 export const supabase = createClient(
   url || 'https://placeholder.supabase.co',
   anonKey || 'placeholder-anon-key',
-  { auth: { persistSession: true, autoRefreshToken: true } },
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      // The password-recovery / magic links come back with the token in the URL
+      // hash; detect and consume it so PASSWORD_RECOVERY fires on this device.
+      detectSessionInUrl: true,
+      flowType: 'implicit',
+    },
+  },
 );
