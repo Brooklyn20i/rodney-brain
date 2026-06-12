@@ -11,9 +11,7 @@ interface Ctx {
   configured: boolean;
   session: Session | null;
   data: CadenceData;
-  signIn: (email: string) => Promise<{ error?: string }>;
-  verifyOtp: (email: string, token: string) => Promise<{ error?: string }>;
-  signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
@@ -70,17 +68,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return () => { supabase.removeChannel(ch); };
   }, [session, reload]);
 
-  const signIn = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    return { error: error?.message };
-  };
-
-  const verifyOtp = async (email: string, token: string) => {
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
-    return { error: error?.message };
-  };
-
-  const signInWithPassword = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message };
   };
@@ -119,7 +107,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, verifyOtp, signInWithPassword, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
       {children}
     </CadenceCtx.Provider>
   );
