@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from './lib/store';
 import { Login } from './components/Login';
+import { SetPassword } from './components/SetPassword';
 import { Sidebar, NAV } from './components/Sidebar';
 import { Today } from './screens/Today';
 import { Placeholder } from './screens/Placeholder';
@@ -12,7 +13,7 @@ const LABELS: Record<string, string> = {
 };
 
 export function App() {
-  const { ready, configured, session, data, signOut } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, signOut } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -24,6 +25,7 @@ export function App() {
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
   if (!configured || !session) return <Login />;
+  if (needsPasswordSet) return <SetPassword />;
 
   const navigate = (id: string) => { setScreen(id); setMenuOpen(false); };
   const known = NAV.some((g) => g.items.some((i) => i.id === screen)) || ['review', 'search', 'settings'].includes(screen);
