@@ -99,7 +99,7 @@ body {
 /* ── Forms ── */
 label.field { display: block; font-size: 12px; font-weight: 600; color: var(--text2);
   margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
-input[type=text], input[type=email], input[type=date], textarea, select {
+input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], textarea, select {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface); font-size: 14px; color: var(--text); outline: none; font-family: inherit; }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.1); }
