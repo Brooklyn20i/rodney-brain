@@ -12,31 +12,38 @@ it organised on Rodney's behalf.
 | | |
 |---|---|
 | **Supabase URL** | `https://uimjzehrykeebocphdna.supabase.co` |
-| **Anon key** | `sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr` |
 | **User email** | `rbalech@gmail.com` |
 
 ---
 
-## Authentication
+## Authentication — preferred: service role key
 
-Sign in first to get a JWT (valid ~1 hour, refresh if you get 401).
-Rodney will give you the password through a secure channel — do not hardcode it.
+The cleanest approach for an agent. No sign-in, no JWT refresh, never expires.
+Rodney retrieves the service role key from:
+`https://supabase.com/dashboard/project/uimjzehrykeebocphdna/settings/api`
+(under "Project API keys" → `service_role`)
+
+He will give it to you via a secure channel. Store it as `CADENCE_SERVICE_KEY`.
+
+Every request uses two headers — that's it:
+```
+apikey: <CADENCE_SERVICE_KEY>
+Authorization: Bearer <CADENCE_SERVICE_KEY>
+```
+
+## Authentication — fallback: user JWT
+
+If you only have the anon key + user password, sign in first to get a JWT (expires ~1 hour):
 
 ```http
 POST https://uimjzehrykeebocphdna.supabase.co/auth/v1/token?grant_type=password
 Content-Type: application/json
 apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
 
-{ "email": "rbalech@gmail.com", "password": "<CADENCE_PASSWORD>" }
+{ "email": "rbalech@gmail.com", "password": "<CADENCE_PASSWORD from secure channel>" }
 ```
 
-Response contains `access_token`. Use it as a Bearer token on every subsequent request.
-
-All requests need two headers:
-```
-apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
-Authorization: Bearer <access_token>
-```
+Response contains `access_token`. Use as Bearer token, refresh on 401.
 
 ---
 
