@@ -289,7 +289,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 #menu-btn, .menu-btn { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text); padding: 4px 8px; margin-left: -8px; line-height: 1; }
 .sidebar-backdrop { display: none; }
 @media (max-width: 768px) {
-  #sidebar { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); transition: transform 0.25s; z-index: 20; border-radius: 0; }
+  #sidebar { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); transition: transform 0.25s; z-index: 20; border-radius: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
   #sidebar.open { transform: translateX(0); }
   #main { border-radius: 0; }
   .menu-btn { display: block; }
