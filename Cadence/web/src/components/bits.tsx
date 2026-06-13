@@ -23,3 +23,37 @@ export function EmptyState({ icon, title, sub }: { icon: string; title: string; 
     </div>
   );
 }
+
+// Shared screen header with the mobile hamburger built in, plus an optional
+// action area on the right (buttons, etc.).
+export function ScreenHeader({ title, subtitle, onMenu, children }: {
+  title: string; subtitle?: string; onMenu?: () => void; children?: React.ReactNode;
+}) {
+  return (
+    <div className="screen-header">
+      <div className="header-left">
+        <button className="menu-btn" onClick={onMenu} aria-label="Open menu">☰</button>
+        <div>
+          <h1>{title}</h1>
+          {subtitle && <div className="subtitle">{subtitle}</div>}
+        </div>
+      </div>
+      {children && <div className="header-actions">{children}</div>}
+    </div>
+  );
+}
+
+export function Modal({ title, onClose, children, footer, wide }: {
+  title: string; onClose: () => void; children: React.ReactNode;
+  footer?: React.ReactNode; wide?: boolean;
+}) {
+  return (
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={wide ? { maxWidth: 640 } : undefined}>
+        <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>✕</button></div>
+        {children}
+        {footer && <div className="modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+}

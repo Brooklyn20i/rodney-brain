@@ -75,6 +75,25 @@ body {
 .empty-state { text-align: center; padding: 40px 24px; color: var(--text2); }
 .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
 .row-list { display: flex; flex-direction: column; gap: 8px; }
+.card-clickable { display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.card-clickable:hover { border-color: var(--accent-lt); box-shadow: var(--shadow-md); }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Segmented control */
+.seg { display: inline-flex; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 3px; gap: 3px; }
+.seg-btn { border: none; background: none; padding: 7px 16px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text2); font-family: inherit; }
+.seg-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* Stat grid */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; text-align: center; box-shadow: var(--shadow); }
+.stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+.stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text2); margin-top: 6px; }
 
 /* ── Tags ── */
 .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px;
