@@ -124,10 +124,14 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 .login-card p { font-size: 14px; color: var(--text2); margin-bottom: 20px; }
 
 /* ── Mobile ── */
-.menu-btn { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text); }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.menu-btn { display: none; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text);
+  padding: 4px 8px; margin-left: -8px; line-height: 1; }
+.sidebar-backdrop { display: none; }
 @media (max-width: 768px) {
   #sidebar { position: fixed; inset: 0 auto 0 0; transform: translateX(-100%); transition: transform 0.25s; z-index: 20; }
   #sidebar.open { transform: translateX(0); }
   #main { border-radius: 0; }
   .menu-btn { display: block; }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 15; }
 }

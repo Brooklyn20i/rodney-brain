@@ -34,8 +34,11 @@ export function App() {
     <div id="app">
       <Sidebar current={screen} onNavigate={navigate} badges={badges}
         email={session.user.email ?? undefined} onSignOut={signOut} open={menuOpen} />
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <div id="main">
-        {screen === 'today' ? <Today /> : <Placeholder title={LABELS[known ? screen : 'today'] || 'Cadence'} />}
+        {screen === 'today'
+          ? <Today onMenu={() => setMenuOpen(true)} />
+          : <Placeholder title={LABELS[known ? screen : 'today'] || 'Cadence'} onMenu={() => setMenuOpen(true)} />}
       </div>
     </div>
   );

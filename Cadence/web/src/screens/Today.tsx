@@ -28,7 +28,7 @@ function TaskCard({ w }: { w: WorkItem }) {
   );
 }
 
-export function Today() {
+export function Today({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [adding, setAdding] = useState(false);
 
@@ -50,9 +50,12 @@ export function Today() {
   return (
     <>
       <div className="screen-header">
-        <div>
-          <h1>Today</h1>
-          <div className="subtitle">{dateLabel}</div>
+        <div className="header-left">
+          <button className="menu-btn" onClick={onMenu} aria-label="Open menu">☰</button>
+          <div>
+            <h1>Today</h1>
+            <div className="subtitle">{dateLabel}</div>
+          </div>
         </div>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </div>
