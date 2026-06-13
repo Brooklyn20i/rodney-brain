@@ -10,9 +10,11 @@ interface Ctx {
   ready: boolean;
   configured: boolean;
   session: Session | null;
+  needsPasswordSet: boolean;
   data: CadenceData;
-  signIn: (email: string) => Promise<{ error?: string }>;
-  verifyOtp: (email: string, token: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  setPassword: (password: string) => Promise<{ error?: string }>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
@@ -31,18 +33,25 @@ export function useCadence(): Ctx {
 
 export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
   const [data, setData] = useState<CadenceData>(emptyData());
   const [ready, setReady] = useState(false);
 
-  // ── Auth bootstrap ──
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setSession(s);
+        setNeedsPasswordSet(true);
+      } else {
+        setNeedsPasswordSet(false);
+        setSession(s);
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ── Load one or all tables from the server ──
   const reload = useCallback(async (table?: Table) => {
     const tables = table ? [table] : TABLES;
     const results = await Promise.all(tables.map(async (t) => {
@@ -59,9 +68,8 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ── Load + subscribe to realtime whenever the session changes ──
   useEffect(() => {
-    if (!session) { setData(emptyData()); return; }
+    if (!session || needsPasswordSet) { setData(emptyData()); return; }
     reload();
     const ch = supabase.channel('cadence-rt');
     TABLES.forEach((t) =>
@@ -69,15 +77,23 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     );
     ch.subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [session, reload]);
+  }, [session, needsPasswordSet, reload]);
 
-  const signIn = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message };
   };
 
-  const verifyOtp = async (email: string, token: string) => {
-    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  const setPassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) setNeedsPasswordSet(false);
+    return { error: error?.message };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
     return { error: error?.message };
   };
 
@@ -108,7 +124,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, data, signIn, verifyOtp, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
       {children}
     </CadenceCtx.Provider>
   );
