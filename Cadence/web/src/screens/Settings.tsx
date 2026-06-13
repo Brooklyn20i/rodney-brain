@@ -4,43 +4,45 @@ import { ScreenHeader } from '../components/bits';
 
 export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; email?: string; onSignOut: () => void }) {
   const { data } = useCadence();
-  const counts: [string, number][] = [
-    ['Projects', data.projects.length],
-    ['Work items', data.work_items.length],
-    ['People', data.people.length],
-    ['Decisions', data.decisions.length],
-    ['Notes', data.notes.length],
-    ['Messages', data.outbox.length],
-  ];
+  const total = data.work_items.length;
+  const completed = data.work_items.filter((w) => w.done).length;
 
   return (
     <>
       <ScreenHeader title="Settings" onMenu={onMenu} />
       <div className="screen-content">
-        <div className="section-header"><h2>Account</h2></div>
-        <div className="card card-compact">
-          <div className="card-row"><span className="card-meta" style={{ flex: 1 }}>Signed in as</span><span className="card-title">{email || '—'}</span></div>
-        </div>
-        <button className="btn btn-danger" style={{ marginTop: 10 }} onClick={onSignOut}>Sign out</button>
-
-        <div className="section-header"><h2>Your data</h2></div>
-        <div className="stat-grid">
-          {counts.map(([label, n]) => (
-            <div className="stat-card" key={label}><div className="stat-value">{n}</div><div className="stat-label">{label}</div></div>
-          ))}
+        <div className="settings-section-title">Account</div>
+        <div className="settings-group">
+          <div className="settings-row">
+            <div><div className="settings-row-label">Signed in</div><div className="settings-row-sub">{email || '—'}</div></div>
+            <button className="btn btn-danger btn-sm" onClick={onSignOut}>Sign out</button>
+          </div>
         </div>
 
-        <div className="section-header"><h2>Sync</h2></div>
-        <div className="card card-compact">
-          <p className="card-meta">Live two-way sync via Supabase. Changes on any device — iPad, iPhone, browser — appear everywhere in real time.</p>
+        <div className="settings-section-title">Sync</div>
+        <div className="settings-group">
+          <div className="settings-row">
+            <div><div className="settings-row-label">Live sync</div><div className="settings-row-sub">Real-time across iPad, iPhone &amp; browser via Supabase</div></div>
+            <span className="tag tag-action">✓ On</span>
+          </div>
         </div>
 
-        <div className="section-header"><h2>Privacy</h2></div>
-        <div className="card card-compact">
-          <p className="card-meta">Your data is protected by row-level security and only ever visible to your account. On the native app, screenshots and OCR stay on-device and are never uploaded.</p>
+        <div className="settings-section-title">Privacy &amp; Data</div>
+        <div className="settings-group">
+          <div className="settings-row"><div className="settings-row-label">Screenshots stay on-device</div><span className="tag tag-action">✓ Local only</span></div>
+          <div className="settings-row"><div className="settings-row-label">No analytics or third-party tracking</div><span className="tag tag-action">✓ Private</span></div>
+          <div className="settings-row"><div className="settings-row-label">Row-level security</div><span className="tag tag-action">✓ Your data only</span></div>
         </div>
 
-        <p className="card-meta" style={{ marginTop: 20, textAlign: 'center', color: 'var(--text3)' }}>Cadence · executive operating system</p>
+        <div className="settings-section-title">Stats</div>
+        <div className="settings-group">
+          <div className="settings-row"><div className="settings-row-label">Total items</div><strong>{total}</strong></div>
+          <div className="settings-row"><div className="settings-row-label">Completed</div><strong>{completed}</strong></div>
+          <div className="settings-row"><div className="settings-row-label">Projects</div><strong>{data.projects.length}</strong></div>
+          <div className="settings-row"><div className="settings-row-label">People</div><strong>{data.people.length}</strong></div>
+        </div>
+
+        <p className="card-meta" style={{ textAlign: 'center', color: 'var(--text3)', marginTop: 20 }}>Cadence — Executive Operating System</p>
       </div>
     </>
   );

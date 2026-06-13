@@ -1,34 +1,31 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
-import { isOverdue, healthIcon, fmtDate } from '../lib/util';
-
-function Stat({ label, value, color }: { label: string; value: number | string; color?: string }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-value" style={color ? { color } : undefined}>{value}</div>
-      <div className="stat-label">{label}</div>
-    </div>
-  );
-}
+import { isOverdue } from '../lib/util';
 
 export function Review({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const toggle = (k: string) => setChecked((c) => ({ ...c, [k]: !c[k] }));
 
-  const r = useMemo(() => {
-    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-    const completed = data.work_items.filter((w) => w.done && w.completed_at && w.completed_at >= weekAgo);
+  const counts = useMemo(() => {
     const open = data.work_items.filter((w) => !w.done);
     return {
-      completed,
-      overdue: open.filter((w) => isOverdue(w.due_date)),
-      openCount: open.length,
-      pendingDecisions: data.decisions.filter((d) => d.status === 'pending'),
-      activeProjects: data.projects.filter((p) => p.status === 'active'),
-      atRisk: data.projects.filter((p) => p.status === 'active' && p.health !== 'green'),
-      waiting: open.filter((w) => w.type === 'waitingFor'),
+      inbox: open.filter((w) => w.inboxed).length,
+      overdue: open.filter((w) => isOverdue(w.due_date)).length,
+      decisions: data.decisions.filter((d) => d.status === 'pending').length,
+      waiting: open.filter((w) => w.type === 'waitingFor').length,
     };
   }, [data]);
+
+  const sections: { title: string; items: string[] }[] = [
+    { title: '📥 Process Inbox', items: [`Clear ${counts.inbox} inbox item(s)`] },
+    { title: '⚠️ Overdue Items', items: [`Review ${counts.overdue} overdue item(s)`] },
+    { title: '⚖ Open Decisions', items: [`${counts.decisions} decision(s) pending`] },
+    { title: '▤ Projects Review', items: ['Review each active project', 'Check for stale projects (>2 weeks)', 'Identify next actions for blocked projects'] },
+    { title: '✦ Waiting On Others', items: [`Follow up on ${counts.waiting} outstanding item(s)`] },
+    { title: '📅 Next Week', items: ['Schedule focus time for top 3 priorities', 'Block time for deep work', 'Review upcoming deadlines'] },
+  ];
 
   const dateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -36,52 +33,32 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     <>
       <ScreenHeader title="Weekly Review" subtitle={dateLabel} onMenu={onMenu} />
       <div className="screen-content">
-        <div className="stat-grid">
-          <Stat label="Done this week" value={r.completed.length} color="var(--green)" />
-          <Stat label="Still open" value={r.openCount} />
-          <Stat label="Overdue" value={r.overdue.length} color={r.overdue.length ? 'var(--red)' : undefined} />
-          <Stat label="Waiting on others" value={r.waiting.length} color="var(--purple)" />
+        <div style={{ background: 'linear-gradient(135deg,#EBF3FD,#F0F6FF)', border: '1px solid #C8DEF5', borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 16 }}>
+          <small style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--accent)', display: 'block', marginBottom: 4 }}>Weekly Review Checklist</small>
+          <p style={{ fontSize: 15, fontWeight: 600 }}>Systematically review your commitments and capture new ones.</p>
         </div>
-
-        <div className="section-header"><h2>Projects at risk</h2><span className="section-count" style={{ background: 'var(--orange)' }}>{r.atRisk.length}</span></div>
-        <div className="row-list">
-          {r.atRisk.length ? r.atRisk.map((p) => (
-            <div className="card card-compact" key={p.id}><div className="card-row">
-              <span>{healthIcon(p.health)}</span><span className="card-title" style={{ flex: 1 }}>{p.name}</span>
-              {p.target_date && <span className="card-meta">{fmtDate(p.target_date)}</span>}
-            </div></div>
-          )) : <div className="card-meta">All active projects are green. 🎉</div>}
-        </div>
-
-        <div className="section-header"><h2>Decisions to make</h2><span className="section-count" style={{ background: 'var(--purple)' }}>{r.pendingDecisions.length}</span></div>
-        <div className="row-list">
-          {r.pendingDecisions.length ? r.pendingDecisions.map((d) => (
-            <div className="card card-compact" key={d.id}><div className="card-row">
-              <span className="card-title" style={{ flex: 1 }}>{d.title}</span>
-              {d.due_date && <span className="card-meta">{fmtDate(d.due_date)}</span>}
-            </div></div>
-          )) : <div className="card-meta">No open decisions.</div>}
-        </div>
-
-        <div className="section-header"><h2>Overdue</h2><span className="section-count" style={{ background: 'var(--red)' }}>{r.overdue.length}</span></div>
-        <div className="row-list">
-          {r.overdue.length ? r.overdue.map((w) => (
-            <div className="card card-compact" key={w.id}><div className="card-row">
-              <span className="card-title" style={{ flex: 1 }}>{w.title}</span>
-              <span className="due-overdue" style={{ fontSize: 12 }}>{fmtDate(w.due_date)}</span>
-            </div></div>
-          )) : <div className="card-meta">Nothing overdue. Clean slate.</div>}
-        </div>
-
-        <div className="section-header"><h2>Wins this week</h2><span className="section-count" style={{ background: 'var(--green)' }}>{r.completed.length}</span></div>
-        <div className="row-list">
-          {r.completed.length ? r.completed.map((w) => (
-            <div className="card card-compact" key={w.id}><div className="card-row">
-              <span style={{ color: 'var(--green)' }}>✓</span>
-              <span className="card-title" style={{ flex: 1, color: 'var(--text2)' }}>{w.title}</span>
-            </div></div>
-          )) : <div className="card-meta">No completed items logged this week yet.</div>}
-        </div>
+        {sections.map((s, si) => {
+          const allDone = s.items.every((_, ii) => checked[`${si}-${ii}`]);
+          return (
+            <div className="review-section" key={si}>
+              <div className="review-section-header">
+                <strong style={{ fontSize: 14 }}>{s.title}</strong>
+                <span className={`tag ${allDone ? 'tag-action' : 'tag-followUp'}`}>{allDone ? 'Done' : 'Pending'}</span>
+              </div>
+              <div className="review-section-body">
+                {s.items.map((it, ii) => {
+                  const k = `${si}-${ii}`;
+                  return (
+                    <label className={`review-check-item ${checked[k] ? 'done' : ''}`} key={ii}>
+                      <input type="checkbox" checked={!!checked[k]} onChange={() => toggle(k)} />
+                      <span>{it}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </>
   );

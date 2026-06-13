@@ -1,58 +1,108 @@
 import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { WorkItem, Note } from '../lib/types';
-import { ScreenHeader } from '../components/bits';
+import type { WorkItem, ItemType, Priority } from '../lib/types';
+import { TypeTag, PriTag, ScreenHeader } from '../components/bits';
 
-type Mode = 'task' | 'note';
+interface Extracted { title: string; type: ItemType; priority: Priority; checked: boolean; }
+
+// Heuristic classifier — mirrors the original PWA. Runs entirely on-device.
+function classify(line: string): { type: ItemType; priority: Priority } {
+  const t = line.toLowerCase();
+  let type: ItemType = 'task';
+  if (/\b(decide|decision|choose|approve)\b/.test(t)) type = 'decision';
+  else if (/\b(waiting|blocked by|pending from|need .* from)\b/.test(t)) type = 'waitingFor';
+  else if (/\b(follow up|chase|circle back|check in)\b/.test(t)) type = 'followUp';
+  else if (/\b(risk|concern|issue|blocker)\b/.test(t)) type = 'risk';
+  else if (/\b(action|todo|to-do|send|prepare|review)\b/.test(t)) type = 'action';
+  let priority: Priority = 'medium';
+  if (/\b(urgent|asap|critical|today|high)\b/.test(t)) priority = 'high';
+  else if (/\b(later|someday|low|whenever)\b/.test(t)) priority = 'low';
+  return { type, priority };
+}
+
+interface QueueItem { id: string; name: string; text: string; results: Extracted[]; }
 
 export function Capture({ onMenu }: { onMenu?: () => void }) {
   const { insert, logActivity } = useCadence();
-  const [mode, setMode] = useState<Mode>('task');
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const item = queue.find((q) => q.id === selected) || null;
 
-  const save = async () => {
-    if (!text.trim()) return;
-    setBusy(true);
-    try {
-      if (mode === 'task') {
-        await insert('work_items', {
-          title: text.trim().split('\n')[0].slice(0, 200), type: 'task', priority: 'medium',
-          due_date: null, project_id: null, notes: text.trim(), inboxed: true, source: 'capture',
-        } as Partial<WorkItem>);
-        logActivity('capture_task', text.trim().split('\n')[0]);
-      } else {
-        const lines = text.trim().split('\n');
-        await insert('notes', { title: lines[0].slice(0, 120), body: lines.slice(1).join('\n') } as Partial<Note>);
-        logActivity('capture_note', lines[0]);
-      }
-      setText(''); setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally { setBusy(false); }
+  const addCapture = () => {
+    const id = Math.random().toString(36).slice(2);
+    const q: QueueItem = { id, name: `Capture ${queue.length + 1}`, text: '', results: [] };
+    setQueue((cur) => [...cur, q]); setSelected(id);
+  };
+  const setText = (text: string) => setQueue((cur) => cur.map((q) => q.id === selected ? { ...q, text } : q));
+  const extract = () => {
+    if (!item) return;
+    const lines = item.text.split('\n').map((l) => l.trim()).filter((l) => l.length > 2);
+    const results: Extracted[] = lines.map((l) => ({ title: l, ...classify(l), checked: true }));
+    setQueue((cur) => cur.map((q) => q.id === selected ? { ...q, results } : q));
+  };
+  const toggle = (i: number) => setQueue((cur) => cur.map((q) => q.id === selected ? { ...q, results: q.results.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r) } : q));
+  const addChecked = async () => {
+    if (!item) return;
+    for (const r of item.results.filter((r) => r.checked)) {
+      await insert('work_items', { title: r.title, type: r.type, priority: r.priority, due_date: null, project_id: null, person_id: null, notes: '', inboxed: true, source: 'capture' } as Partial<WorkItem>);
+    }
+    logActivity('capture_extract', `${item.results.filter((r) => r.checked).length} items`);
+    setQueue((cur) => cur.filter((q) => q.id !== selected)); setSelected(null);
   };
 
   return (
     <>
-      <ScreenHeader title="Capture" subtitle="Get it out of your head" onMenu={onMenu} />
-      <div className="screen-content">
-        <div className="seg">
-          <button className={`seg-btn ${mode === 'task' ? 'active' : ''}`} onClick={() => setMode('task')}>→ Inbox task</button>
-          <button className={`seg-btn ${mode === 'note' ? 'active' : ''}`} onClick={() => setMode('note')}>→ Note</button>
+      <ScreenHeader title="Capture" onMenu={onMenu} />
+      <div className="split-view">
+        <div className="split-left">
+          <div className="split-panel-header"><h3>Screenshot Queue</h3><button className="btn btn-primary btn-sm" onClick={addCapture}>+ Add</button></div>
+          <div className="split-panel-body">
+            {queue.length ? queue.map((q) => (
+              <button className={`capture-queue-item ${selected === q.id ? 'selected' : ''}`} key={q.id} onClick={() => setSelected(q.id)}>
+                <span className="cq-thumb">📷</span>
+                <div className="cq-info"><div className="cq-name">{q.name}</div><div className="cq-status">{q.results.length ? `${q.results.length} items extracted` : 'Not yet processed'}</div></div>
+                <span className={`status-dot ${q.results.length ? 'done' : 'pending'}`} />
+              </button>
+            )) : <small style={{ color: 'var(--text3)' }}>No screenshots yet. Tap "+ Add" to import.</small>}
+          </div>
         </div>
-        <div className="form-group" style={{ marginTop: 14 }}>
-          <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)}
-            placeholder={mode === 'task' ? 'What needs doing? (first line becomes the title)' : 'First line is the title, the rest is the body…'}
-            style={{ minHeight: 220 }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
-        </div>
-        <button className="btn btn-primary" onClick={save} disabled={busy || !text.trim()}
-          style={{ width: '100%', justifyContent: 'center' }}>
-          {busy ? 'Saving…' : saved ? 'Saved ✓' : mode === 'task' ? 'Add to Inbox' : 'Save note'}
-        </button>
-        <p className="card-meta" style={{ marginTop: 12, textAlign: 'center', color: 'var(--text3)' }}>
-          Tip: ⌘/Ctrl + Enter to save fast.
-        </p>
+        {item ? (
+          <div className="split-right">
+            <div className="split-panel-header"><h3>{item.name}</h3></div>
+            <div className="split-panel-body">
+              <div className="capture-drop-zone"><div className="drop-icon">📷</div>
+                <p>Paste the text from a screenshot below</p>
+                <small>Text is extracted locally — nothing leaves your device</small>
+              </div>
+              <div className="form-group"><label>Extracted / Typed Text</label>
+                <textarea value={item.text} placeholder="Paste or type the text from this screenshot…" style={{ minHeight: 120 }} onChange={(e) => setText(e.target.value)} /></div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <button className="btn btn-primary" onClick={extract}>🔍 Extract Work Items</button>
+              </div>
+              {item.results.length > 0 && <>
+                <div className="settings-section-title">Extracted Items</div>
+                {item.results.map((r, i) => (
+                  <div className="result-item" key={i}>
+                    <input type="checkbox" checked={r.checked} onChange={() => toggle(i)} />
+                    <div className="result-item-content"><div className="ri-title">{r.title}</div>
+                      <div className="ri-tags"><TypeTag type={r.type} /><PriTag priority={r.priority} /></div></div>
+                  </div>
+                ))}
+                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addChecked}>Add Checked to Inbox</button>
+              </>}
+            </div>
+          </div>
+        ) : (
+          <div className="split-right">
+            <div className="split-panel-header"><h3>Select a screenshot</h3></div>
+            <div className="split-panel-body">
+              <div className="capture-drop-zone"><div className="drop-icon">📷</div>
+                <p>Drop screenshots here or tap "Add"</p>
+                <small>Text is extracted locally — nothing leaves your device</small>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

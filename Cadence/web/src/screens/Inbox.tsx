@@ -1,58 +1,39 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { WorkItem } from '../lib/types';
-import { TypeTag, PriTag, Due, EmptyState, ScreenHeader } from '../components/bits';
-import { QuickAdd } from './QuickAdd';
-
-function InboxCard({ w }: { w: WorkItem }) {
-  const { data, update, logActivity } = useCadence();
-  const proj = data.projects.find((p) => p.id === w.project_id);
-
-  const done = () => {
-    update('work_items', w.id, { done: true, inboxed: false, completed_at: new Date().toISOString() } as Partial<WorkItem>);
-    logActivity('complete_task', w.title);
-  };
-  const keep = () => {
-    update('work_items', w.id, { inboxed: false } as Partial<WorkItem>);
-    logActivity('triage_task', w.title);
-  };
-
-  return (
-    <div className="card card-compact">
-      <div className="card-row">
-        <input type="checkbox" checked={false} onChange={done}
-          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-        <div style={{ flex: 1 }}>
-          <div className="card-title">{w.title}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TypeTag type={w.type} /><PriTag priority={w.priority} />
-            {proj && <span className="tag tag-task">{proj.name}</span>}
-            <Due date={w.due_date} />
-          </div>
-        </div>
-        <button className="btn btn-sm btn-ghost" onClick={keep}>Keep</button>
-      </div>
-    </div>
-  );
-}
+import { TypeTag, PriTag, EmptyState, ScreenHeader } from '../components/bits';
+import { ItemModal } from '../components/ItemModal';
 
 export function Inbox({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
-  const [adding, setAdding] = useState(false);
+  const { data, update, remove, logActivity } = useCadence();
+  const [editing, setEditing] = useState<WorkItem | null>(null);
   const items = useMemo(() => data.work_items.filter((w) => w.inboxed && !w.done), [data]);
+
+  const file = (w: WorkItem) => { update('work_items', w.id, { inboxed: false } as Partial<WorkItem>); logActivity('file_item', w.title); };
+  const processAll = () => items.forEach((w) => update('work_items', w.id, { inboxed: false } as Partial<WorkItem>));
 
   return (
     <>
-      <ScreenHeader title="Inbox" subtitle={`${items.length} to triage`} onMenu={onMenu}>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
+      <ScreenHeader title="Inbox" onMenu={onMenu}>
+        {items.length > 0 && <button className="btn btn-secondary btn-sm" onClick={processAll}>Process All</button>}
       </ScreenHeader>
       <div className="screen-content">
-        <div className="row-list">
-          {items.length ? items.map((w) => <InboxCard key={w.id} w={w} />)
-            : <EmptyState icon="📥" title="Inbox zero" sub="Nothing waiting to be triaged." />}
-        </div>
+        {items.length ? items.map((w) => (
+          <div className="inbox-item" key={w.id}>
+            <div className="inbox-item-header">
+              <span className="inbox-item-title">{w.title}</span>
+              <span className="inbox-item-meta"><TypeTag type={w.type} /><PriTag priority={w.priority} /></span>
+            </div>
+            {w.notes && <p className="card-meta">{w.notes.slice(0, 120)}{w.notes.length > 120 ? '…' : ''}</p>}
+            <div className="card-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditing(w)}>Edit &amp; File</button>
+              <button className="btn btn-sm" style={{ background: 'var(--green-bg)', color: 'var(--green)' }} onClick={() => file(w)}>✓ File</button>
+              <button className="btn btn-danger btn-sm" onClick={() => remove('work_items', w.id)}>Delete</button>
+            </div>
+          </div>
+        )) : <EmptyState icon="✓" title="Inbox zero!" sub="Captured items appear here for processing" />}
       </div>
-      {adding && <QuickAdd onClose={() => setAdding(false)} />}
+      {editing && <ItemModal existing={editing} onClose={() => { file(editing); setEditing(null); }} />}
     </>
   );
 }

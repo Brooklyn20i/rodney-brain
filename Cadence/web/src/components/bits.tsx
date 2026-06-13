@@ -31,14 +31,12 @@ export function ScreenHeader({ title, subtitle, onMenu, children }: {
 }) {
   return (
     <div className="screen-header">
+      <button className="menu-btn" onClick={onMenu} aria-label="Open menu">☰</button>
       <div className="header-left">
-        <button className="menu-btn" onClick={onMenu} aria-label="Open menu">☰</button>
-        <div>
-          <h1>{title}</h1>
-          {subtitle && <div className="subtitle">{subtitle}</div>}
-        </div>
+        <h1>{title}</h1>
+        {subtitle && <div className="subtitle">{subtitle}</div>}
       </div>
-      {children && <div className="header-actions">{children}</div>}
+      <div className="header-actions">{children}</div>
     </div>
   );
 }

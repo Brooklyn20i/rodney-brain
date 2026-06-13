@@ -1,65 +1,47 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Decision, DecisionStatus } from '../lib/types';
-import { EmptyState, ScreenHeader, Modal } from '../components/bits';
-import { fmtDate } from '../lib/util';
+import { EmptyState, ScreenHeader, Modal, Due } from '../components/bits';
 
-function NewDecision({ onClose }: { onClose: () => void }) {
-  const { insert, logActivity } = useCadence();
-  const [title, setTitle] = useState('');
-  const [context, setContext] = useState('');
-  const [due, setDue] = useState('');
+const STATUS_TAG: Record<DecisionStatus, string> = { pending: 'tag-decision', deferred: 'tag-followUp', decided: 'tag-action' };
+
+function DecisionModal({ existing, onClose }: { existing?: Decision; onClose: () => void }) {
+  const { insert, update, logActivity } = useCadence();
+  const [title, setTitle] = useState(existing?.title || '');
+  const [status, setStatus] = useState<DecisionStatus>(existing?.status || 'pending');
+  const [due, setDue] = useState(existing?.due_date || '');
+  const [context, setContext] = useState(existing?.context || '');
+  const [outcome, setOutcome] = useState(existing?.outcome || '');
   const [busy, setBusy] = useState(false);
-
   const save = async () => {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      await insert('decisions', { title: title.trim(), context: context.trim(), status: 'pending', due_date: due || null, outcome: '' } as Partial<Decision>);
-      logActivity('add_decision', title.trim());
+      const patch = { title: title.trim(), status, due_date: due || null, context, outcome } as Partial<Decision>;
+      if (existing) await update('decisions', existing.id, patch);
+      else await insert('decisions', patch);
+      logActivity(existing ? 'edit_decision' : 'add_decision', title.trim());
       onClose();
     } finally { setBusy(false); }
   };
-
   return (
-    <Modal title="New Decision" onClose={onClose}
-      footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Add decision'}</button>
-      </>}>
-      <div className="form-group"><label className="field">Decision to make</label>
+    <Modal title={existing ? 'Edit Decision' : 'New Decision'} onClose={onClose}
+      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></>}>
+      <div className="form-group"><label>Decision Title</label>
         <input type="text" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-      <div className="form-group"><label className="field">Context</label>
-        <textarea value={context} onChange={(e) => setContext(e.target.value)} placeholder="What's at stake, options…" /></div>
-      <div className="form-group"><label className="field">Decide by</label>
-        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></div>
-    </Modal>
-  );
-}
-
-function DecideModal({ decision, onClose }: { decision: Decision; onClose: () => void }) {
-  const { update, logActivity } = useCadence();
-  const [outcome, setOutcome] = useState(decision.outcome || '');
-  const [busy, setBusy] = useState(false);
-
-  const decide = async (status: DecisionStatus) => {
-    setBusy(true);
-    try {
-      await update('decisions', decision.id, { status, outcome: outcome.trim() } as Partial<Decision>);
-      logActivity('decide', `${decision.title}: ${status}`);
-      onClose();
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <Modal title={decision.title} onClose={onClose}
-      footer={<>
-        <button className="btn btn-secondary" onClick={() => decide('deferred')} disabled={busy}>Defer</button>
-        <button className="btn btn-primary" onClick={() => decide('decided')} disabled={busy}>Mark decided</button>
-      </>}>
-      {decision.context && <p className="card-meta" style={{ marginBottom: 12 }}>{decision.context}</p>}
-      <div className="form-group"><label className="field">Outcome</label>
-        <textarea autoFocus value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="What did you decide and why?" /></div>
+      <div className="form-row">
+        <div className="form-group"><label>Status</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value as DecisionStatus)}>
+            <option value="pending">Pending</option><option value="decided">Decided</option><option value="deferred">Deferred</option>
+          </select></div>
+        <div className="form-group"><label>Due Date</label>
+          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></div>
+      </div>
+      <div className="form-group"><label>Context</label>
+        <textarea value={context} placeholder="What are the options? What's at stake?" onChange={(e) => setContext(e.target.value)} /></div>
+      <div className="form-group"><label>Outcome (once decided)</label>
+        <textarea value={outcome} placeholder="What was decided and why?" onChange={(e) => setOutcome(e.target.value)} /></div>
     </Modal>
   );
 }
@@ -73,42 +55,38 @@ const GROUPS: { status: DecisionStatus; label: string; color: string }[] = [
 export function Decisions({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [creating, setCreating] = useState(false);
-  const [deciding, setDeciding] = useState<Decision | null>(null);
-  const pending = useMemo(() => data.decisions.filter((d) => d.status === 'pending').length, [data]);
+  const [editing, setEditing] = useState<Decision | null>(null);
 
   return (
     <>
-      <ScreenHeader title="Decisions" subtitle={`${pending} pending`} onMenu={onMenu}>
+      <ScreenHeader title="Decisions" onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>+ New Decision</button>
       </ScreenHeader>
       <div className="screen-content">
-        {data.decisions.length === 0 && <EmptyState icon="⚖️" title="No decisions tracked" sub="Capture the calls you need to make." />}
+        {data.decisions.length === 0 && <EmptyState icon="⚖" title="No decisions yet" sub="Track decisions that need to be made" />}
         {GROUPS.map(({ status, label, color }) => {
-          const items = data.decisions.filter((d) => d.status === status)
-            .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+          const items = data.decisions.filter((d) => d.status === status).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
           if (!items.length) return null;
           return (
             <React.Fragment key={status}>
               <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{items.length}</span></div>
-              <div className="row-list">
-                {items.map((d) => (
-                  <button className="card card-compact card-clickable" key={d.id} onClick={() => setDeciding(d)}>
-                    <div className="card-row" style={{ alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, textAlign: 'left' }}>
-                        <div className="card-title">{d.title}</div>
-                        {d.outcome && <p className="card-meta" style={{ marginTop: 2 }}>→ {d.outcome}</p>}
-                      </div>
-                      {d.due_date && status === 'pending' && <span className="card-meta">{fmtDate(d.due_date)}</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {items.map((d) => (
+                <button className="decision-item" key={d.id} onClick={() => setEditing(d)}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                    <span className={`tag ${STATUS_TAG[status]}`}>{label}</span>
+                    {d.due_date && status === 'pending' && <Due date={d.due_date} />}
+                  </div>
+                  <div className="card-title">{d.title}</div>
+                  {d.context && <p className="card-meta">{d.context.slice(0, 100)}{d.context.length > 100 ? '…' : ''}</p>}
+                  {d.outcome && status === 'decided' && <p className="card-meta">→ {d.outcome}</p>}
+                </button>
+              ))}
             </React.Fragment>
           );
         })}
       </div>
-      {creating && <NewDecision onClose={() => setCreating(false)} />}
-      {deciding && <DecideModal decision={deciding} onClose={() => setDeciding(null)} />}
+      {creating && <DecisionModal onClose={() => setCreating(false)} />}
+      {editing && <DecisionModal existing={editing} onClose={() => setEditing(null)} />}
     </>
   );
 }

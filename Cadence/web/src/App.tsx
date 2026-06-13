@@ -21,9 +21,10 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const badges = useMemo(() => ({
-    inbox: data.work_items.filter((w) => w.inboxed && !w.done).length,
-    decisions: data.decisions.filter((d) => d.status === 'pending').length,
-    outbox: data.outbox.filter((m) => m.status === 'queued').length,
+    inbox: { count: data.work_items.filter((w) => w.inboxed && !w.done).length, cls: '' },
+    people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
+    decisions: { count: data.decisions.filter((d) => d.status === 'pending').length, cls: 'purple' },
+    outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
@@ -53,8 +54,7 @@ export function App() {
 
   return (
     <div id="app">
-      <Sidebar current={screen} onNavigate={navigate} badges={badges}
-        email={email} onSignOut={signOut} open={menuOpen} />
+      <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} />
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <div id="main">{render()}</div>
     </div>
