@@ -215,6 +215,10 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .color-swatch:hover { transform: scale(1.1); }
 .color-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px #fff inset; }
 
+/* ── Save error banner ── */
+.save-error-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 200; background: var(--red); color: #fff; font-size: 13px; font-weight: 600; padding: 10px 16px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.save-error-banner button { background: rgba(255,255,255,0.2); color: #fff; border: none; border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+
 /* ── WIN (Strategy management) ── */
 .win-tabs { display: flex; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; }
 .win-tab { background: none; border: none; padding: 12px 14px; font-size: 13px; font-weight: 600; color: var(--text2); cursor: pointer; font-family: inherit; border-bottom: 2px solid transparent; white-space: nowrap; }
