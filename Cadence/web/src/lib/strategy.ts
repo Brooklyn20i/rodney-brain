@@ -73,3 +73,14 @@ export const emptyWinState = (): WinState => ({ initiatives: [], readings: {}, r
 
 export const uid = () =>
   (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+export const STRATEGY_NOTE_TITLE = '__win_strategy__';
+// Read the user's private strategy content out of the synced note (shared by
+// WIN and Projects). Returns an empty strategy if not set up / unparseable.
+export function readStrategy(notes: { title: string; body: string; updated_at?: string }[]): StrategyContent {
+  const note = notes.filter((n) => n.title === STRATEGY_NOTE_TITLE)
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0];
+  if (!note) return emptyStrategy();
+  try { return { ...emptyStrategy(), ...JSON.parse(note.body || '{}') }; }
+  catch { return emptyStrategy(); }
+}

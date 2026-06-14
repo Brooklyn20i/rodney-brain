@@ -43,7 +43,7 @@ export function App() {
       case 'projects': return <Projects onMenu={onMenu} />;
       case 'people': return <People onMenu={onMenu} />;
       case 'decisions': return <Decisions onMenu={onMenu} />;
-      case 'win': return <Win onMenu={onMenu} />;
+      case 'win': return <Win onMenu={onMenu} onNavigate={navigate} />;
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'outbox': return <Outbox onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;

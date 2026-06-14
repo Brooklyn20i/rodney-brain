@@ -12,11 +12,29 @@ export interface Project {
   id: string; owner_id: string;
   name: string; goal: string; status: ProjectStatus; health: Health;
   owner: string; target_date: string | null; next_action: string; color: string;
+  pillar_id?: string; kpi_ids?: string[]; // strategy linkage (migration 0006)
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface Milestone {
   id: string; owner_id: string; project_id: string;
   title: string; due_date: string | null; done: boolean;
+  phase_id?: string | null; // migration 0006
+  created_at: string; updated_at: string; deleted_at: string | null;
+}
+export interface ProjectPhase {
+  id: string; owner_id: string; project_id: string;
+  name: string; start_date: string | null; end_date: string | null; sort: number;
+  created_at: string; updated_at: string; deleted_at: string | null;
+}
+export interface RaidItem {
+  id: string; owner_id: string; project_id: string;
+  kind: 'risk' | 'assumption' | 'issue' | 'dependency';
+  text: string; owner: string; severity: 'high' | 'medium' | 'low'; status: 'open' | 'closed';
+  created_at: string; updated_at: string; deleted_at: string | null;
+}
+export interface Stakeholder {
+  id: string; owner_id: string; project_id: string;
+  person_id: string | null; name: string; raci: 'R' | 'A' | 'C' | 'I';
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface ProjectUpdate {
@@ -40,6 +58,7 @@ export interface WorkItem {
   title: string; type: ItemType; priority: Priority; due_date: string | null;
   project_id: string | null; person_id: string | null; notes: string;
   done: boolean; inboxed: boolean; source: string; completed_at: string | null;
+  phase_id?: string | null; // migration 0006
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface Comment {
@@ -89,14 +108,19 @@ export interface CadenceData {
   outbox: OutboxEmail[];
   links: LinkRec[];
   activity: Activity[];
+  project_phases: ProjectPhase[];
+  raid_items: RaidItem[];
+  stakeholders: Stakeholder[];
 }
 
 export const TABLES: (keyof CadenceData)[] = [
   'projects', 'milestones', 'project_updates', 'people', 'talking_points',
   'work_items', 'comments', 'decisions', 'notes', 'outbox', 'links', 'activity',
+  'project_phases', 'raid_items', 'stakeholders',
 ];
 
 export const emptyData = (): CadenceData => ({
   projects: [], milestones: [], project_updates: [], people: [], talking_points: [],
   work_items: [], comments: [], decisions: [], notes: [], outbox: [], links: [], activity: [],
+  project_phases: [], raid_items: [], stakeholders: [],
 });

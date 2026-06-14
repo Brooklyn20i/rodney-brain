@@ -1,50 +1,44 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Note } from '../lib/types';
+import type { Note, Project, Health } from '../lib/types';
 import { ScreenHeader } from '../components/bits';
 import {
   emptyStrategy, strategyConfigured, pillarList, kpiList, getKpi,
   emptyWinState, uid, STATUS_META,
 } from '../lib/strategy';
-import type { StrategyContent, WinState, Initiative, InitiativeStatus, KpiContent } from '../lib/strategy';
+import type { StrategyContent, WinState, InitiativeStatus, KpiContent } from '../lib/strategy';
 
 const STRATEGY_TITLE = '__win_strategy__';
 const STATE_TITLE = '__win_state__';
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const QUARTER_DAYS = 90;
+const healthToStatus = (h: Health): InitiativeStatus => h === 'green' ? 'onTrack' : h === 'amber' ? 'atRisk' : 'stalled';
 
-// Shared synced-record hook: dedupes duplicate records (keeps newest),
-// guards against corrupt JSON, and refuses to overwrite a corrupted record
-// (so a transient parse failure can never wipe your data).
+// A project, viewed through the strategy lens (projects ARE initiatives).
+interface InitView { id: string; name: string; pillarId: string; kpiIds: string[]; owner: string; status: InitiativeStatus; nextAction: string; }
+const toInit = (p: Project): InitView => ({
+  id: p.id, name: p.name, pillarId: p.pillar_id || '', kpiIds: p.kpi_ids || [],
+  owner: p.owner || '', status: healthToStatus(p.health), nextAction: p.next_action || '',
+});
+
 function useSynced<T extends object>(title: string, empty: () => T) {
   const { data, insert, update } = useCadence();
-  const note = useMemo(() => {
-    const matches = data.notes.filter((n) => n.title === title)
-      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
-    return matches[0];
-  }, [data.notes, title]);
-
+  const note = useMemo(() => data.notes.filter((n) => n.title === title)
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0], [data.notes, title]);
   const { value, parseError } = useMemo(() => {
     if (!note) return { value: empty(), parseError: false };
     try { return { value: { ...empty(), ...JSON.parse(note.body || '{}') } as T, parseError: false }; }
     catch { return { value: empty(), parseError: true }; }
   }, [note]);
-
   const save = (mut: (v: T) => T) => {
     if (note && parseError) throw new Error(`${title} record is corrupted — refusing to overwrite`);
     const body = JSON.stringify(mut(value));
-    if (note) update('notes', note.id, { body } as Partial<Note>);
-    else insert('notes', { title, body } as Partial<Note>);
+    if (note) update('notes', note.id, { body } as Partial<Note>); else insert('notes', { title, body } as Partial<Note>);
   };
   return { value, parseError, save };
 }
 
-const StatusDot = ({ s }: { s: InitiativeStatus }) => (
-  <span className="win-dot" style={{ background: STATUS_META[s].dot }} title={STATUS_META[s].label} />
-);
-
-// ── Setup / import (keeps confidential content out of source) ────────────────
-function StrategySetup({ current, onImport }: { current: StrategyContent; onImport: (s: StrategyContent, inits?: Initiative[]) => void }) {
+function StrategySetup({ current, onImport }: { current: StrategyContent; onImport: (s: StrategyContent, inits?: any[]) => void }) {
   const [text, setText] = useState(current && strategyConfigured(current) ? JSON.stringify({ strategy: current }, null, 2) : '');
   const [err, setErr] = useState('');
   const load = () => {
@@ -57,9 +51,9 @@ function StrategySetup({ current, onImport }: { current: StrategyContent; onImpo
   };
   return (
     <div className="screen-content">
-      <div className="win-aspiration-bar"><small>Set up WIN</small><p>Your strategy stays private — paste it in once and it's stored only in your account, never in the app's code.</p></div>
-      <p className="card-meta" style={{ margin: '12px 0 6px' }}>Paste your strategy JSON (Claude can hand you this privately), then Load:</p>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder='{ "strategy": { "aspiration": "...", "pillars": {...}, "kpis": {...} } }'
+      <div className="win-aspiration-bar"><small>Set up WIN</small><p>Your strategy stays private — paste it once and it's stored only in your account, never in the app's code. Any initiatives become Projects.</p></div>
+      <p className="card-meta" style={{ margin: '12px 0 6px' }}>Paste your strategy JSON, then Load:</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder='{ "strategy": { "aspiration": "...", "pillars": {...}, "kpis": {...} }, "initiatives": [...] }'
         style={{ width: '100%', minHeight: 240, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} />
       {err && <p style={{ color: 'var(--red)', fontSize: 12, marginTop: 6 }}>{err}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
@@ -69,105 +63,41 @@ function StrategySetup({ current, onImport }: { current: StrategyContent; onImpo
   );
 }
 
-function InitiativeForm({ existing, strategy, onSave, onCancel }: {
-  existing?: Initiative; strategy: StrategyContent; onSave: (i: Initiative) => void; onCancel: () => void;
-}) {
-  const [name, setName] = useState(existing?.name || '');
-  const [pillarId, setPillarId] = useState(existing?.pillarId || '');
-  const [kpiIds, setKpiIds] = useState<string[]>(existing?.kpiIds || []);
-  const [owner, setOwner] = useState(existing?.owner || '');
-  const [status, setStatus] = useState<InitiativeStatus>(existing?.status || 'onTrack');
-  const [nextAction, setNextAction] = useState(existing?.nextAction || '');
-  const [stoppedFor, setStoppedFor] = useState(existing?.stoppedFor || '');
-  const pillars = pillarList(strategy);
-  const kpis = kpiList(strategy);
-  const toggleKpi = (id: string) => setKpiIds((k) => k.includes(id) ? k.filter((x) => x !== id) : [...k, id]);
-  const save = () => {
-    if (!name.trim()) return;
-    onSave({
-      id: existing?.id || uid(), name: name.trim(), pillarId, kpiIds, owner: owner.trim(),
-      status, nextAction: nextAction.trim(), stoppedFor: stoppedFor.trim(),
-      createdAt: existing?.createdAt || new Date().toISOString(),
-    });
-  };
-  return (
-    <div className="win-form">
-      <div className="form-group"><label>Initiative</label>
-        <input type="text" autoFocus value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="form-row">
-        <div className="form-group"><label>Pillar</label>
-          <select value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
-            <option value="">— Unassigned —</option>
-            {pillars.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select></div>
-        <div className="form-group"><label>Owner</label>
-          <input type="text" value={owner} onChange={(e) => setOwner(e.target.value)} /></div>
-      </div>
-      <div className="form-group"><label>KPIs it moves</label>
-        <div className="win-kpi-pick">
-          {kpis.map((k) => <button key={k.id} type="button" className={`win-kpi-chip ${kpiIds.includes(k.id) ? 'on' : ''}`} onClick={() => toggleKpi(k.id)}>{k.name}</button>)}
-        </div>
-        {kpiIds.length === 0 && <small style={{ color: 'var(--orange)' }}>⚠ Serves no KPI — per your rule, it shouldn't be prioritised.</small>}
-      </div>
-      <div className="form-row">
-        <div className="form-group"><label>Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as InitiativeStatus)}>
-            <option value="onTrack">On track</option><option value="atRisk">At risk</option><option value="stalled">Stalled</option>
-          </select></div>
-        <div className="form-group"><label>Next action</label>
-          <input type="text" value={nextAction} onChange={(e) => setNextAction(e.target.value)} /></div>
-      </div>
-      {!existing && <div className="form-group"><label>One in, one out — what stops to make room?</label>
-        <input type="text" value={stoppedFor} onChange={(e) => setStoppedFor(e.target.value)} /></div>}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-secondary btn-sm" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-primary btn-sm" onClick={save}>{existing ? 'Save' : 'Add initiative'}</button>
-      </div>
-    </div>
-  );
-}
-
 type Tab = 'overview' | 'initiatives' | 'kpis' | 'review';
 
-export function Win({ onMenu }: { onMenu?: () => void }) {
+export function Win({ onMenu, onNavigate }: { onMenu?: () => void; onNavigate?: (id: string) => void }) {
+  const { data, insert } = useCadence();
   const strat = useSynced<StrategyContent>(STRATEGY_TITLE, emptyStrategy);
   const win = useSynced<WinState>(STATE_TITLE, emptyWinState);
   const [tab, setTab] = useState<Tab>('overview');
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [editStrategy, setEditStrategy] = useState(false);
 
   const strategy = strat.value;
   const state = win.value;
 
+  const importStrategy = async (s: StrategyContent, inits?: any[]) => {
+    strat.save(() => s);
+    // Initiatives become Projects (the single source of truth)
+    if (inits && inits.length) {
+      for (const i of inits) {
+        const full = { name: i.name, pillar_id: i.pillarId || '', kpi_ids: i.kpiIds || [], status: 'active', health: 'green', goal: '', owner: i.owner || '', next_action: '', color: '#1B5E9E' } as Partial<Project>;
+        try { await insert('projects', full); }
+        catch (e: any) { if (/pillar_id|kpi_ids|column/i.test(String(e?.message || e))) { const { pillar_id: _a, kpi_ids: _b, ...rest } = full as any; await insert('projects', rest); } else throw e; }
+      }
+    }
+    setEditStrategy(false);
+  };
+
   if (!strategyConfigured(strategy) || editStrategy) {
-    return (
-      <>
-        <ScreenHeader title="WIN" subtitle="Strategy setup" onMenu={onMenu} />
-        <StrategySetup current={strategy} onImport={(s, inits) => {
-          strat.save(() => s);
-          if (inits && inits.length) win.save((w) => ({ ...w, initiatives: [...w.initiatives, ...inits] }));
-          setEditStrategy(false);
-        }} />
-      </>
-    );
+    return (<><ScreenHeader title="WIN" subtitle="Strategy setup" onMenu={onMenu} /><StrategySetup current={strategy} onImport={importStrategy} /></>);
   }
 
-  const inits = state.initiatives;
   const pillars = pillarList(strategy);
   const kpis = kpiList(strategy);
-  const saveInit = (i: Initiative) => {
-    win.save((s) => {
-      const exists = s.initiatives.some((x) => x.id === i.id);
-      return { ...s, initiatives: exists ? s.initiatives.map((x) => x.id === i.id ? i : x) : [...s.initiatives, i] };
-    });
-    setAdding(false); setEditingId(null);
-  };
-  const removeInit = (id: string) => win.save((s) => ({ ...s, initiatives: s.initiatives.filter((x) => x.id !== id) }));
-
-  const orphans = inits.filter((i) => i.kpiIds.length === 0);
-  const stalled = inits.filter((i) => i.status === 'stalled');
-  const emptyPillars = pillars.filter((p) => !inits.some((i) => i.pillarId === p.id));
+  const initiatives = data.projects.filter((p) => p.status !== 'completed' && !p.deleted_at).map(toInit);
+  const orphans = initiatives.filter((i) => i.kpiIds.length === 0);
+  const stalled = initiatives.filter((i) => i.status === 'stalled');
+  const emptyPillars = pillars.filter((p) => !initiatives.some((i) => i.pillarId === p.id));
   const lastReview = state.reviews[0];
   const nextReviewDue = lastReview ? new Date(new Date(lastReview.date).getTime() + QUARTER_DAYS * 86400000).toISOString().slice(0, 10) : null;
   const reviewOverdue = nextReviewDue ? nextReviewDue < todayISO() : true;
@@ -184,7 +114,7 @@ export function Win({ onMenu }: { onMenu?: () => void }) {
         ))}
       </div>
       <div className="screen-content">
-        {(strat.parseError || win.parseError) && <div className="win-alert"><span>🔴</span> A WIN data record looks corrupted; editing is paused to protect your data. Tell Claude.</div>}
+        {(strat.parseError || win.parseError) && <div className="win-alert"><span>🔴</span> A WIN data record looks corrupted; editing is paused to protect your data.</div>}
 
         {tab === 'overview' && <>
           <div className="win-aspiration-bar"><small>Winning Aspiration</small><p>{strategy.aspiration}</p>
@@ -192,24 +122,24 @@ export function Win({ onMenu }: { onMenu?: () => void }) {
 
           {(orphans.length || stalled.length || emptyPillars.length || reviewOverdue) ? <div className="section-header"><h2>Needs your attention</h2></div> : null}
           {reviewOverdue && <div className="win-alert"><span>📅</span> {lastReview ? `Review overdue — last run ${lastReview.date}` : 'No strategy review logged yet'} <button className="btn btn-sm btn-ghost" onClick={() => setTab('review')}>Review →</button></div>}
-          {emptyPillars.map((p) => <div className="win-alert" key={p.id}><span>⚠</span> <b>{p.name}</b> is a named priority with no initiative.</div>)}
-          {orphans.map((i) => <div className="win-alert" key={i.id}><span>⚠</span> <b>{i.name}</b> serves no KPI.</div>)}
-          {stalled.map((i) => <div className="win-alert" key={i.id}><span>🔴</span> <b>{i.name}</b> is stalled{i.owner ? ` · ${i.owner}` : ''}.</div>)}
+          {emptyPillars.map((p) => <div className="win-alert" key={p.id}><span>⚠</span> <b>{p.name}</b> is a named priority with no project.</div>)}
+          {orphans.map((i) => <div className="win-alert" key={i.id}><span>⚠</span> <b>{i.name}</b> serves no KPI — link one in Projects.</div>)}
+          {stalled.map((i) => <div className="win-alert" key={i.id}><span>🔴</span> <b>{i.name}</b> is off track{i.owner ? ` · ${i.owner}` : ''}.</div>)}
 
           <div className="section-header"><h2>Pillar Health</h2><span className="section-count" style={{ background: 'var(--purple)' }}>{pillars.length}</span></div>
           {pillars.map((p) => {
-            const pin = inits.filter((i) => i.pillarId === p.id);
+            const pin = initiatives.filter((i) => i.pillarId === p.id);
             const mix = { onTrack: 0, atRisk: 0, stalled: 0 } as Record<InitiativeStatus, number>;
             pin.forEach((i) => mix[i.status]++);
             return (
               <div className="win-pillar-health" key={p.id} onClick={() => setTab('initiatives')}>
                 <div className="win-ph-name">{p.name}</div>
                 <div className="win-ph-meta">
-                  {pin.length === 0 ? <span style={{ color: 'var(--red)' }}>No initiatives</span> : <>
-                    <span>{pin.length} initiative{pin.length > 1 ? 's' : ''}</span>
+                  {pin.length === 0 ? <span style={{ color: 'var(--red)' }}>No projects</span> : <>
+                    <span>{pin.length} project{pin.length > 1 ? 's' : ''}</span>
                     {mix.onTrack > 0 && <span className="win-pill on">{mix.onTrack} on track</span>}
                     {mix.atRisk > 0 && <span className="win-pill risk">{mix.atRisk} at risk</span>}
-                    {mix.stalled > 0 && <span className="win-pill stall">{mix.stalled} stalled</span>}
+                    {mix.stalled > 0 && <span className="win-pill stall">{mix.stalled} off track</span>}
                   </>}
                 </div>
               </div>
@@ -234,24 +164,21 @@ export function Win({ onMenu }: { onMenu?: () => void }) {
 
         {tab === 'initiatives' && <>
           {strategy.operatingRule && <p className="win-rule"><strong>Operating rule:</strong> {strategy.operatingRule}</p>}
-          <div style={{ marginBottom: 12 }}>
-            <button className="btn btn-primary btn-sm" onClick={() => { setAdding(true); setEditingId(null); }}>+ Add initiative</button>
-          </div>
-          {adding && <InitiativeForm strategy={strategy} onSave={saveInit} onCancel={() => setAdding(false)} />}
-          {inits.length === 0 && !adding && <p className="card-meta">No initiatives yet. Add your real initiatives and map each to a pillar + KPI.</p>}
+          <p className="card-meta" style={{ marginBottom: 12 }}>Initiatives are your <b>Projects</b>. {onNavigate && <button className="btn btn-sm btn-ghost" style={{ padding: 0 }} onClick={() => onNavigate('projects')}>Manage in Projects →</button>}</p>
+          {initiatives.length === 0 && <p className="card-meta">No active projects yet. Create projects and link each to a pillar + KPI in Projects.</p>}
           {pillars.map((p) => {
-            const pin = inits.filter((i) => i.pillarId === p.id);
+            const pin = initiatives.filter((i) => i.pillarId === p.id);
             if (!pin.length) return null;
             return (
               <React.Fragment key={p.id}>
                 <div className="section-header"><h2>{p.name}</h2><span className="section-count" style={{ background: 'var(--purple)' }}>{pin.length}</span></div>
-                {pin.map((i) => <InitiativeCard key={i.id} i={i} strategy={strategy} editing={editingId === i.id} onEdit={() => setEditingId(i.id)} onSave={saveInit} onCancelEdit={() => setEditingId(null)} onRemove={() => removeInit(i.id)} />)}
+                {pin.map((i) => <InitiativeView key={i.id} i={i} strategy={strategy} />)}
               </React.Fragment>
             );
           })}
-          {inits.some((i) => !i.pillarId) && <>
-            <div className="section-header"><h2>Unassigned</h2></div>
-            {inits.filter((i) => !i.pillarId).map((i) => <InitiativeCard key={i.id} i={i} strategy={strategy} editing={editingId === i.id} onEdit={() => setEditingId(i.id)} onSave={saveInit} onCancelEdit={() => setEditingId(null)} onRemove={() => removeInit(i.id)} />)}
+          {initiatives.some((i) => !i.pillarId) && <>
+            <div className="section-header"><h2>Unlinked to a pillar</h2></div>
+            {initiatives.filter((i) => !i.pillarId).map((i) => <InitiativeView key={i.id} i={i} strategy={strategy} />)}
           </>}
         </>}
 
@@ -268,17 +195,13 @@ export function Win({ onMenu }: { onMenu?: () => void }) {
   );
 }
 
-function InitiativeCard({ i, strategy, editing, onEdit, onSave, onCancelEdit, onRemove }: {
-  i: Initiative; strategy: StrategyContent; editing: boolean; onEdit: () => void; onSave: (i: Initiative) => void; onCancelEdit: () => void; onRemove: () => void;
-}) {
-  if (editing) return <InitiativeForm existing={i} strategy={strategy} onSave={onSave} onCancel={onCancelEdit} />;
+function InitiativeView({ i, strategy }: { i: InitView; strategy: StrategyContent }) {
   return (
     <div className="win-init-card">
       <div className="win-init-head">
-        <StatusDot s={i.status} />
+        <span className="win-dot" style={{ background: STATUS_META[i.status].dot }} />
         <span className="win-init-title">{i.name}</span>
         {i.kpiIds.length === 0 && <span className="win-init-warn">⚠ No KPI</span>}
-        <button className="btn-icon" onClick={onEdit}>✎</button>
       </div>
       <div className="win-init-tags">
         {i.kpiIds.map((id) => <span className="tag tag-info" key={id}>{getKpi(strategy, id)?.name || id}</span>)}
@@ -286,8 +209,6 @@ function InitiativeCard({ i, strategy, editing, onEdit, onSave, onCancelEdit, on
         <span className="tag" style={{ background: 'var(--surface2)', color: STATUS_META[i.status].dot }}>{STATUS_META[i.status].label}</span>
       </div>
       {i.nextAction && <div className="win-init-next">→ {i.nextAction}</div>}
-      {i.stoppedFor && <div className="win-init-trade">⇄ Made room by: {i.stoppedFor}</div>}
-      <button className="btn btn-sm btn-ghost" style={{ color: 'var(--red)', padding: '2px 0' }} onClick={onRemove}>Remove</button>
     </div>
   );
 }
@@ -342,7 +263,7 @@ function ReviewTab({ state, save, nextReviewDue, reviewOverdue }: {
       </div>
       <div className="section-header"><h2>Run a review</h2></div>
       <div className="win-form">
-        <p className="card-meta" style={{ marginBottom: 8 }}>Update initiative statuses on the Initiatives tab, then capture what was decided:</p>
+        <p className="card-meta" style={{ marginBottom: 8 }}>Update project health on the Projects screen, then capture what was decided:</p>
         <textarea value={summary} placeholder="What moved, what's stalled, trade-offs made, decisions taken…" onChange={(e) => setSummary(e.target.value)} style={{ minHeight: 100 }} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
           <button className="btn btn-primary btn-sm" onClick={log}>Log review ({todayISO()})</button>

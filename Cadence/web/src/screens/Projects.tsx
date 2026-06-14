@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem } from '../lib/types';
+import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem, ProjectPhase, RaidItem, Stakeholder } from '../lib/types';
 import { ScreenHeader, Modal, Due } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { healthIcon, fmtDate } from '../lib/util';
+import { healthIcon, fmtDate, isOverdue } from '../lib/util';
+import { readStrategy, pillarList, kpiList, getPillar, getKpi } from '../lib/strategy';
 
 const STATUSES: ProjectStatus[] = ['active', 'onHold', 'completed'];
 const HEALTHS: { v: Health; label: string }[] = [
@@ -11,9 +12,15 @@ const HEALTHS: { v: Health; label: string }[] = [
 ];
 const HEALTH_PILL: Record<Health, [string, string]> = { green: ['health-green', 'On track'], amber: ['health-amber', 'At risk'], red: ['health-red', 'Off track'] };
 const COLORS = ['#1B5E9E', '#6B3FA0', '#1A7F37', '#E07D00', '#D93025', '#0E7490'];
+const RAID_KINDS: RaidItem['kind'][] = ['risk', 'assumption', 'issue', 'dependency'];
+const RAID_LABEL: Record<RaidItem['kind'], string> = { risk: 'Risk', assumption: 'Assumption', issue: 'Issue', dependency: 'Dependency' };
+const RACI_LABEL: Record<Stakeholder['raci'], string> = { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' };
 
 function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () => void }) {
-  const { insert, update, logActivity } = useCadence();
+  const { data, insert, update, logActivity } = useCadence();
+  const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
+  const pillars = pillarList(strategy);
+  const kpis = kpiList(strategy);
   const [name, setName] = useState(existing?.name || '');
   const [goal, setGoal] = useState(existing?.goal || '');
   const [status, setStatus] = useState<ProjectStatus>(existing?.status || 'active');
@@ -22,15 +29,24 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
   const [target, setTarget] = useState(existing?.target_date || '');
   const [nextAction, setNextAction] = useState(existing?.next_action || '');
   const [color, setColor] = useState(existing?.color || '#1B5E9E');
+  const [pillarId, setPillarId] = useState(existing?.pillar_id || '');
+  const [kpiIds, setKpiIds] = useState<string[]>(existing?.kpi_ids || []);
   const [busy, setBusy] = useState(false);
+  const toggleKpi = (id: string) => setKpiIds((k) => k.includes(id) ? k.filter((x) => x !== id) : [...k, id]);
 
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const patch = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color } as Partial<Project>;
-      if (existing) await update('projects', existing.id, patch);
-      else await insert('projects', patch);
+      const full = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color, pillar_id: pillarId, kpi_ids: kpiIds } as Partial<Project>;
+      const write = async (body: Partial<Project>) => { if (existing) await update('projects', existing.id, body); else await insert('projects', body); };
+      try { await write(full); }
+      catch (e: any) {
+        // Graceful fallback if migration 0006 (pillar_id/kpi_ids) isn't applied yet
+        if (/pillar_id|kpi_ids|column/i.test(String(e?.message || e))) {
+          const { pillar_id: _a, kpi_ids: _b, ...rest } = full as any; await write(rest);
+        } else throw e;
+      }
       logActivity(existing ? 'edit_project' : 'add_project', name.trim());
       onClose();
     } finally { setBusy(false); }
@@ -62,6 +78,22 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
       </div>
       <div className="form-group"><label>Next Action</label>
         <input type="text" value={nextAction} placeholder="The single next step" onChange={(e) => setNextAction(e.target.value)} /></div>
+
+      {/* Strategy link — a project IS an initiative */}
+      <div className="form-group"><label>Strategy — pillar (WIN)</label>
+        <select value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
+          <option value="">— Not linked —</option>
+          {pillars.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {pillars.length === 0 && <small style={{ color: 'var(--text3)' }}>Set up your strategy in WIN to link projects to pillars/KPIs.</small>}
+      </div>
+      {kpis.length > 0 && (
+        <div className="form-group"><label>KPIs this project moves</label>
+          <div className="win-kpi-pick">
+            {kpis.map((k) => <button key={k.id} type="button" className={`win-kpi-chip ${kpiIds.includes(k.id) ? 'on' : ''}`} onClick={() => toggleKpi(k.id)}>{k.name}</button>)}
+          </div>
+        </div>
+      )}
       <div className="form-group"><label>Colour</label>
         <select value={color} onChange={(e) => setColor(e.target.value)}>
           {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -100,37 +132,200 @@ function UpdateModal({ project, onClose }: { project: Project; onClose: () => vo
   );
 }
 
-function WorkItemRow({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
+function WorkItemRow({ w, phases, onEdit }: { w: WorkItem; phases: ProjectPhase[]; onEdit: (w: WorkItem) => void }) {
   const { update } = useCadence();
   return (
     <div className="work-item-row">
       <input type="checkbox" checked={w.done} onChange={() => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>)} />
       <span className={`wi-title ${w.done ? 'done' : ''}`}>{w.title}</span>
+      {phases.length > 0 && (
+        <select className="phase-mini" value={w.phase_id || ''} onChange={(e) => update('work_items', w.id, { phase_id: e.target.value || null } as Partial<WorkItem>)}>
+          <option value="">— phase —</option>
+          {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      )}
       <Due date={w.due_date} />
       <button className="btn-icon" onClick={() => onEdit(w)}>✎</button>
     </div>
   );
 }
 
+// ── Phases / workstreams ───────────────────────────────────────────────────
+function Phases({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
+  const { insert, update, remove } = useCadence();
+  const [name, setName] = useState('');
+  const add = async () => {
+    if (!name.trim()) return;
+    await insert('project_phases', { project_id: project.id, name: name.trim(), sort: phases.length, start_date: null, end_date: null } as Partial<ProjectPhase>);
+    setName('');
+  };
+  return (
+    <div className="detail-section">
+      <h3>Phases / Workstreams</h3>
+      {phases.length ? phases.map((ph) => {
+        const ms = milestones.filter((m) => m.phase_id === ph.id);
+        const done = ms.filter((m) => m.done).length;
+        return (
+          <div className="phase-card" key={ph.id}>
+            <div className="phase-head">
+              <input className="phase-name" value={ph.name} onChange={(e) => update('project_phases', ph.id, { name: e.target.value } as Partial<ProjectPhase>)} />
+              <button className="btn-icon" onClick={() => remove('project_phases', ph.id)}>✕</button>
+            </div>
+            <div className="phase-dates">
+              <label>Start <input type="date" value={ph.start_date || ''} onChange={(e) => update('project_phases', ph.id, { start_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
+              <label>End <input type="date" value={ph.end_date || ''} onChange={(e) => update('project_phases', ph.id, { end_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
+              {ms.length > 0 && <span className="phase-prog">{done}/{ms.length} milestones</span>}
+            </div>
+          </div>
+        );
+      }) : <small style={{ color: 'var(--text3)' }}>No phases yet — group milestones &amp; tasks into stages.</small>}
+      <div className="form-row" style={{ marginTop: 8 }}>
+        <input type="text" placeholder="Add phase (e.g. Discovery)…" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+        <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Stakeholders / RACI ────────────────────────────────────────────────────
+function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[] }) {
+  const { data, insert, remove } = useCadence();
+  const [personId, setPersonId] = useState('');
+  const [name, setName] = useState('');
+  const [raci, setRaci] = useState<Stakeholder['raci']>('I');
+  const add = async () => {
+    const pname = personId ? (data.people.find((p) => p.id === personId)?.name || '') : name.trim();
+    if (!pname) return;
+    await insert('stakeholders', { project_id: project.id, person_id: personId || null, name: pname, raci } as Partial<Stakeholder>);
+    setPersonId(''); setName('');
+  };
+  return (
+    <div className="detail-section">
+      <h3>Stakeholders (RACI)</h3>
+      {rows.length ? rows.map((s) => (
+        <div className="work-item-row" key={s.id}>
+          <span className={`raci-badge raci-${s.raci}`}>{s.raci}</span>
+          <span className="wi-title">{s.name}</span>
+          <span className="card-meta">{RACI_LABEL[s.raci]}</span>
+          <button className="btn-icon" onClick={() => remove('stakeholders', s.id)}>✕</button>
+        </div>
+      )) : <small style={{ color: 'var(--text3)' }}>No stakeholders yet</small>}
+      <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
+        <select value={personId} onChange={(e) => { setPersonId(e.target.value); }}>
+          <option value="">Person…</option>
+          {data.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {!personId && <input type="text" placeholder="or name" value={name} onChange={(e) => setName(e.target.value)} />}
+        <select value={raci} onChange={(e) => setRaci(e.target.value as Stakeholder['raci'])} style={{ maxWidth: 140 }}>
+          {(['R', 'A', 'C', 'I'] as const).map((r) => <option key={r} value={r}>{r} · {RACI_LABEL[r]}</option>)}
+        </select>
+        <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
+      </div>
+    </div>
+  );
+}
+
+// ── RAID log ────────────────────────────────────────────────────────────────
+function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
+  const { insert, update, remove } = useCadence();
+  const [kind, setKind] = useState<RaidItem['kind']>('risk');
+  const [text, setText] = useState('');
+  const [severity, setSeverity] = useState<RaidItem['severity']>('medium');
+  const add = async () => {
+    if (!text.trim()) return;
+    await insert('raid_items', { project_id: project.id, kind, text: text.trim(), severity, status: 'open', owner: '' } as Partial<RaidItem>);
+    setText('');
+  };
+  const open = rows.filter((r) => r.status === 'open');
+  return (
+    <div className="detail-section">
+      <h3>RAID — Risks, Assumptions, Issues, Dependencies ({open.length} open)</h3>
+      {RAID_KINDS.map((k) => {
+        const items = rows.filter((r) => r.kind === k);
+        if (!items.length) return null;
+        return (
+          <div key={k} style={{ marginBottom: 8 }}>
+            <div className="raid-kind">{RAID_LABEL[k]}s</div>
+            {items.map((r) => (
+              <div className={`raid-row ${r.status === 'closed' ? 'closed' : ''}`} key={r.id}>
+                <span className={`sev-dot sev-${r.severity}`} title={r.severity} />
+                <span className="raid-text">{r.text}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => update('raid_items', r.id, { status: r.status === 'open' ? 'closed' : 'open' } as Partial<RaidItem>)}>{r.status === 'open' ? 'Close' : 'Reopen'}</button>
+                <button className="btn-icon" onClick={() => remove('raid_items', r.id)}>✕</button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {rows.length === 0 && <small style={{ color: 'var(--text3)' }}>No RAID items logged</small>}
+      <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
+        <select value={kind} onChange={(e) => setKind(e.target.value as RaidItem['kind'])} style={{ maxWidth: 130 }}>
+          {RAID_KINDS.map((k) => <option key={k} value={k}>{RAID_LABEL[k]}</option>)}
+        </select>
+        <input type="text" placeholder="Describe…" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+        <select value={severity} onChange={(e) => setSeverity(e.target.value as RaidItem['severity'])} style={{ maxWidth: 110 }}>
+          <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+        </select>
+        <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Timeline (chronological key dates) ──────────────────────────────────────
+function Timeline({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
+  const events = useMemo(() => {
+    const ev: { date: string; label: string; kind: string; done?: boolean }[] = [];
+    phases.forEach((p) => { if (p.start_date) ev.push({ date: p.start_date, label: `${p.name} starts`, kind: 'phase' }); if (p.end_date) ev.push({ date: p.end_date, label: `${p.name} ends`, kind: 'phase' }); });
+    milestones.forEach((m) => { if (m.due_date) ev.push({ date: m.due_date, label: m.title, kind: 'milestone', done: m.done }); });
+    if (project.target_date) ev.push({ date: project.target_date, label: 'Project target', kind: 'target' });
+    return ev.sort((a, b) => a.date.localeCompare(b.date));
+  }, [phases, milestones, project.target_date]);
+  if (!events.length) return null;
+  return (
+    <div className="detail-section">
+      <h3>Timeline</h3>
+      {events.map((e, i) => {
+        const overdue = isOverdue(e.date) && !e.done;
+        return (
+          <div className="tl-row" key={i}>
+            <span className={`tl-dot ${e.kind}`} />
+            <span className={`tl-date ${overdue ? 'tl-overdue' : ''}`}>{fmtDate(e.date)}</span>
+            <span className={`tl-label ${e.done ? 'done' : ''}`}>{e.label}{e.done ? ' ✓' : ''}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Detail({ project, onEditProject }: { project: Project; onEditProject: () => void }) {
   const { data, insert, update, remove } = useCadence();
+  const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
+  const phases = data.project_phases.filter((p) => p.project_id === project.id).sort((a, b) => a.sort - b.sort);
   const milestones = data.milestones.filter((m) => m.project_id === project.id);
   const updates = data.project_updates.filter((u) => u.project_id === project.id).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8);
   const items = data.work_items.filter((w) => w.project_id === project.id);
   const open = items.filter((w) => !w.done);
   const closed = items.filter((w) => w.done);
   const links = data.links.filter((l) => l.parent_type === 'project' && l.parent_id === project.id);
+  const raid = data.raid_items.filter((r) => r.project_id === project.id);
+  const stake = data.stakeholders.filter((s) => s.project_id === project.id);
   const pct = milestones.length ? Math.round(milestones.filter((m) => m.done).length / milestones.length * 100) : 0;
   const [posting, setPosting] = useState(false);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   const [mTitle, setMTitle] = useState('');
+  const [mDate, setMDate] = useState('');
+  const [mPhase, setMPhase] = useState('');
   const [pill, pillLabel] = HEALTH_PILL[project.health];
+  const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
+  const linkedKpis = (project.kpi_ids || []).map((id) => getKpi(strategy, id)?.name).filter(Boolean);
 
   const addMilestone = async () => {
     if (!mTitle.trim()) return;
-    await insert('milestones', { project_id: project.id, title: mTitle.trim(), due_date: null, done: false } as Partial<Milestone>);
-    setMTitle('');
+    await insert('milestones', { project_id: project.id, title: mTitle.trim(), due_date: mDate || null, done: false, phase_id: mPhase || null } as Partial<Milestone>);
+    setMTitle(''); setMDate(''); setMPhase('');
   };
 
   return (
@@ -148,6 +343,12 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
             <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
             <button className="btn btn-ghost btn-sm" onClick={() => setPosting(true)}>Post update</button>
           </div>
+          {(pillar || linkedKpis.length > 0) && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {pillar && <span className="tag tag-decision">◎ {pillar.name}</span>}
+              {linkedKpis.map((n) => <span className="tag tag-info" key={n}>{n}</span>)}
+            </div>
+          )}
           {project.goal && <p style={{ fontStyle: 'italic', color: 'var(--text2)', fontSize: 14, marginTop: 10 }}>{project.goal}</p>}
           <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 12, color: 'var(--text2)', flexWrap: 'wrap' }}>
             <span><strong>Owner:</strong> {project.owner || '—'}</span>
@@ -158,26 +359,39 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
           <div className="progress-bar"><div className="progress-bar-fill" style={{ width: pct + '%' }} /></div>
         </div>
 
+        <Phases project={project} phases={phases} milestones={milestones} />
+
         <div className="detail-section">
           <h3>Milestones ({milestones.filter((m) => m.done).length}/{milestones.length})</h3>
-          {milestones.length ? milestones.map((m) => (
-            <div className="milestone-row" key={m.id}>
-              <input type="checkbox" checked={m.done} onChange={() => update('milestones', m.id, { done: !m.done } as Partial<Milestone>)} />
-              <span className={`ms-title ${m.done ? 'done' : ''}`}>{m.title}</span>
-              {m.due_date && <span className="card-meta">{fmtDate(m.due_date)}</span>}
-              <button className="btn-icon" onClick={() => remove('milestones', m.id)}>✕</button>
-            </div>
-          )) : <small style={{ color: 'var(--text3)' }}>No milestones yet</small>}
-          <div className="form-row" style={{ marginTop: 8 }}>
+          {milestones.length ? milestones.map((m) => {
+            const ph = phases.find((p) => p.id === m.phase_id);
+            return (
+              <div className="milestone-row" key={m.id}>
+                <input type="checkbox" checked={m.done} onChange={() => update('milestones', m.id, { done: !m.done } as Partial<Milestone>)} />
+                <span className={`ms-title ${m.done ? 'done' : ''}`}>{m.title}</span>
+                {ph && <span className="tag" style={{ background: 'var(--surface2)', color: 'var(--text2)' }}>{ph.name}</span>}
+                {m.due_date && <span className={`card-meta ${isOverdue(m.due_date) && !m.done ? 'tl-overdue' : ''}`}>{fmtDate(m.due_date)}</span>}
+                <button className="btn-icon" onClick={() => remove('milestones', m.id)}>✕</button>
+              </div>
+            );
+          }) : <small style={{ color: 'var(--text3)' }}>No milestones yet</small>}
+          <div className="form-row" style={{ marginTop: 8, gap: 6, flexWrap: 'wrap' }}>
             <input type="text" placeholder="Add milestone…" value={mTitle} onChange={(e) => setMTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addMilestone(); }} />
+            <input type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} style={{ maxWidth: 150 }} />
+            {phases.length > 0 && <select value={mPhase} onChange={(e) => setMPhase(e.target.value)} style={{ maxWidth: 140 }}><option value="">— phase —</option>{phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
             <button className="btn btn-ghost btn-sm" onClick={addMilestone}>+ Add</button>
           </div>
         </div>
 
+        <Timeline project={project} phases={phases} milestones={milestones} />
+
         <div className="detail-section">
           <h3>Open Items ({open.length})</h3>
-          {open.length ? open.map((w) => <WorkItemRow key={w.id} w={w} onEdit={setEditingItem} />) : <small style={{ color: 'var(--text3)' }}>No open items</small>}
+          {open.length ? open.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />) : <small style={{ color: 'var(--text3)' }}>No open items</small>}
         </div>
+
+        <Stakeholders project={project} rows={stake} />
+        <Raid project={project} rows={raid} />
 
         <div className="detail-section">
           <h3>Status Updates</h3>
@@ -193,13 +407,13 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
           <h3>Files &amp; Links</h3>
           {links.length ? links.map((l) => (
             <div className="link-row" key={l.id}>🔗 <a href={l.url} target="_blank" rel="noreferrer">{l.title || l.url}</a></div>
-          )) : <small style={{ color: 'var(--text3)' }}>No files linked. Ask your agent to attach a Drive file, or add a URL.</small>}
+          )) : <small style={{ color: 'var(--text3)' }}>No files linked.</small>}
         </div>
 
         {closed.length > 0 && (
           <div className="detail-section">
             <h3>Completed ({closed.length})</h3>
-            {closed.map((w) => <WorkItemRow key={w.id} w={w} onEdit={setEditingItem} />)}
+            {closed.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />)}
           </div>
         )}
       </div>
@@ -228,7 +442,7 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
           <div className="split-panel-header"><h3>Projects</h3><button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ New</button></div>
           <div className="split-panel-body">
             {sorted.length ? sorted.map((p) => {
-              const open = data.work_items.filter((w) => w.project_id === p.id && !w.done).length;
+              const openCount = data.work_items.filter((w) => w.project_id === p.id && !w.done).length;
               const ms = data.milestones.filter((m) => m.project_id === p.id);
               const pct = ms.length ? Math.round(ms.filter((m) => m.done).length / ms.length * 100) : 0;
               return (
@@ -236,7 +450,7 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
                   <span className="project-dot" style={{ background: p.color || 'var(--accent)' }} />
                   <div className="project-info">
                     <div className="project-name">{p.name}</div>
-                    <div className="project-meta">{healthIcon(p.health)} {open} open · {pct}% done{p.target_date ? ' · ' + fmtDate(p.target_date) : ''}</div>
+                    <div className="project-meta">{healthIcon(p.health)} {openCount} open · {pct}% done{p.target_date ? ' · ' + fmtDate(p.target_date) : ''}</div>
                     <div className="progress-bar"><div className="progress-bar-fill" style={{ width: pct + '%' }} /></div>
                   </div>
                 </button>

@@ -191,6 +191,35 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .detail-section { margin-bottom: 20px; }
 .detail-section h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
 
+/* ── Projects depth: phases, RAID, stakeholders, timeline ── */
+.phase-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 6px; }
+.phase-head { display: flex; align-items: center; gap: 8px; }
+.phase-name { flex: 1; border: none; background: transparent; font-size: 14px; font-weight: 600; padding: 2px 0; }
+.phase-name:focus { box-shadow: none; border-bottom: 1px solid var(--accent); }
+.phase-dates { display: flex; gap: 14px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.phase-dates label { font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0; }
+.phase-dates input[type=date] { width: auto; padding: 4px 8px; font-size: 12px; }
+.phase-prog { font-size: 11px; color: var(--text3); margin-left: auto; }
+.phase-mini { width: auto !important; padding: 3px 22px 3px 8px !important; font-size: 11px; }
+
+.raci-badge { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.raci-R { background: var(--accent); } .raci-A { background: var(--red); } .raci-C { background: var(--purple); } .raci-I { background: var(--text3); }
+
+.raid-kind { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin: 6px 0 4px; }
+.raid-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.raid-row:last-child { border-bottom: none; }
+.raid-row.closed .raid-text { text-decoration: line-through; color: var(--text3); }
+.raid-text { flex: 1; font-size: 13px; }
+.sev-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sev-high { background: var(--red); } .sev-medium { background: var(--orange); } .sev-low { background: var(--text3); }
+
+.tl-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.tl-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
+.tl-dot.milestone { background: var(--purple); } .tl-dot.target { background: var(--red); } .tl-dot.phase { background: var(--teal); }
+.tl-date { font-size: 12px; font-weight: 600; color: var(--text2); width: 90px; flex-shrink: 0; }
+.tl-overdue { color: var(--red); }
+.tl-label { font-size: 13px; } .tl-label.done { color: var(--text3); text-decoration: line-through; }
+
 /* ── People ── */
 .person-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font-family: inherit; }
 .person-item:hover { box-shadow: var(--shadow); }
