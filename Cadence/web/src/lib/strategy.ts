@@ -44,10 +44,49 @@ export const WIN_KPIS: Kpi[] = [
   { id: 'leadtime', name: 'Lead-time reduction', proves: 'Execution is faster where it matters', targetLabel: '≥50% reduction', target: 50, unit: '%' },
 ];
 
-// Editable, synced state
-export interface WinState {
-  shifts: Record<string, number>; // shift id -> progress 0..100
-  kpis: Record<string, string>;   // kpi id -> current value (string, may be number or note)
-  links: Record<string, string>;  // project id -> kpi id ('' = none)
+export const getPillar = (id: string) => WIN_PILLARS.find((p) => p.id === id);
+export const getKpi = (id: string) => WIN_KPIS.find((k) => k.id === id);
+
+// Starter initiatives — taken verbatim from section 6.2 of the document
+// (activity → initiative → primary KPI impact). Offered as a one-tap seed;
+// the user owns/edits them. Pillar left blank where the doc is ambiguous.
+export interface SeedInitiative { name: string; pillarId: string; kpiIds: string[]; }
+export const WIN_SEED_INITIATIVES: SeedInitiative[] = [
+  { name: 'Negotiation Support Platform (NSP)', pillarId: 'negotiation', kpiIds: ['adoption', 'leadtime', 'capacity'] },
+  { name: 'Tendering workflow simplification', pillarId: 'negotiation', kpiIds: ['capacity', 'leadtime'] },
+  { name: 'Advanced Pricing', pillarId: 'pricing', kpiIds: ['adoption'] },
+  { name: 'Zone Pricing', pillarId: 'pricing', kpiIds: ['adoption'] },
+  { name: 'ProMaCE', pillarId: 'product', kpiIds: ['harmonisation', 'adoption'] },
+  { name: 'Artwork Management', pillarId: 'product', kpiIds: ['harmonisation', 'adoption'] },
+  { name: 'Global Range capability', pillarId: 'product', kpiIds: ['harmonisation', 'adoption'] },
+  { name: 'European TOM / IDA end-to-end flows', pillarId: '', kpiIds: ['harmonisation', 'capacity'] },
+  { name: 'SustainIT — packaging compliance & reporting', pillarId: 'sustainability', kpiIds: ['adoption', 'leadtime'] },
+  { name: 'Purchasing Desk', pillarId: 'efficiency', kpiIds: ['capacity', 'automation'] },
+  { name: 'TEMBOS / GNFR data initiatives', pillarId: 'efficiency', kpiIds: ['capacity', 'automation'] },
+];
+
+export type InitiativeStatus = 'onTrack' | 'atRisk' | 'stalled';
+export const STATUS_META: Record<InitiativeStatus, { label: string; dot: string }> = {
+  onTrack: { label: 'On track', dot: 'var(--green)' },
+  atRisk: { label: 'At risk', dot: 'var(--orange)' },
+  stalled: { label: 'Stalled', dot: 'var(--red)' },
+};
+
+export interface Initiative {
+  id: string; name: string; pillarId: string; kpiIds: string[];
+  owner: string; status: InitiativeStatus; nextAction: string;
+  stoppedFor: string; createdAt: string;
 }
-export const emptyWinState = (): WinState => ({ shifts: {}, kpis: {}, links: {} });
+export interface KpiReading { date: string; value: number; }
+export interface Review { id: string; date: string; summary: string; }
+
+// Editable, synced state — the management layer on top of the fixed strategy
+export interface WinState {
+  initiatives: Initiative[];
+  readings: Record<string, KpiReading[]>; // kpi id -> readings (oldest→newest)
+  reviews: Review[];
+}
+export const emptyWinState = (): WinState => ({ initiatives: [], readings: {}, reviews: [] });
+
+export const uid = () =>
+  (globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
