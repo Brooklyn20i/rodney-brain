@@ -18,15 +18,35 @@ it organised on Rodney's behalf.
 
 ## Authentication — dedicated Kobe login
 
-Kobe has his own Cadence account. Sign in with it to get a JWT:
+Kobe has his own Cadence account:
+
+| | |
+|---|---|
+| **Email** | `kobe-agent@cadence.app` |
+| **Password** | `<Rodney will tell you>` |
+
+Sign in to get a JWT (refresh on 401):
 
 ```http
 POST https://uimjzehrykeebocphdna.supabase.co/auth/v1/token?grant_type=password
 Content-Type: application/json
 apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
 
-{ "email": "kobe-agent@cadence.app", "password": "<from Mac Keychain: service=cadence, account=kobe-agent@cadence.app>" }
+{ "email": "kobe-agent@cadence.app", "password": "<ask Rodney>" }
 ```
+
+## Getting Rodney's owner_id (required for all INSERTs)
+
+After signing in, fetch any existing work item to get Rodney's UUID:
+
+```http
+GET https://uimjzehrykeebocphdna.supabase.co/rest/v1/work_items?limit=1
+apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
+Authorization: Bearer <your_jwt>
+```
+
+The `owner_id` field in that response is Rodney's UUID. Store it as `RODNEY_OWNER_ID`
+and pass it explicitly on every INSERT you make.
 
 Response contains `access_token`. Use it as Bearer on every subsequent request (refresh on 401):
 ```
