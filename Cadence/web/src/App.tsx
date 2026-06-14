@@ -23,7 +23,7 @@ export function App() {
   const badges = useMemo(() => ({
     inbox: { count: data.work_items.filter((w) => w.inboxed && !w.done).length, cls: '' },
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
-    decisions: { count: data.decisions.filter((d) => d.status === 'pending').length, cls: 'purple' },
+    decisions: { count: data.decisions.filter((d) => d.status === 'pending').length + data.work_items.filter((w) => w.type === 'decision' && !w.done).length, cls: 'purple' },
     outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
   }), [data]);
 

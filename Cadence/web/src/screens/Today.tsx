@@ -52,7 +52,10 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       overdue: active.filter((w) => isOverdue(w.due_date)),
       waiting: active.filter((w) => w.type === 'waitingFor'),
       dueToday: active.filter((w) => isDueToday(w.due_date) && w.type !== 'waitingFor'),
-      decisions: data.decisions.filter((d) => d.status === 'pending'),
+      decisions: [
+        ...data.decisions.filter((d) => d.status === 'pending'),
+        ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
+      ] as { id: string; title: string }[],
     };
   }, [data]);
 

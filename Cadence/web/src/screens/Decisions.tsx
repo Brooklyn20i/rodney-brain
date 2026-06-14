@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Decision, DecisionStatus } from '../lib/types';
+import type { Decision, DecisionStatus, WorkItem } from '../lib/types';
 import { EmptyState, ScreenHeader, Modal, Due } from '../components/bits';
+import { ItemModal } from '../components/ItemModal';
 
 const STATUS_TAG: Record<DecisionStatus, string> = { pending: 'tag-decision', deferred: 'tag-followUp', decided: 'tag-action' };
 
@@ -56,6 +57,11 @@ export function Decisions({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Decision | null>(null);
+  const [editingWorkItem, setEditingWorkItem] = useState<WorkItem | null>(null);
+
+  // work_items typed as 'decision' always land in the Pending group
+  const workItemDecisions = data.work_items.filter((w) => w.type === 'decision' && !w.done);
+  const totalCount = data.decisions.length + workItemDecisions.length;
 
   return (
     <>
@@ -63,13 +69,15 @@ export function Decisions({ onMenu }: { onMenu?: () => void }) {
         <button className="btn btn-primary" onClick={() => setCreating(true)}>+ New Decision</button>
       </ScreenHeader>
       <div className="screen-content">
-        {data.decisions.length === 0 && <EmptyState icon="⚖" title="No decisions yet" sub="Track decisions that need to be made" />}
+        {totalCount === 0 && <EmptyState icon="⚖" title="No decisions yet" sub="Track decisions that need to be made" />}
         {GROUPS.map(({ status, label, color }) => {
           const items = data.decisions.filter((d) => d.status === status).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
-          if (!items.length) return null;
+          const extras = status === 'pending' ? workItemDecisions : [];
+          const groupCount = items.length + extras.length;
+          if (!groupCount) return null;
           return (
             <React.Fragment key={status}>
-              <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{items.length}</span></div>
+              <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{groupCount}</span></div>
               {items.map((d) => (
                 <button className="decision-item" key={d.id} onClick={() => setEditing(d)}>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
@@ -81,12 +89,27 @@ export function Decisions({ onMenu }: { onMenu?: () => void }) {
                   {d.outcome && status === 'decided' && <p className="card-meta">→ {d.outcome}</p>}
                 </button>
               ))}
+              {extras.map((w) => {
+                const person = data.people.find((p) => p.id === w.person_id);
+                return (
+                  <button className="decision-item" key={w.id} onClick={() => setEditingWorkItem(w)}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                      <span className={`tag ${STATUS_TAG['pending']}`}>Pending</span>
+                      {person && <span className="tag tag-info">{person.name}</span>}
+                      {w.due_date && <Due date={w.due_date} />}
+                    </div>
+                    <div className="card-title">{w.title}</div>
+                    {w.notes && <p className="card-meta">{w.notes.slice(0, 100)}{w.notes.length > 100 ? '…' : ''}</p>}
+                  </button>
+                );
+              })}
             </React.Fragment>
           );
         })}
       </div>
       {creating && <DecisionModal onClose={() => setCreating(false)} />}
       {editing && <DecisionModal existing={editing} onClose={() => setEditing(null)} />}
+      {editingWorkItem && <ItemModal existing={editingWorkItem} onClose={() => setEditingWorkItem(null)} />}
     </>
   );
 }

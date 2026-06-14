@@ -13,7 +13,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     return {
       inbox: open.filter((w) => w.inboxed).length,
       overdue: open.filter((w) => isOverdue(w.due_date)).length,
-      decisions: data.decisions.filter((d) => d.status === 'pending').length,
+      decisions: data.decisions.filter((d) => d.status === 'pending').length + open.filter((w) => w.type === 'decision').length,
       waiting: open.filter((w) => w.type === 'waitingFor').length,
     };
   }, [data]);
