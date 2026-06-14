@@ -34,6 +34,7 @@ jobs:
 
       - name: Deploy to GitHub Pages
         run: |
+          rm -rf docs/assets
           cp -r Cadence/web/dist/* docs/
           touch docs/.nojekyll
           git config user.name "github-actions[bot]"
