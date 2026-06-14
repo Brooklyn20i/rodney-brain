@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WIN — Strategy Management (reconsidered)</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#1A1F2E; --app:#F4F4F0; --surface:#fff; --surface2:#F8F8F6; --border:rgba(0,0,0,0.08);
+  --accent:#1B5E9E; --accent2:#5B9CF6; --text:#1A1A1A; --t2:#6B6B6B; --t3:#ABABAB;
+  --red:#D93025; --redb:#FEF2F1; --org:#E07D00; --orgb:#FFF8EE; --grn:#1A7F37; --grnb:#EDFAF1;
+  --blu:#1B5E9E; --blub:#EDF4FD; --pur:#6B3FA0; --purb:#F3EEFA; --teal:#0E7490; --tealb:#ECFAFA;
+  --radius:12px; --radius-sm:8px; --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:var(--app);color:var(--text);-webkit-font-smoothing:antialiased;padding:24px;}
+.wrap{max-width:920px;margin:0 auto;}
+.crumb{font-size:12px;color:var(--t2);margin-bottom:14px;}
+h1{font-size:26px;font-weight:700;letter-spacing:-.4px;}
+.sub{font-size:13px;color:var(--t2);margin-bottom:20px;}
+.sec{display:flex;align-items:center;gap:8px;margin:26px 0 10px;}
+.sec h2{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--t2);}
+.sec .count{font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;color:#fff;}
+.sec .note{margin-left:auto;font-size:11px;color:var(--t3);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+
+/* Strategy map (line of sight) */
+.map{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.band{padding:14px 18px;border-bottom:1px solid var(--border);}
+.band:last-child{border-bottom:none;}
+.band-label{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--t3);margin-bottom:8px;}
+.aspiration{background:linear-gradient(135deg,#1A1F2E,#2C3654);color:#fff;}
+.aspiration .band-label{color:var(--accent2);}
+.aspiration p{font-size:17px;font-weight:600;line-height:1.4;}
+.chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{font-size:12px;font-weight:600;padding:6px 12px;border-radius:16px;}
+.chip.out{background:var(--grnb);color:var(--grn);}
+.pillars{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.pillar{background:var(--purb);border-radius:var(--radius-sm);padding:10px;}
+.pillar .pn{font-size:12px;font-weight:700;color:var(--pur);line-height:1.25;}
+.pillar .init{font-size:11px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06);}
+.flowhint{text-align:center;font-size:11px;color:var(--t3);padding:8px;font-style:italic;}
+
+/* Three horizons */
+.hz{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.hzcol{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+.hzcol h3{font-size:13px;font-weight:700;}
+.hzcol .hzsub{font-size:11px;color:var(--t3);margin-bottom:10px;}
+.hzitem{font-size:12px;padding:7px 10px;background:var(--surface2);border-radius:6px;margin-bottom:6px;}
+.hzbar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;}
+.hzbar i{display:block;}
+
+/* Attention reallocation */
+.alloc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+.allocrow{display:grid;grid-template-columns:200px 1fr 96px;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);}
+.allocrow:last-child{border-bottom:none;}
+.allocname{font-size:13px;font-weight:600;}
+.track{position:relative;height:18px;background:var(--surface2);border-radius:9px;}
+.actual{position:absolute;left:0;top:0;height:18px;border-radius:9px;background:var(--accent);}
+.target{position:absolute;top:-3px;height:24px;width:2px;background:var(--text);}
+.delta{font-size:12px;font-weight:700;text-align:right;}
+.delta.under{color:var(--red);}.delta.over{color:var(--org);}.delta.ok{color:var(--grn);}
+
+/* Trade-off ledger */
+.trade{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px 14px;margin-bottom:6px;font-size:13px;}
+.trade .in{color:var(--grn);font-weight:600;}
+.trade .out{color:var(--red);font-weight:600;}
+.trade .arr{color:var(--t3);}
+.trade .dt{margin-left:auto;font-size:11px;color:var(--t3);}
+
+/* Review cadence */
+.review{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+.revhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.revhead .next{font-size:13px;font-weight:700;}
+.revhead .pill{font-size:11px;font-weight:600;background:var(--blub);color:var(--accent);padding:4px 10px;border-radius:12px;}
+.revrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.revrow:last-child{border-bottom:none;}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.dot.g{background:var(--grn);}.dot.a{background:var(--org);}.dot.r{background:var(--red);}
+.revname{flex:1;font-weight:600;}
+.revowner{font-size:12px;color:var(--t2);}
+.revstat{font-size:11px;color:var(--t3);}
+
+/* Scoreboard tight */
+.score{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:13px;}
+.score th{background:var(--surface2);text-align:left;padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--t2);}
+.score td{padding:10px 12px;border-top:1px solid var(--border);}
+.tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;}
+.lag{background:var(--blub);color:var(--blu);}.lead{background:var(--grnb);color:var(--grn);}
+.src{font-size:11px;color:var(--t3);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">Strategy ›</div>
+  <h1>WIN</h1>
+  <div class="sub">Commercial Technology Strategy — managed, not just displayed</div>
+
+  <!-- 1. STRATEGY MAP / LINE OF SIGHT (Balanced Scorecard + Playing to Win) -->
+  <div class="sec"><h2>Strategy Map — line of sight</h2><span class="note">read bottom-up: work drives pillars drive outcomes drive the aspiration</span></div>
+  <div class="map">
+    <div class="band aspiration">
+      <div class="band-label">Winning Aspiration</div>
+      <p>Make Commercial teams more effective and outcomes stronger through technology, AI and agentic workflows.</p>
+    </div>
+    <div class="band">
+      <div class="band-label">Outcomes we're proving</div>
+      <div class="chips">
+        <span class="chip out">Capacity released</span>
+        <span class="chip out">Faster lead times</span>
+        <span class="chip out">Better decisions</span>
+        <span class="chip out">Harmonised ways of working</span>
+      </div>
+    </div>
+    <div class="band">
+      <div class="band-label">Where we play · with the initiatives feeding each</div>
+      <div class="pillars">
+        <div class="pillar"><div class="pn">Negotiation &amp; tendering</div><div class="init">NSP · Tendering simplification</div></div>
+        <div class="pillar"><div class="pn">Product &amp; data lifecycle</div><div class="init">ProMaCE · Global Range</div></div>
+        <div class="pillar"><div class="pn">Pricing &amp; decisioning</div><div class="init">Advanced Pricing · Zone Pricing</div></div>
+        <div class="pillar"><div class="pn">Sustainability &amp; compliance</div><div class="init" style="color:var(--red)">⚠ no active initiative</div></div>
+        <div class="pillar"><div class="pn">Internal efficiency</div><div class="init">Purchasing Desk · TEMBOS</div></div>
+      </div>
+    </div>
+    <div class="flowhint">↑ every initiative must trace up to an outcome — orphans get flagged ↑</div>
+  </div>
+
+  <!-- 2. PORTFOLIO — THREE HORIZONS (McKinsey) -->
+  <div class="sec"><h2>Initiative Portfolio — Three Horizons</h2><span class="note">balance of run / grow / transform</span></div>
+  <div class="hz">
+    <div class="hzcol">
+      <h3>H1 · Run</h3><div class="hzsub">Defend &amp; optimise the core</div>
+      <div class="hzitem">Tendering simplification</div>
+      <div class="hzitem">Purchasing Desk</div>
+      <div class="hzitem">TEMBOS / GNFR data</div>
+    </div>
+    <div class="hzcol">
+      <h3>H2 · Grow</h3><div class="hzsub">Scale emerging capability</div>
+      <div class="hzitem">Advanced Pricing</div>
+      <div class="hzitem">ProMaCE · Global Range</div>
+    </div>
+    <div class="hzcol">
+      <h3>H3 · Transform</h3><div class="hzsub">Future bets</div>
+      <div class="hzitem">Agentic workflows</div>
+      <div class="hzitem" style="color:var(--t3)">Project Phoenix (scoping)</div>
+    </div>
+  </div>
+  <div class="hzbar">
+    <i style="width:55%;background:var(--accent)" title="H1"></i>
+    <i style="width:30%;background:var(--accent2)" title="H2"></i>
+    <i style="width:15%;background:#9BC4F0" title="H3"></i>
+  </div>
+  <div style="font-size:11px;color:var(--t3);margin-top:6px;">55% Run · 30% Grow · 15% Transform — healthy tilt to the core, thin on transform bets</div>
+
+  <!-- 3. ATTENTION / RESOURCE REALLOCATION (Hockey Stick) -->
+  <div class="sec"><h2>Where your effort actually goes</h2><span class="note">active projects &amp; work by pillar · ▎= target</span></div>
+  <div class="alloc">
+    <div class="allocrow"><span class="allocname">Negotiation &amp; tendering</span><div class="track"><div class="actual" style="width:38%"></div><div class="target" style="left:25%"></div></div><span class="delta over">+13% over</span></div>
+    <div class="allocrow"><span class="allocname">Pricing &amp; decisioning</span><div class="track"><div class="actual" style="width:30%"></div><div class="target" style="left:25%"></div></div><span class="delta ok">on intent</span></div>
+    <div class="allocrow"><span class="allocname">Product &amp; data lifecycle</span><div class="track"><div class="actual" style="width:22%"></div><div class="target" style="left:20%"></div></div><span class="delta ok">on intent</span></div>
+    <div class="allocrow"><span class="allocname">Internal efficiency</span><div class="track"><div class="actual" style="width:9%"></div><div class="target" style="left:10%"></div></div><span class="delta ok">on intent</span></div>
+    <div class="allocrow"><span class="allocname">Sustainability &amp; compliance</span><div class="track"><div class="actual" style="width:1%"></div><div class="target" style="left:20%"></div></div><span class="delta under">−19% under</span></div>
+  </div>
+  <div style="font-size:12px;color:var(--red);margin-top:8px;">⚠ Sustainability is a named priority getting almost none of your attention. Reallocate or drop it from the strategy.</div>
+
+  <!-- 4. TRADE-OFF LEDGER (one-in-one-out) -->
+  <div class="sec"><h2>Trade-off ledger</h2><span class="note">one in, one out — enforced</span></div>
+  <div class="trade"><span class="in">▶ Started: Advanced Pricing</span><span class="arr">⇄</span><span class="out">■ Stopped: Legacy reporting refresh</span><span class="dt">9 Jun</span></div>
+  <div class="trade"><span class="in">▶ Started: Agentic workflows pilot</span><span class="arr">⇄</span><span class="out">■ Paused: Local dashboard requests</span><span class="dt">2 Jun</span></div>
+  <div class="trade" style="border-style:dashed;color:var(--t3)"><span style="flex:1">＋ New initiative requested: "Supplier portal v2" — what stops to make room?</span></div>
+
+  <!-- 5. REVIEW CADENCE (Hoshin / Management Systems) -->
+  <div class="sec"><h2>Council review cadence</h2></div>
+  <div class="review">
+    <div class="revhead"><span class="next">Next review · Tue 24 Jun</span><span class="pill">Quarterly · TPC / EBC</span></div>
+    <div class="revrow"><span class="dot g"></span><span class="revname">Negotiation &amp; tendering</span><span class="revowner">Owner: A. Johnson</span><span class="revstat">moving</span></div>
+    <div class="revrow"><span class="dot a"></span><span class="revname">Pricing &amp; decisioning</span><span class="revowner">Owner: B. Liu</span><span class="revstat">at risk · decision needed</span></div>
+    <div class="revrow"><span class="dot r"></span><span class="revname">Sustainability &amp; compliance</span><span class="revowner">Owner: —</span><span class="revstat">stalled · no owner, no initiative</span></div>
+    <div class="revrow"><span class="dot g"></span><span class="revname">Product &amp; data lifecycle</span><span class="revowner">Owner: S. King</span><span class="revstat">moving</span></div>
+    <div class="revrow"><span class="dot g"></span><span class="revname">Internal efficiency</span><span class="revowner">Owner: M. T.</span><span class="revstat">moving</span></div>
+  </div>
+
+  <!-- 6. SCOREBOARD — tight, owned, sourced (not manually typed) -->
+  <div class="sec"><h2>Scoreboard</h2><span class="note">few measures · leading + lagging · owned · sourced</span></div>
+  <table class="score">
+    <tr><th>KPI</th><th>Type</th><th>Target</th><th>Owner</th><th>Source</th></tr>
+    <tr><td><b>Capacity released</b> (headline)</td><td><span class="tag lag">Lagging</span></td><td>per workflow, quarterly</td><td>A. Johnson</td><td class="src">from BI ▸</td></tr>
+    <tr><td>Harmonisation</td><td><span class="tag lead">Leading</span></td><td>70%</td><td>S. King</td><td class="src">from BI ▸</td></tr>
+    <tr><td>Automation by 2028</td><td><span class="tag lead">Leading</span></td><td>6% → 30%</td><td>B. Liu</td><td class="src">from BI ▸</td></tr>
+    <tr><td>Priority workflow adoption</td><td><span class="tag lead">Leading</span></td><td>≥70% by 2028</td><td>M. T.</td><td class="src">from BI ▸</td></tr>
+    <tr><td>Lead-time reduction</td><td><span class="tag lag">Lagging</span></td><td>≥50%</td><td>A. Johnson</td><td class="src">from BI ▸</td></tr>
+  </table>
+  <div style="font-size:11px;color:var(--t3);margin-top:8px;">Numbers pull from the real source — no double-entry. Cadence manages the strategy; it isn't the system of record for the metrics.</div>
+
+</div>
+</body>
+</html>
