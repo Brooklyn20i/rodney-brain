@@ -51,6 +51,7 @@ export function Sidebar({ current, onNavigate, badges, open }: Props) {
       <div id="sidebar-footer">
         {FOOTER.map(item)}
         <div id="sync-status"><span className="status-dot" /> Live sync on</div>
+        <div id="sidebar-signature">Rodney's workspace · Cadence</div>
       </div>
     </nav>
   );
