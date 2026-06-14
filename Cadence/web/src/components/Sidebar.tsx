@@ -7,6 +7,9 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     { id: 'notes', label: 'Notes', icon: '✎' },
     { id: 'inbox', label: 'Inbox', icon: '↓' },
   ]},
+  { section: 'Strategy', items: [
+    { id: 'win', label: 'WIN', icon: '◎' },
+  ]},
   { section: 'Work', items: [
     { id: 'projects', label: 'Projects', icon: '▤' },
     { id: 'people', label: 'People', icon: '✦' },

@@ -24,7 +24,9 @@ const byUpdated = (a: Note, b: Note) => b.updated_at.localeCompare(a.updated_at)
 const NEW_FOLDER = '__new__';
 
 export function Notes({ onMenu }: { onMenu?: () => void }) {
-  const { data, insert, update, remove } = useCadence();
+  const { data: rawData, insert, update, remove } = useCadence();
+  // Hide internal state notes (e.g. WIN strategy state) from the notes UI
+  const data = useMemo(() => ({ ...rawData, notes: rawData.notes.filter((n) => !n.title.startsWith('__')) }), [rawData]);
   const [selected, setSelected] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});

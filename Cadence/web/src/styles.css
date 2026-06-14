@@ -215,6 +215,52 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .color-swatch:hover { transform: scale(1.1); }
 .color-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px #fff inset; }
 
+/* ── WIN (Strategy) ── */
+.win-hero { background: linear-gradient(135deg, #1A1F2E, #2C3654); color: #fff; border-radius: var(--radius); padding: 24px; margin-bottom: 8px; }
+.win-hero-tag { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #5B9CF6; }
+.win-hero h2 { font-size: 22px; font-weight: 700; margin: 4px 0 16px; letter-spacing: -0.3px; }
+.win-aspiration { background: rgba(255,255,255,0.07); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 14px; }
+.win-aspiration small { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #5B9CF6; display: block; margin-bottom: 4px; }
+.win-aspiration p { font-size: 16px; font-weight: 600; line-height: 1.4; }
+.win-core { font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.7); }
+
+.win-kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.win-kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; position: relative; }
+.win-kpi.headline { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.win-kpi-flag { position: absolute; top: 12px; right: 12px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); background: var(--blue-bg); padding: 2px 7px; border-radius: 8px; }
+.win-kpi-name { font-size: 15px; font-weight: 700; }
+.win-kpi-proves { font-size: 12px; color: var(--text2); margin: 2px 0 10px; }
+.win-kpi-input-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.win-kpi-input { width: 64px; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 15px; font-weight: 700; text-align: center; }
+.win-kpi-unit { font-size: 14px; font-weight: 700; color: var(--text2); margin-left: -2px; }
+.win-kpi-target { font-size: 11px; color: var(--text3); margin-left: auto; }
+.win-bar { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
+.win-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+.win-pillars { display: flex; flex-direction: column; gap: 8px; }
+.win-pillar { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; }
+.win-pillar-num { width: 26px; height: 26px; border-radius: 50%; background: var(--purple-bg); color: var(--purple); font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.win-pillar-name { font-size: 14px; font-weight: 600; }
+.win-pillar-detail { font-size: 12px; color: var(--text2); margin-top: 1px; }
+
+.win-shift { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; }
+.win-shift-row { display: flex; align-items: center; gap: 10px; }
+.win-shift-from { font-size: 12px; color: var(--text3); text-decoration: line-through; flex: 1; }
+.win-shift-arrow { color: var(--accent); font-weight: 700; }
+.win-shift-to { font-size: 13px; color: var(--text); font-weight: 600; flex: 1; }
+.win-shift-control { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.win-shift-control input[type=range] { flex: 1; accent-color: var(--accent); }
+.win-shift-pct { font-size: 12px; font-weight: 700; color: var(--accent); width: 38px; text-align: right; }
+
+.win-rule { font-size: 12px; color: var(--text2); background: var(--orange-bg); border: 1px solid #F5C97A; border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 10px; }
+.win-initiative { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 6px; }
+.win-init-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.win-init-name { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.win-init-warn { font-size: 11px; font-weight: 600; color: var(--orange); white-space: nowrap; }
+.win-init-select { width: auto; font-size: 12px; padding: 5px 24px 5px 10px; border-radius: 14px; }
+.win-foot { font-size: 12px; font-style: italic; color: var(--text3); text-align: center; margin: 14px 0 4px; }
+@media (max-width: 768px) { .win-kpi-grid { grid-template-columns: 1fr; } }
+
 /* ── Decisions ── */
 .decision-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; width: 100%; text-align: left; font-family: inherit; }
 .decision-item:hover { box-shadow: var(--shadow); }
