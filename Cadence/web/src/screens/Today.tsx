@@ -4,6 +4,7 @@ import { priorityScore, isOverdue, isDueToday } from '../lib/util';
 import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
+import { QuickAdd } from '../components/QuickAdd';
 
 function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
   return (
@@ -117,7 +118,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         </Section>
       </div>
 
-      {adding && <ItemModal onClose={() => setAdding(false)} />}
+      {adding && <QuickAdd onClose={() => setAdding(false)} />}
       {editing && <ItemModal existing={editing} onClose={() => setEditing(null)} />}
     </>
   );

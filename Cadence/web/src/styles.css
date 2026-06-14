@@ -279,6 +279,21 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .est-draft { background: var(--surface2); color: var(--text2); }
 .est-cancelled { background: var(--red-bg); color: var(--red); }
 
+/* ── Quick Add Sheet ── */
+.quick-add-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; }
+.quick-add-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(3px); }
+.quick-add-sheet { position: relative; z-index: 1; background: var(--surface); border-radius: 20px 20px 0 0; padding: 24px 28px 28px; width: calc(100% - var(--sidebar-w)); margin-left: auto; box-shadow: 0 -8px 40px rgba(0,0,0,0.15); animation: qaSlideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes qaSlideUp { from { transform: translateY(32px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.quick-add-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.quick-add-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.quick-add-input { width: 100%; font-size: 16px; padding: 13px 16px; border-radius: var(--radius-sm); border: 2px solid var(--accent); background: var(--surface); color: var(--text); outline: none; font-family: inherit; box-shadow: 0 0 0 4px rgba(27,94,158,0.08); }
+.quick-add-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; min-height: 24px; }
+.quick-add-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; align-items: center; }
+.quick-add-hint { font-size: 11px; color: var(--text3); margin-top: 10px; text-align: right; line-height: 1.5; }
+@media (max-width: 768px) {
+  .quick-add-sheet { width: 100%; margin-left: 0; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+}
+
 /* ── Login ── */
 .login-wrap { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--app-bg); padding: 24px; }
 .login-card { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-md); padding: 32px; width: 380px; max-width: 100%; }
