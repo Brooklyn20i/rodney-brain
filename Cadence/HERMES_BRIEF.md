@@ -16,34 +16,38 @@ it organised on Rodney's behalf.
 
 ---
 
-## Authentication — preferred: service role key
+## Authentication — dedicated Kobe login
 
-The cleanest approach for an agent. No sign-in, no JWT refresh, never expires.
-Rodney retrieves the service role key from:
-`https://supabase.com/dashboard/project/uimjzehrykeebocphdna/settings/api`
-(under "Project API keys" → `service_role`)
-
-He will give it to you via a secure channel. Store it as `CADENCE_SERVICE_KEY`.
-
-Every request uses two headers — that's it:
-```
-apikey: <CADENCE_SERVICE_KEY>
-Authorization: Bearer <CADENCE_SERVICE_KEY>
-```
-
-## Authentication — fallback: user JWT
-
-If you only have the anon key + user password, sign in first to get a JWT (expires ~1 hour):
+Kobe has his own Cadence account. Sign in with it to get a JWT:
 
 ```http
 POST https://uimjzehrykeebocphdna.supabase.co/auth/v1/token?grant_type=password
 Content-Type: application/json
 apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
 
-{ "email": "rbalech@gmail.com", "password": "<CADENCE_PASSWORD from secure channel>" }
+{ "email": "kobe-agent@cadence.app", "password": "<from Mac Keychain: service=cadence, account=kobe-agent@cadence.app>" }
 ```
 
-Response contains `access_token`. Use as Bearer token, refresh on 401.
+Response contains `access_token`. Use it as Bearer on every subsequent request (refresh on 401):
+```
+apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
+Authorization: Bearer <access_token>
+```
+
+## IMPORTANT — owner_id on every INSERT
+
+All of Rodney's data rows have `owner_id = <Rodney's UUID>`. When you insert new rows,
+you MUST pass `owner_id` explicitly (the default would set it to your own UUID and the
+row would be invisible to Rodney). Rodney's UUID is printed when the setup SQL is run —
+store it as `RODNEY_OWNER_ID` and include it in every insert:
+
+```json
+{
+  "owner_id": "<RODNEY_OWNER_ID>",
+  "title": "...",
+  ...
+}
+```
 
 ---
 
