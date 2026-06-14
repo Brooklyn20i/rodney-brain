@@ -12,19 +12,25 @@ export function QuickAdd({ onClose, defaults }: { onClose: () => void; defaults?
   const [priority, setPriority] = useState<Priority>((defaults?.priority as Priority) || 'medium');
   const [due, setDue] = useState(defaults?.due_date || '');
   const [projectId, setProjectId] = useState(defaults?.project_id || '');
+  const [personId, setPersonId] = useState(defaults?.person_id || '');
+  const [notes, setNotes] = useState(defaults?.notes || '');
+  const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
-    if (!title.trim()) return;
-    setBusy(true);
+    const cleanTitle = title.trim();
+    if (!cleanTitle) { setErr('Add a title first.'); return; }
+    setBusy(true); setErr('');
     try {
       await insert('work_items', {
-        title: title.trim(), type, priority,
-        due_date: due || null, project_id: projectId || null,
-        notes: '', inboxed: true, source: 'you',
+        title: cleanTitle, type, priority,
+        due_date: due || null, project_id: projectId || null, person_id: personId || null,
+        notes: notes.trim(), inboxed: true, source: 'you',
       } as Partial<WorkItem>);
-      logActivity('add_task', title.trim());
+      await logActivity('add_task', cleanTitle);
       onClose();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : 'Could not save this item.');
     } finally { setBusy(false); }
   };
 
@@ -35,7 +41,7 @@ export function QuickAdd({ onClose, defaults }: { onClose: () => void; defaults?
         <div className="form-group">
           <label className="field">What needs to happen?</label>
           <input type="text" value={title} autoFocus onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') save(); }} />
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
         </div>
         <div className="form-row">
           <div className="form-group">
@@ -64,6 +70,18 @@ export function QuickAdd({ onClose, defaults }: { onClose: () => void; defaults?
             </select>
           </div>
         </div>
+        <div className="form-group">
+          <label className="field">Person</label>
+          <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
+            <option value="">No person</option>
+            {data.people.map((p) => <option key={p.id} value={p.id}>{p.name}{p.role ? ` — ${p.role}` : ''}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="field">Notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional context, source, or next step" />
+        </div>
+        {err && <p style={{ color: 'var(--red)', fontSize: 13 }}>{err}</p>}
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Adding…' : 'Add to Inbox'}</button>

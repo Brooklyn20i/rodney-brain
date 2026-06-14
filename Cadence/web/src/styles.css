@@ -99,7 +99,7 @@ body {
 /* ── Forms ── */
 label.field { display: block; font-size: 12px; font-weight: 600; color: var(--text2);
   margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
-input[type=text], input[type=email], input[type=date], textarea, select {
+input[type=text], input[type=email], input[type=password], input[type=date], textarea, select {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface); font-size: 14px; color: var(--text); outline: none; font-family: inherit; }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.1); }
@@ -131,3 +131,29 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
   #main { border-radius: 0; }
   .menu-btn { display: block; }
 }
+
+/* ── Operational screens ── */
+.inline-meta { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+.button-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.label { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text2); margin-bottom: 6px; }
+.mini-heading { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text2); margin: 18px 0 10px; }
+.split-screen { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 16px; min-height: 0; }
+.split-list, .split-detail { min-height: 0; overflow-y: auto; }
+.split-list { display: flex; flex-direction: column; gap: 8px; }
+.list-row { display: flex; gap: 10px; width: 100%; text-align: left; align-items: center; padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; box-shadow: var(--shadow); }
+.list-row:hover, .list-row.active { border-color: rgba(27,94,158,0.35); background: #F8FBFF; }
+.list-row strong { display: block; font-size: 14px; }
+.list-row small { display: block; color: var(--text2); margin-top: 3px; line-height: 1.3; }
+.health-dot { width: 24px; text-align: center; }
+.detail-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.detail-title h2 { font-size: 22px; letter-spacing: -0.3px; }
+.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.email-preview { margin-top: 12px; padding: 12px; border-radius: var(--radius-sm); background: var(--surface2); white-space: pre-wrap; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--border); }
+.note-body { margin-top: 12px; white-space: pre-wrap; line-height: 1.55; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.metric-card strong { display: block; font-size: 28px; letter-spacing: -0.5px; }
+.metric-card span { color: var(--text2); font-size: 12px; font-weight: 600; }
+.metric-card.good strong { color: var(--green); } .metric-card.bad strong { color: var(--red); }
+.checklist { margin: 12px 0 0 20px; color: var(--text2); line-height: 1.8; }
+@media (max-width: 900px) { .split-screen, .two-col { grid-template-columns: 1fr; } }

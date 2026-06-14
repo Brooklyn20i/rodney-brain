@@ -1,8 +1,9 @@
 -- Cadence — Row-Level Security (Phase 0)
 -- Every row belongs to one account (owner_id). These policies guarantee a
 -- logged-in user can only ever read or write their OWN rows, enforced by the
--- database itself — not by client code. The agent uses a service key tied to
--- the account, so it operates as that owner.
+-- database itself — not by client code. Later migrations may add explicit,
+-- revocable delegated-agent access; do not bypass this with service-role client
+-- code for normal agent operations.
 
 do $$
 declare t text;

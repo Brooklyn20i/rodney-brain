@@ -5,6 +5,14 @@ import { SetPassword } from './components/SetPassword';
 import { Sidebar, NAV } from './components/Sidebar';
 import { Today } from './screens/Today';
 import { Placeholder } from './screens/Placeholder';
+import { Inbox } from './screens/Inbox';
+import { Projects } from './screens/Projects';
+import { People } from './screens/People';
+import { Decisions } from './screens/Decisions';
+import { Outbox } from './screens/Outbox';
+import { Notes } from './screens/Notes';
+import { Capture } from './screens/Capture';
+import { WeeklyReview } from './screens/WeeklyReview';
 
 const LABELS: Record<string, string> = {
   today: 'Today', notes: 'Notes', capture: 'Capture', inbox: 'Inbox',
@@ -30,12 +38,27 @@ export function App() {
   const navigate = (id: string) => { setScreen(id); setMenuOpen(false); };
   const known = NAV.some((g) => g.items.some((i) => i.id === screen)) || ['review', 'search', 'settings'].includes(screen);
 
+  const activeScreen = () => {
+    switch (screen) {
+      case 'today': return <Today />;
+      case 'capture': return <Capture />;
+      case 'inbox': return <Inbox />;
+      case 'projects': return <Projects />;
+      case 'people': return <People />;
+      case 'decisions': return <Decisions />;
+      case 'outbox': return <Outbox />;
+      case 'notes': return <Notes />;
+      case 'review': return <WeeklyReview />;
+      default: return <Placeholder title={LABELS[known ? screen : 'today'] || 'Cadence'} />;
+    }
+  };
+
   return (
     <div id="app">
       <Sidebar current={screen} onNavigate={navigate} badges={badges}
         email={session.user.email ?? undefined} onSignOut={signOut} open={menuOpen} />
       <div id="main">
-        {screen === 'today' ? <Today /> : <Placeholder title={LABELS[known ? screen : 'today'] || 'Cadence'} />}
+        {activeScreen()}
       </div>
     </div>
   );
