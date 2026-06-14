@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cadence — People 1:1 View Mockup</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --sidebar-bg: #1A1F2E; --sidebar-active: #2C3654; --sidebar-text: rgba(255,255,255,0.65);
+  --app-bg: #F4F4F0; --surface: #FFFFFF; --surface2: #F8F8F6;
+  --border: rgba(0,0,0,0.08); --accent: #1B5E9E; --accent-lt: #4A8FD4;
+  --text: #1A1A1A; --text2: #6B6B6B; --text3: #ABABAB;
+  --red: #D93025; --red-bg: #FEF2F1; --orange: #E07D00; --orange-bg: #FFF8EE;
+  --green: #1A7F37; --green-bg: #EDFAF1; --blue: #1B5E9E; --blue-bg: #EDF4FD;
+  --purple: #6B3FA0; --purple-bg: #F3EEFA; --teal: #0E7490; --teal-bg: #ECFAFA;
+  --sidebar-w: 230px; --header-h: 64px; --radius: 12px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+}
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  background: var(--sidebar-bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+/* App shell */
+#app { display: flex; height: 100vh; }
+#sidebar { width: var(--sidebar-w); background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 20px 12px; }
+#sidebar-title { font-size: 22px; font-weight: 700; color: #FFF; padding: 8px 8px 20px; letter-spacing: -0.3px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: var(--sidebar-text); font-size: 14px; font-weight: 500; margin-bottom: 2px; cursor: pointer; }
+.nav-item.active { background: var(--sidebar-active); color: #FFF; }
+.nav-item .nav-icon { width: 20px; text-align: center; font-size: 15px; }
+.nav-item.active .nav-icon { color: #5B9CF6; }
+.nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+.nav-badge.blue { background: var(--accent); }
+.nav-badge.purple { background: var(--purple); }
+.nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 10px 8px 4px; }
+.nav-sep { height: 1px; background: rgba(255,255,255,0.08); margin: 8px 4px; }
+#main { flex: 1; background: var(--app-bg); display: flex; flex-direction: column; overflow: hidden; border-radius: 16px 0 0 16px; }
+
+/* Header */
+.screen-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: var(--header-h); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+.screen-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost { background: transparent; color: var(--accent); border: none; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.tag-waitingFor { background: var(--teal-bg); color: var(--teal); }
+.tag-followUp { background: var(--orange-bg); color: var(--orange); }
+.tag-decision { background: var(--purple-bg); color: var(--purple); }
+.tag-task { background: var(--blue-bg); color: var(--blue); }
+
+/* Split */
+.split-view { display: flex; flex: 1; overflow: hidden; }
+.split-left { width: 38%; min-width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.split-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.split-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); flex-shrink: 0; gap: 8px; }
+.split-panel-header h3 { font-size: 14px; font-weight: 600; }
+.split-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+/* Person list */
+.person-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.person-item.selected { border-color: var(--accent); background: var(--blue-bg); }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.avatar.green { background: #1A7F37; }
+.avatar.purple { background: #6B3FA0; }
+.avatar.orange { background: #c05d00; }
+.person-name { font-size: 14px; font-weight: 600; }
+.person-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.person-badges { display: flex; gap: 4px; margin-top: 4px; }
+
+/* Right panel — detail */
+.detail-scroll { flex: 1; overflow-y: auto; padding: 20px 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+
+/* Person header card */
+.person-hero { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
+.hero-avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; flex-shrink: 0; }
+.hero-info h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.hero-info .role { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.hero-info .email { font-size: 12px; color: var(--accent); margin-top: 3px; }
+.hero-actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* Notes card */
+.notes-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.notes-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.notes-card-header span { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text2); }
+.notes-body { padding: 14px 16px; font-size: 14px; color: var(--text); line-height: 1.6; }
+.notes-body.placeholder { color: var(--text3); font-style: italic; }
+
+/* Section block */
+.section-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.section-block-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.section-block-title { display: flex; align-items: center; gap: 8px; }
+.section-block-title span { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text2); }
+.section-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 8px; color: #fff; }
+.section-body { padding: 4px 0; }
+
+/* Talking point rows */
+.tp-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.tp-row:last-child { border-bottom: none; }
+.tp-row input[type=checkbox] { margin-top: 2px; width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+.tp-text { flex: 1; font-size: 14px; color: var(--text); line-height: 1.4; }
+.tp-text.done { text-decoration: line-through; color: var(--text3); }
+.tp-add { display: flex; align-items: center; gap: 8px; padding: 10px 16px; }
+.tp-add input { flex: 1; border: none; outline: none; font-size: 14px; color: var(--text); background: transparent; font-family: inherit; }
+.tp-add input::placeholder { color: var(--text3); }
+
+/* Work item rows */
+.wi-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.wi-row:last-child { border-bottom: none; }
+.wi-row input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+.wi-content { flex: 1; }
+.wi-title { font-size: 14px; color: var(--text); }
+.wi-title.done { text-decoration: line-through; color: var(--text3); }
+.wi-meta { display: flex; gap: 5px; margin-top: 3px; align-items: center; }
+.due-overdue { color: var(--red); font-size: 11px; font-weight: 600; }
+.due-normal { color: var(--text3); font-size: 11px; }
+.btn-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* Completed / history section */
+.completed-toggle { display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer; width: 100%; background: none; border: none; font-family: inherit; text-align: left; border-bottom: 1px solid var(--border); }
+.completed-toggle:last-child { border-bottom: none; }
+.completed-toggle span { font-size: 12px; color: var(--text2); font-weight: 500; }
+.completed-toggle .caret { font-size: 10px; color: var(--text3); margin-left: auto; }
+.done-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px 9px 42px; border-bottom: 1px solid var(--border); }
+.done-row:last-child { border-bottom: none; }
+.done-check { color: var(--green); font-size: 13px; flex-shrink: 0; }
+.done-title { flex: 1; font-size: 13px; color: var(--text2); text-decoration: line-through; }
+.done-date { font-size: 11px; color: var(--text3); }
+
+/* Callout pill for new */
+.new-pill { background: #FFF8EE; border: 1px solid #F5C97A; border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--orange); font-weight: 500; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="sidebar-title">Cadence</div>
+    <div class="nav-section-label">Workspace</div>
+    <div class="nav-item"><span class="nav-icon">☀</span> Today</div>
+    <div class="nav-item"><span class="nav-icon">📥</span> Inbox <span class="nav-badge">3</span></div>
+    <div class="nav-item"><span class="nav-icon">◈</span> Projects</div>
+    <div class="nav-item active"><span class="nav-icon">✦</span> People</div>
+    <div class="nav-item"><span class="nav-icon">⚖</span> Decisions <span class="nav-badge purple">2</span></div>
+    <div class="nav-item"><span class="nav-icon">✎</span> Notes</div>
+    <div class="nav-sep"></div>
+    <div class="nav-section-label">Tools</div>
+    <div class="nav-item"><span class="nav-icon">📤</span> Outbox <span class="nav-badge blue">1</span></div>
+    <div class="nav-item"><span class="nav-icon">⚙</span> Settings</div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div class="screen-header">
+      <h1>People</h1>
+      <button class="btn btn-primary">+ Add Person</button>
+    </div>
+
+    <div class="split-view">
+
+      <!-- Left: person list -->
+      <div class="split-left">
+        <div class="split-panel-header"><h3>4 people</h3></div>
+        <div class="split-panel-body">
+
+          <div class="person-item selected">
+            <div class="avatar">AJ</div>
+            <div>
+              <div class="person-name">Amy Johnson</div>
+              <div class="person-meta">CFO · 1 waiting · 2 follow-ups</div>
+              <div class="person-badges">
+                <span class="tag tag-waitingFor">3 items</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="person-item">
+            <div class="avatar green">BL</div>
+            <div>
+              <div class="person-name">Ben Liu</div>
+              <div class="person-meta">Lead Engineer · 0 waiting · 1 follow-up</div>
+            </div>
+          </div>
+
+          <div class="person-item">
+            <div class="avatar purple">SK</div>
+            <div>
+              <div class="person-name">Sarah King</div>
+              <div class="person-meta">Product · 2 waiting · 0 follow-ups</div>
+            </div>
+          </div>
+
+          <div class="person-item">
+            <div class="avatar orange">MT</div>
+            <div>
+              <div class="person-name">Marcus T.</div>
+              <div class="person-meta">Legal · 1 waiting · 1 follow-up</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right: 1:1 prep view -->
+      <div class="split-right">
+        <div class="split-panel-header">
+          <h3>Amy Johnson — 1:1 Prep</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">+ Add item</button>
+          </div>
+        </div>
+
+        <div class="detail-scroll">
+
+          <!-- Person hero -->
+          <div class="person-hero">
+            <div class="hero-avatar">AJ</div>
+            <div class="hero-info">
+              <h2>Amy Johnson</h2>
+              <div class="role">Chief Financial Officer</div>
+              <div class="email">amy.johnson@company.com</div>
+            </div>
+            <div class="hero-actions">
+              <button class="btn btn-secondary btn-sm">✉ Email</button>
+            </div>
+          </div>
+
+          <!-- Notes — inline editable -->
+          <div class="notes-card">
+            <div class="notes-card-header">
+              <span>Notes</span>
+              <button class="btn-ghost">Edit</button>
+            </div>
+            <div class="notes-body">
+              Prefers data-first communication. Key contact for Q3 budget approval. Next 1:1 every other Tuesday.
+            </div>
+          </div>
+
+          <!-- ① TALKING POINTS — NEW -->
+          <div class="section-block">
+            <div class="section-block-header">
+              <div class="section-block-title">
+                <span>💬 Talking Points</span>
+                <div class="new-pill">New</div>
+                <span class="section-count" style="background:var(--accent)">3</span>
+              </div>
+              <span style="font-size:11px;color:var(--text3)">Agenda for next 1:1</span>
+            </div>
+            <div class="section-body">
+              <div class="tp-row">
+                <input type="checkbox" />
+                <span class="tp-text">Review Q3 budget proposal — she has questions on headcount line</span>
+              </div>
+              <div class="tp-row">
+                <input type="checkbox" />
+                <span class="tp-text">Discuss new vendor payment terms (Net 60 vs Net 30)</span>
+              </div>
+              <div class="tp-row">
+                <input type="checkbox" checked />
+                <span class="tp-text done">Sign off on audit schedule</span>
+              </div>
+              <div class="tp-add">
+                <span style="color:var(--text3);font-size:14px">+</span>
+                <input type="text" placeholder="Add a talking point…" />
+              </div>
+            </div>
+          </div>
+
+          <!-- ② WAITING FOR AMY -->
+          <div class="section-block">
+            <div class="section-block-header">
+              <div class="section-block-title">
+                <span>⏳ Waiting on Amy</span>
+                <span class="section-count" style="background:var(--teal)">2</span>
+              </div>
+            </div>
+            <div class="section-body">
+              <div class="wi-row">
+                <input type="checkbox" />
+                <div class="wi-content">
+                  <div class="wi-title">Signed contract for new vendor</div>
+                  <div class="wi-meta"><span class="tag tag-waitingFor">Waiting For</span><span class="due-overdue">Overdue 3d</span></div>
+                </div>
+                <button class="btn-icon">✎</button>
+              </div>
+              <div class="wi-row">
+                <input type="checkbox" />
+                <div class="wi-content">
+                  <div class="wi-title">Q3 headcount sign-off</div>
+                  <div class="wi-meta"><span class="tag tag-waitingFor">Waiting For</span><span class="due-normal">Jun 20</span></div>
+                </div>
+                <button class="btn-icon">✎</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ③ FOLLOW UPS -->
+          <div class="section-block">
+            <div class="section-block-header">
+              <div class="section-block-title">
+                <span>↩ Follow Ups</span>
+                <span class="section-count" style="background:var(--orange)">2</span>
+              </div>
+            </div>
+            <div class="section-body">
+              <div class="wi-row">
+                <input type="checkbox" />
+                <div class="wi-content">
+                  <div class="wi-title">Send Amy the updated forecast model</div>
+                  <div class="wi-meta"><span class="tag tag-followUp">Follow Up</span><span class="due-normal">Tomorrow</span></div>
+                </div>
+                <button class="btn-icon">✎</button>
+              </div>
+              <div class="wi-row">
+                <input type="checkbox" />
+                <div class="wi-content">
+                  <div class="wi-title">Chase legal on NDA status</div>
+                  <div class="wi-meta"><span class="tag tag-followUp">Follow Up</span></div>
+                </div>
+                <button class="btn-icon">✎</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ④ RECENTLY DONE — NEW -->
+          <div class="section-block">
+            <div class="section-block-header" style="cursor:pointer">
+              <div class="section-block-title">
+                <span>✓ Recently Done</span>
+                <div class="new-pill">New</div>
+                <span class="section-count" style="background:var(--green)">4</span>
+              </div>
+              <span style="font-size:12px;color:var(--text2)">Last 14 days ▾</span>
+            </div>
+            <div class="section-body">
+              <div class="done-row">
+                <span class="done-check">✓</span>
+                <span class="done-title">Send Amy the board deck draft</span>
+                <span class="done-date">Jun 12</span>
+              </div>
+              <div class="done-row">
+                <span class="done-check">✓</span>
+                <span class="done-title">Intro call with new auditor</span>
+                <span class="done-date">Jun 11</span>
+              </div>
+              <div class="done-row">
+                <span class="done-check">✓</span>
+                <span class="done-title">Review expense policy update</span>
+                <span class="done-date">Jun 9</span>
+              </div>
+              <div class="done-row">
+                <span class="done-check">✓</span>
+                <span class="done-title">Approve marketing budget increase</span>
+                <span class="done-date">Jun 6</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
