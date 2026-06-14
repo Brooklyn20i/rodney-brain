@@ -34,3 +34,17 @@ export const TYPE_LABEL: Record<string, string> = {
 };
 
 export const priLabel = (p: Priority) => p[0].toUpperCase() + p.slice(1);
+
+// Avatar / accent palette. Distinct, accessible-on-white colours.
+export const AVATAR_COLORS = [
+  '#1B5E9E', '#1A7F37', '#6B3FA0', '#C0392B',
+  '#B9770E', '#0E7490', '#BE2D6E', '#2C3E50',
+];
+
+// Deterministic colour from a seed (name/id) so every person looks distinct
+// even before they pick one.
+export function autoColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}

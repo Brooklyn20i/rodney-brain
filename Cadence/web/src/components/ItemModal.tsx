@@ -36,7 +36,7 @@ export function ItemModal({ existing, defaults, onClose }: {
         await update('work_items', existing.id, patch);
         logActivity('edit_item', title.trim());
       } else {
-        await insert('work_items', { ...patch, inboxed: true, source: 'you' } as Partial<WorkItem>);
+        await insert('work_items', { ...patch, inboxed: (base as any).inboxed ?? true, source: 'you' } as Partial<WorkItem>);
         logActivity('add_item', title.trim());
       }
       onClose();
