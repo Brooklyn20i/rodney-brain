@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WIN — Commercial Technology Strategy (faithful)</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --app:#F4F4F0; --surface:#fff; --surface2:#F8F8F6; --border:rgba(0,0,0,0.08);
+  --accent:#1B5E9E; --accent2:#5B9CF6; --text:#1A1A1A; --t2:#6B6B6B; --t3:#ABABAB;
+  --grn:#1A7F37; --grnb:#EDFAF1; --pur:#6B3FA0; --purb:#F3EEFA; --org:#E07D00; --orgb:#FFF8EE;
+  --blu:#1B5E9E; --blub:#EDF4FD; --radius:12px; --radius-sm:8px; --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:var(--app);color:var(--text);-webkit-font-smoothing:antialiased;padding:24px;}
+.wrap{max-width:880px;margin:0 auto;}
+.crumb{font-size:12px;color:var(--t2);margin-bottom:14px;}
+h1{font-size:26px;font-weight:700;letter-spacing:-.4px;}
+.sub{font-size:13px;color:var(--t2);margin-bottom:6px;}
+.note-track{font-size:11px;color:var(--accent);background:var(--blub);display:inline-block;padding:3px 10px;border-radius:10px;margin-bottom:18px;}
+.sec{display:flex;align-items:center;gap:8px;margin:26px 0 10px;}
+.sec h2{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--t2);}
+.sec .count{font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;color:#fff;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:8px;}
+.lead-in{font-size:13px;color:var(--t2);font-style:italic;margin-bottom:8px;}
+ul{margin:6px 0 0 18px;}li{font-size:13px;line-height:1.6;margin-bottom:3px;}
+
+.hero{background:linear-gradient(135deg,#1A1F2E,#2C3654);color:#fff;border-radius:var(--radius);padding:22px;margin-bottom:6px;}
+.hero .tag{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);}
+.hero h2{font-size:20px;font-weight:700;margin:3px 0 14px;}
+.hero .asp{background:rgba(255,255,255,.07);border-radius:var(--radius-sm);padding:14px 16px;}
+.hero .asp small{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--accent2);display:block;margin-bottom:4px;}
+.hero .asp p{font-size:16px;font-weight:600;line-height:1.4;}
+
+.pillar{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:6px;}
+.pnum{width:26px;height:26px;border-radius:50%;background:var(--purb);color:var(--pur);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.pname{font-size:14px;font-weight:600;}.pdetail{font-size:12px;color:var(--t2);margin-top:1px;}
+
+.tbl{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:12.5px;}
+.tbl th{background:var(--surface2);text-align:left;padding:9px 11px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--t2);}
+.tbl td{padding:9px 11px;border-top:1px solid var(--border);vertical-align:top;line-height:1.4;}
+.tbl td b{font-weight:700;}
+
+.shift{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:6px;}
+.sfrom{font-size:12px;color:var(--t3);text-decoration:line-through;flex:1;}
+.sarr{color:var(--accent);font-weight:700;}
+.sto{font-size:13px;font-weight:600;flex:1;}
+
+.rule{font-size:13px;background:var(--orgb);border:1px solid #F5C97A;border-radius:var(--radius-sm);padding:10px 14px;margin:6px 0;}
+.gov{font-size:12px;color:var(--t2);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;}
+
+.mbt{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px 14px;margin-bottom:6px;}
+.mbt input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;}
+.mbt .mt{font-size:13px;font-weight:600;}.mbt .md{font-size:12px;color:var(--t2);margin-top:1px;}
+
+.kpiwrap{overflow-x:auto;}
+.kpi-now{width:64px;padding:5px 6px;border:1px solid var(--accent);border-radius:6px;font-size:13px;font-weight:700;text-align:center;}
+.headline-row td{background:#FBFDFF;}
+.htag{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--accent);background:var(--blub);padding:1px 6px;border-radius:7px;margin-left:6px;}
+.faith{font-size:11px;color:var(--t3);margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">Strategy ›</div>
+  <h1>WIN</h1>
+  <div class="sub">Commercial Technology Strategy · Enabling Commercial to WIN</div>
+  <div class="note-track">Your document, unchanged. Only the boxed inputs (KPI values + the readiness checklist) are yours to track.</div>
+
+  <!-- Core message + aspiration -->
+  <div class="hero">
+    <div class="tag">Enabling Commercial to WIN</div>
+    <h2>Commercial Technology Strategy</h2>
+    <div class="asp">
+      <small>Winning Aspiration</small>
+      <p>Make Commercial teams more effective and Commercial outcomes stronger through technology, AI, and agentic workflows.</p>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Core message</h2></div>
+  <div class="card">
+    <p style="font-size:13px;line-height:1.6;">Commercial has a clear strategy. The Commercial Technology strategy exists to enable it through technology, AI and better ways of working at scale. This strategy has a clear focus on fixing the basics:</p>
+    <ul>
+      <li>Fix the core workflows, data, and tools that slow Commercial down today</li>
+      <li>Make decisions better with embedded insight and AI support</li>
+      <li>Move from manual execution to agentic workflows where AI is built into how work gets done</li>
+    </ul>
+    <p style="font-size:13px;line-height:1.6;margin-top:8px;">This is not a stand-alone technology agenda. It is designed to enable the overarching Commercial strategy and support the Commercial community IPO serves.</p>
+  </div>
+
+  <div class="sec"><h2>1 · Winning aspiration — we will do this by</h2></div>
+  <div class="card">
+    <ul>
+      <li>Fixing the basics in the workflows people rely on every day</li>
+      <li>Improving decision quality in the moments that matter most, with insight and AI built into the workflow</li>
+      <li>Shifting key workflows to an agentic model where AI drafts, structures and automates routine work and people stay accountable for judgement and sign off</li>
+      <li>Reducing effort and coordination overhead by removing manual steps, duplication and avoidable handoffs</li>
+      <li>Simplifying and improving the user experience for all end users</li>
+      <li>Scaling common ways of working across markets where it creates value, with clear flexibility where it does not</li>
+    </ul>
+    <p style="font-size:12px;font-weight:700;margin:12px 0 4px;">Success is not systems delivered. Success is Commercial work that is:</p>
+    <ul>
+      <li>Easier to run</li><li>Faster end to end</li><li>More consistent at the decision points</li>
+      <li>Increasingly agentic in the workflows that matter, not just individual productivity hacks</li>
+      <li>Measurably improved through adoption, automation, lead time reduction, and capacity released</li>
+    </ul>
+  </div>
+
+  <!-- Where we play -->
+  <div class="sec"><h2>2 · Where we will play</h2><span class="count" style="background:var(--pur)">5</span></div>
+  <div class="lead-in">Focus only on workflows that materially improve commercial outcomes and release capacity.</div>
+  <div class="pillar"><div class="pnum">1</div><div><div class="pname">Negotiation, tendering and supplier collaboration</div><div class="pdetail">Direct impact on buying outcomes and commercial performance</div></div></div>
+  <div class="pillar"><div class="pnum">2</div><div><div class="pname">Product, data and lifecycle management</div><div class="pdetail">Foundation for range, pricing, quality and transparency</div></div></div>
+  <div class="pillar"><div class="pnum">3</div><div><div class="pname">Pricing, range and performance decisioning</div><div class="pdetail">Better decisions through usable data and repeatable insight</div></div></div>
+  <div class="pillar"><div class="pnum">4</div><div><div class="pname">Sustainability and compliance execution</div><div class="pdetail">Reliable execution of non-financial commitments</div></div></div>
+  <div class="pillar"><div class="pnum">5</div><div><div class="pname">Internal efficiency and governance overhead</div><div class="pdetail">Reduce administrative effort and shift capacity to value creation</div></div></div>
+
+  <div class="sec"><h2>How this supports the Commercial Strategy</h2></div>
+  <div class="lead-in">Commercial Technology enables the execution of the existing Commercial Strategy. It does not introduce new priorities.</div>
+  <table class="tbl">
+    <tr><th>Strategy</th><th>Execution</th><th>Impact</th></tr>
+    <tr><td><b>Cost leadership</b></td><td>Automation, harmonisation and simplification of core workflows</td><td>Reduced cost and released Commercial capacity</td></tr>
+    <tr><td><b>Customer focus and commercial performance</b></td><td>Stronger pricing, range and negotiation capabilities</td><td>Better decisions and improved buying outcomes</td></tr>
+    <tr><td><b>Force for Good</b></td><td>Structured sustainability and compliance workflows & improved data</td><td>Reliable delivery of non-financial commitments</td></tr>
+    <tr><td><b>Driven by people, culture and technology</b></td><td>Simpler processes, fewer manual steps, better tools</td><td>Teams spend more time on value creation, less on coordination</td></tr>
+  </table>
+  <div class="faith">Result: Technology investment is concentrated on the few areas that directly drive Commercial performance.</div>
+
+  <!-- How we will win -->
+  <div class="sec"><h2>3 · How we will win — four shifts</h2></div>
+  <div class="lead-in">Move from unlimited demand to disciplined portfolio trade-offs. Managed as a constrained portfolio, not an accumulation of projects.</div>
+  <div class="shift"><span class="sfrom">Technology as a broad activity portfolio</span><span class="sarr">→</span><span class="sto">A focused portfolio aligned to Commercial outcomes and explicit trade-offs</span></div>
+  <div class="shift"><span class="sfrom">Waiting for platform solutions before delivering value</span><span class="sarr">→</span><span class="sto">Delivering value early while building scalable capability (Stream 1 solutions & Project Phoenix)</span></div>
+  <div class="shift"><span class="sfrom">Fragmented local ways of working</span><span class="sarr">→</span><span class="sto">Harmonised priority workflows with sensible flexibility</span></div>
+  <div class="shift"><span class="sfrom">Go-live as proof of success</span><span class="sarr">→</span><span class="sto">Adoption, capacity release and faster execution as proof of value</span></div>
+  <div class="rule"><b>Core operating rule:</b> No new demand starts unless something else stops. Enforced through one in, one out portfolio trade-offs.</div>
+  <div class="gov"><b>Governance linkage:</b> The Commercial Technology Council is the single joint forum where Commercial ambition is translated into Technology direction, and prioritised decisions are fed into TPC and EBC.</div>
+
+  <!-- What must be true (trackable checklist) -->
+  <div class="sec"><h2>4 · What must be true to make this work</h2><span class="count" style="background:var(--org)">6</span></div>
+  <div class="lead-in">Tick each as it becomes true — a readiness check, not a change to the strategy.</div>
+  <label class="mbt"><input type="checkbox" checked><div><div class="mt">Trade-offs are enforced</div><div class="md">New demand cannot be added without stopping or deferring existing work</div></div></label>
+  <label class="mbt"><input type="checkbox"><div><div class="mt">Commercial and Technology are aligned early</div><div class="md">Priorities are agreed before entering formal governance</div></div></label>
+  <label class="mbt"><input type="checkbox" checked><div><div class="mt">Value is delivered early while building long-term capability</div><div class="md">Fast impact and scalable solutions work in parallel</div></div></label>
+  <label class="mbt"><input type="checkbox"><div><div class="mt">Workflows are simplified before systems are scaled</div><div class="md">Simplify the business, then align technology</div></div></label>
+  <label class="mbt"><input type="checkbox"><div><div class="mt">Success is measured through adoption and capacity release</div><div class="md">Technology succeeds only if it removes work and improves execution</div></div></label>
+  <label class="mbt"><input type="checkbox" checked><div><div class="mt">Commercial Technology Council has clear mandate and accountability</div><div class="md">CLT provides the mandate and trust to prioritise and deliver; the Council is accountable for delivering against the aspiration</div></div></label>
+
+  <!-- Scoreboard -->
+  <div class="sec"><h2>5 · Our Scoreboard</h2><span class="count" style="background:var(--accent)">5</span></div>
+  <div class="lead-in">Measure what proves Commercial is getting better. Enter the current value in the boxed column — definitions and targets are yours, unchanged.</div>
+  <div class="kpiwrap"><table class="tbl">
+    <tr><th>KPI</th><th>What it proves</th><th>Measure</th><th>Target</th><th>Current</th></tr>
+    <tr class="headline-row"><td><b>Capacity released</b><span class="htag">Headline</span></td><td>Time is returned to Commercial</td><td>Hours saved per workflow (net, not gross)</td><td>Set per named workflow, tracked quarterly</td><td><input class="kpi-now" placeholder="—"></td></tr>
+    <tr><td><b>Harmonisation</b></td><td>Common ways of working are scaling</td><td>Harmonised L4 ÷ total L4 processes in scope</td><td>70%</td><td><input class="kpi-now" placeholder="%"></td></tr>
+    <tr><td><b>Automation by 2028</b></td><td>Manual steps are being removed</td><td>Automated L5 steps ÷ total L5 steps</td><td>6% → 30% by 2028</td><td><input class="kpi-now" placeholder="%"></td></tr>
+    <tr><td><b>Priority workflow adoption</b></td><td>Users are changing how work gets done</td><td>Unique active users ÷ eligible end users</td><td>≥70% by 2028</td><td><input class="kpi-now" placeholder="%"></td></tr>
+    <tr><td><b>Lead-time reduction</b></td><td>Execution is faster where it matters</td><td>% reduction vs baseline (same workflow)</td><td>≥50% reduction</td><td><input class="kpi-now" placeholder="%"></td></tr>
+  </table></div>
+
+  <!-- Activity to initiative to KPI -->
+  <div class="sec"><h2>6 · Activity → initiative → KPI impact</h2></div>
+  <div class="lead-in">If an initiative does not move a KPI, it should not be prioritised. <span style="color:var(--t3)">(examples — needs work)</span></div>
+  <div class="kpiwrap"><table class="tbl">
+    <tr><th>Commercial activity</th><th>Example initiatives</th><th>Primary KPI impact</th></tr>
+    <tr><td>Improve negotiation quality and preparation</td><td>Negotiation Support Platform (NSP)</td><td>Adoption, lead-time reduction, capacity released & improved costs</td></tr>
+    <tr><td>Simplify tendering and supplier interaction</td><td>NSP, tendering workflow simplification work</td><td>Capacity released, lead-time reduction</td></tr>
+    <tr><td>Improve pricing and commercial decisioning</td><td>Advanced Pricing, Zone Pricing</td><td>Adoption, improved GP & pricing decisions</td></tr>
+    <tr><td>Strengthen product lifecycle and data quality</td><td>ProMaCE, Artwork Management, Global Range capability work</td><td>Harmonisation, adoption, speed to market</td></tr>
+    <tr><td>Scale consistent ways of working across markets</td><td>European TOM, IDA end-to-end flows (planning, ordering, allocation)</td><td>Harmonisation, capacity released</td></tr>
+    <tr><td>Deliver sustainability and compliance requirements</td><td>SustainIT, packaging compliance and reporting, other compliance initiatives</td><td>Adoption, lead-time reduction (compliance)</td></tr>
+    <tr><td>Reduce administrative effort and indirect spend complexity</td><td>Purchasing Desk, TEMBOS, GNFR data initiatives</td><td>Capacity released, automation</td></tr>
+  </table></div>
+
+  <div class="faith">Every word above is from your document. The only editable elements are the KPI "Current" boxes and the section-4 checkboxes — tracking, not changes to the strategy.</div>
+</div>
+</body>
+</html>
