@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cadence — Notes with Folders</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --sidebar-bg: #1A1F2E; --sidebar-active: #2C3654; --sidebar-text: rgba(255,255,255,0.65);
+  --app-bg: #F4F4F0; --surface: #FFFFFF; --surface2: #F8F8F6;
+  --border: rgba(0,0,0,0.08); --accent: #1B5E9E;
+  --text: #1A1A1A; --text2: #6B6B6B; --text3: #ABABAB;
+  --green: #1A7F37; --blue: #1B5E9E; --blue-bg: #EDF4FD; --purple: #6B3FA0; --orange: #E07D00;
+  --sidebar-w: 230px; --header-h: 64px; --radius: 12px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+}
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; background: var(--sidebar-bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+#app { display: flex; height: 100vh; }
+#sidebar { width: var(--sidebar-w); background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 20px 12px; }
+#sidebar-title { font-size: 22px; font-weight: 700; color: #FFF; padding: 8px 8px 20px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: var(--sidebar-text); font-size: 14px; font-weight: 500; margin-bottom: 2px; cursor: pointer; }
+.nav-item.active { background: var(--sidebar-active); color: #FFF; }
+.nav-item .nav-icon { width: 20px; text-align: center; font-size: 15px; }
+.nav-item.active .nav-icon { color: #5B9CF6; }
+.nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 10px 8px 4px; }
+#main { flex: 1; background: var(--app-bg); display: flex; flex-direction: column; overflow: hidden; border-radius: 16px 0 0 16px; }
+.screen-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: var(--header-h); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.screen-header h1 { font-size: 24px; font-weight: 700; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.split-view { display: flex; flex: 1; overflow: hidden; }
+.split-left { width: 38%; min-width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.split-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.split-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface); }
+.split-panel-header h3 { font-size: 14px; font-weight: 600; }
+.split-panel-body { flex: 1; overflow-y: auto; padding: 8px; }
+
+/* Folder tree */
+.folder { margin-bottom: 2px; }
+.folder-header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text); }
+.folder-header:hover { background: var(--surface2); }
+.folder-header .caret { font-size: 9px; color: var(--text3); width: 10px; transition: transform 0.15s; }
+.folder-header.collapsed .caret { transform: rotate(-90deg); }
+.folder-header .fname { flex: 1; }
+.folder-header .fcount { font-size: 11px; color: var(--text3); font-weight: 600; }
+.folder-notes { padding-left: 14px; }
+.note-list-item { padding: 8px 12px; border-radius: var(--radius-sm); margin: 2px 0; cursor: pointer; border: 1px solid transparent; display: block; }
+.note-list-item:hover { background: var(--surface2); }
+.note-list-item.selected { background: var(--blue-bg); border-color: var(--accent); }
+.note-list-item .nli-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.note-list-item .nli-sub { font-size: 11px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-sep { height: 1px; background: var(--border); margin: 8px 6px; }
+.add-folder { display: flex; align-items: center; gap: 8px; padding: 8px 10px; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* Editor */
+#note-title-input { border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; flex: 1; }
+.note-toolbar { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); align-items: center; }
+.btn-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; }
+.folder-pill { display: inline-flex; align-items: center; gap: 5px; background: var(--blue-bg); color: var(--accent); border: 1px solid #C8DEF5; padding: 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+#note-body { padding: 16px; font-size: 15px; line-height: 1.7; }
+#note-body h3 { font-size: 17px; margin: 14px 0 6px; }
+#note-body .b { display: flex; gap: 8px; padding: 2px 0; }
+#note-body .b .dot { color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-title">Cadence</div>
+    <div class="nav-section-label">Day</div>
+    <div class="nav-item"><span class="nav-icon">☀</span> Today</div>
+    <div class="nav-item active"><span class="nav-icon">✎</span> Notes</div>
+    <div class="nav-item"><span class="nav-icon">↓</span> Inbox</div>
+    <div class="nav-section-label">Work</div>
+    <div class="nav-item"><span class="nav-icon">▤</span> Projects</div>
+    <div class="nav-item"><span class="nav-icon">✦</span> People</div>
+    <div class="nav-item"><span class="nav-icon">⚖</span> Decisions</div>
+  </div>
+
+  <div id="main">
+    <div class="screen-header">
+      <h1>Notes</h1>
+      <button class="btn btn-primary">+ New Note</button>
+    </div>
+
+    <div class="split-view">
+      <!-- Left: folder tree -->
+      <div class="split-left">
+        <div class="split-panel-header"><h3>Notebooks</h3><button class="btn btn-secondary btn-sm">+ Folder</button></div>
+        <div class="split-panel-body">
+
+          <div class="folder-header"><span class="caret">▾</span><span style="font-size:14px">🗂</span><span class="fname">All Notes</span><span class="fcount">12</span></div>
+          <div class="tree-sep"></div>
+
+          <!-- Work folder (expanded) -->
+          <div class="folder">
+            <div class="folder-header"><span class="caret">▾</span><span style="font-size:14px">📁</span><span class="fname">Work</span><span class="fcount">5</span></div>
+            <div class="folder-notes">
+              <div class="note-list-item selected">
+                <div class="nli-title">Board meeting prep</div>
+                <div class="nli-sub">14 Jun · Q3 numbers, hiring plan, runway…</div>
+              </div>
+              <div class="note-list-item">
+                <div class="nli-title">Vendor negotiation notes</div>
+                <div class="nli-sub">12 Jun · Net 60 vs Net 30, pricing tiers…</div>
+              </div>
+              <div class="note-list-item">
+                <div class="nli-title">Product roadmap ideas</div>
+                <div class="nli-sub">9 Jun · Search, OKRs, iPad layout…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Meetings folder (expanded) -->
+          <div class="folder">
+            <div class="folder-header"><span class="caret">▾</span><span style="font-size:14px">📁</span><span class="fname">Meetings</span><span class="fcount">4</span></div>
+            <div class="folder-notes">
+              <div class="note-list-item">
+                <div class="nli-title">1:1 with Amy — 10 Jun</div>
+                <div class="nli-sub">10 Jun · Budget sign-off, headcount…</div>
+              </div>
+              <div class="note-list-item">
+                <div class="nli-title">All-hands recap</div>
+                <div class="nli-sub">6 Jun · Roadmap shared, Q&A…</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Personal folder (collapsed) -->
+          <div class="folder">
+            <div class="folder-header collapsed"><span class="caret">▾</span><span style="font-size:14px">📁</span><span class="fname">Personal</span><span class="fcount">3</span></div>
+          </div>
+
+          <div class="tree-sep"></div>
+          <div class="folder-header"><span class="caret" style="visibility:hidden">▾</span><span style="font-size:14px">📄</span><span class="fname" style="color:var(--text2);font-weight:500">Uncategorized</span><span class="fcount">0</span></div>
+          <div class="add-folder"><span>＋</span> New folder</div>
+
+        </div>
+      </div>
+
+      <!-- Right: editor -->
+      <div class="split-right">
+        <div class="split-panel-header">
+          <input id="note-title-input" value="Board meeting prep" />
+          <button class="btn btn-secondary btn-sm" style="color:var(--accent)">Delete</button>
+        </div>
+        <div class="note-toolbar">
+          <span class="folder-pill">📁 Work ▾</span>
+          <div style="width:8px"></div>
+          <button class="btn-icon">H</button>
+          <button class="btn-icon">•</button>
+          <button class="btn-icon">☐</button>
+          <div style="flex:1"></div>
+          <button class="btn btn-secondary btn-sm">👁 Preview</button>
+        </div>
+        <div id="note-body">
+          <h3>Board meeting — 18 June</h3>
+          <div class="b"><span class="dot">•</span> Walk through Q3 numbers vs forecast</div>
+          <div class="b"><span class="dot">•</span> Hiring plan: 3 eng, 1 design</div>
+          <div class="b"><span class="dot">•</span> Runway + fundraise timing</div>
+          <div class="b">☐ Send deck to Amy by Friday</div>
+          <div class="b">☑ Confirm room booking</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
