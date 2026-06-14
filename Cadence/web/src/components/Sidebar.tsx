@@ -5,7 +5,6 @@ export const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Day', items: [
     { id: 'today', label: 'Today', icon: '☀' },
     { id: 'notes', label: 'Notes', icon: '✎' },
-    { id: 'capture', label: 'Capture', icon: '⊡' },
     { id: 'inbox', label: 'Inbox', icon: '↓' },
   ]},
   { section: 'Work', items: [

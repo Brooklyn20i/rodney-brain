@@ -10,7 +10,6 @@ import { People } from './screens/People';
 import { Decisions } from './screens/Decisions';
 import { Notes } from './screens/Notes';
 import { Outbox } from './screens/Outbox';
-import { Capture } from './screens/Capture';
 import { Review } from './screens/Review';
 import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
@@ -44,7 +43,6 @@ export function App() {
       case 'decisions': return <Decisions onMenu={onMenu} />;
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'outbox': return <Outbox onMenu={onMenu} />;
-      case 'capture': return <Capture onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
