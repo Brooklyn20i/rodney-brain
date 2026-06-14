@@ -56,6 +56,7 @@ export interface Decision {
 export interface Note {
   id: string; owner_id: string;
   title: string; body: string;
+  folder?: string; // optional until migration 0005 is applied
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface OutboxEmail {
