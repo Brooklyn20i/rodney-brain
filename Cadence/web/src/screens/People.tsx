@@ -1,24 +1,27 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Person, WorkItem } from '../lib/types';
+import type { Person, TalkingPoint, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
+const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+
 function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => void }) {
   const { insert, update, logActivity } = useCadence();
   const [name, setName] = useState(existing?.name || '');
   const [role, setRole] = useState(existing?.role || '');
+  const [email, setEmail] = useState(existing?.email || '');
   const [notes, setNotes] = useState(existing?.notes || '');
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const patch = { name: name.trim(), role: role.trim(), notes } as Partial<Person>;
+      const patch = { name: name.trim(), role: role.trim(), email: email.trim(), notes } as Partial<Person>;
       if (existing) await update('people', existing.id, patch);
-      else await insert('people', { ...patch, email: '' } as Partial<Person>);
+      else await insert('people', { ...patch } as Partial<Person>);
       logActivity(existing ? 'edit_person' : 'add_person', name.trim());
       onClose();
     } finally { setBusy(false); }
@@ -33,6 +36,8 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
         <div className="form-group"><label>Role</label>
           <input type="text" value={role} placeholder="e.g. CFO, Lead Dev" onChange={(e) => setRole(e.target.value)} /></div>
       </div>
+      <div className="form-group"><label>Email</label>
+        <input type="email" value={email} placeholder="email@company.com" onChange={(e) => setEmail(e.target.value)} /></div>
       <div className="form-group"><label>Notes</label>
         <textarea value={notes} placeholder="Context about this person…" onChange={(e) => setNotes(e.target.value)} /></div>
     </Modal>
@@ -51,12 +56,133 @@ function Row({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
   );
 }
 
+function TalkingPoints({ personId }: { personId: string }) {
+  const { data, insert, update } = useCadence();
+  const [draft, setDraft] = useState('');
+  const points = data.talking_points.filter((tp) => tp.person_id === personId && !tp.deleted_at);
+  const open = points.filter((tp) => !tp.done);
+  const done = points.filter((tp) => tp.done);
+
+  const add = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    await insert('talking_points', { person_id: personId, text, done: false, author: 'you' } as Partial<TalkingPoint>);
+  };
+
+  const toggle = (tp: TalkingPoint) => update('talking_points', tp.id, { done: !tp.done } as Partial<TalkingPoint>);
+
+  return (
+    <div className="detail-section">
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        💬 Talking Points
+        {points.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{open.length}</span>}
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>Agenda for next 1:1</span>
+      </h3>
+      {open.map((tp) => (
+        <div key={tp.id} className="work-item-row">
+          <input type="checkbox" checked={false} onChange={() => toggle(tp)} />
+          <span className="wi-title">{tp.text}</span>
+        </div>
+      ))}
+      {done.map((tp) => (
+        <div key={tp.id} className="work-item-row" style={{ opacity: 0.5 }}>
+          <input type="checkbox" checked={true} onChange={() => toggle(tp)} />
+          <span className="wi-title done">{tp.text}</span>
+        </div>
+      ))}
+      <div className="work-item-row" style={{ gap: 10 }}>
+        <span style={{ color: 'var(--text3)', fontSize: 16, paddingLeft: 1 }}>+</span>
+        <input
+          style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, background: 'transparent', fontFamily: 'inherit', color: 'var(--text)' }}
+          placeholder="Add a talking point…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RecentlyDone({ items }: { items: WorkItem[] }) {
+  const [open, setOpen] = useState(false);
+  if (!items.length) return null;
+  const fmt = (ts: string | null) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+  return (
+    <div className="detail-section">
+      <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setOpen((o) => !o)}>
+        ✓ Recently Done
+        <span className="section-count" style={{ background: 'var(--green)' }}>{items.length}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+          Last 14 days {open ? '▴' : '▾'}
+        </span>
+      </h3>
+      {open && items.map((w) => (
+        <div key={w.id} className="work-item-row" style={{ opacity: 0.6 }}>
+          <span style={{ color: 'var(--green)', fontSize: 13 }}>✓</span>
+          <span className="wi-title done" style={{ flex: 1 }}>{w.title}</span>
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{fmt(w.completed_at)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InlineNotes({ person }: { person: Person }) {
+  const { update } = useCadence();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(person.notes);
+
+  const save = () => {
+    update('people', person.id, { notes: draft } as Partial<Person>);
+    setEditing(false);
+  };
+
+  if (!editing && !person.notes) return (
+    <button className="btn btn-ghost" style={{ fontSize: 12, color: 'var(--text3)', padding: '4px 0' }} onClick={() => { setDraft(''); setEditing(true); }}>
+      + Add notes
+    </button>
+  );
+
+  if (editing) return (
+    <div className="detail-section">
+      <h3>Notes</h3>
+      <textarea
+        autoFocus
+        style={{ width: '100%', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', minHeight: 80 }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Escape') { setDraft(person.notes); setEditing(false); } }}
+      />
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => { setDraft(person.notes); setEditing(false); }}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="detail-section" onClick={() => { setDraft(person.notes); setEditing(true); }} style={{ cursor: 'text' }}>
+      <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        Notes <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>Click to edit</span>
+      </h3>
+      <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6 }}>{person.notes}</p>
+    </div>
+  );
+}
+
 function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
   const { data } = useCadence();
-  const items = data.work_items.filter((w) => w.person_id === person.id && !w.done);
-  const waiting = items.filter((w) => w.type === 'waitingFor');
-  const follow = items.filter((w) => w.type === 'followUp');
-  const other = items.filter((w) => w.type !== 'waitingFor' && w.type !== 'followUp');
+  const allItems = data.work_items.filter((w) => w.person_id === person.id);
+  const active = allItems.filter((w) => !w.done);
+  const recentDone = allItems.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
+    .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+
+  const waiting = active.filter((w) => w.type === 'waitingFor');
+  const follow = active.filter((w) => w.type === 'followUp');
+  const other = active.filter((w) => w.type !== 'waitingFor' && w.type !== 'followUp');
   const first = person.name.split(' ')[0];
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
@@ -64,22 +190,23 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   return (
     <div className="split-right">
       <div className="split-panel-header">
-        <h3>{person.name}</h3>
+        <div>
+          <h3>{person.name}</h3>
+          {person.role && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{person.role}</div>}
+        </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn btn-secondary btn-sm" onClick={onEditPerson}>Edit</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>+ Follow Up</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>+ Add item</button>
         </div>
       </div>
       <div className="split-panel-body">
-        {person.role && <p className="card-meta" style={{ marginBottom: 10 }}>{person.role}</p>}
-        {person.notes && <div className="card card-compact"><p style={{ fontSize: 14 }}>{person.notes}</p></div>}
-        {items.length === 0 ? (
-          <div className="empty-state"><div className="icon">✓</div><p>Nothing pending with this person</p></div>
-        ) : <>
-          {waiting.length > 0 && <div className="detail-section"><h3>Waiting On {first}</h3>{waiting.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
-          {follow.length > 0 && <div className="detail-section"><h3>Follow Ups</h3>{follow.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
-          {other.length > 0 && <div className="detail-section"><h3>Other</h3>{other.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
-        </>}
+        <InlineNotes person={person} />
+        <TalkingPoints personId={person.id} />
+        {waiting.length > 0 && <div className="detail-section"><h3>Waiting on {first}</h3>{waiting.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
+        {follow.length > 0 && <div className="detail-section"><h3>Follow Ups</h3>{follow.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
+        {other.length > 0 && <div className="detail-section"><h3>Other</h3>{other.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}</div>}
+        {active.length === 0 && <div className="empty-state"><div className="icon">✓</div><p>Nothing pending with {first}</p></div>}
+        <RecentlyDone items={recentDone} />
       </div>
       {adding && <ItemModal defaults={{ person_id: person.id, type: 'followUp' }} onClose={() => setAdding(false)} />}
       {editing && <ItemModal existing={editing} onClose={() => setEditing(null)} />}
@@ -106,12 +233,13 @@ export function People({ onMenu }: { onMenu?: () => void }) {
               const items = data.work_items.filter((w) => w.person_id === p.id && !w.done);
               const w = items.filter((i) => i.type === 'waitingFor').length;
               const f = items.filter((i) => i.type === 'followUp').length;
+              const tps = data.talking_points.filter((tp) => tp.person_id === p.id && !tp.done && !tp.deleted_at).length;
               return (
                 <button className={`person-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
                   <span className="avatar">{initials(p.name)}</span>
                   <div className="project-info">
                     <div className="project-name">{p.name}</div>
-                    <div className="project-meta">{p.role ? p.role + ' · ' : ''}{w} waiting · {f} follow-ups</div>
+                    <div className="project-meta">{p.role ? p.role + ' · ' : ''}{w} waiting · {f} follow-ups{tps > 0 ? ` · ${tps} talking pts` : ''}</div>
                   </div>
                 </button>
               );
