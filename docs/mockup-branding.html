@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cadence — Branding options</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --sidebar-bg: #1A1F2E; --sidebar-active: #2C3654; --accent: #5B9CF6; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; background: #F4F4F0; padding: 30px; -webkit-font-smoothing: antialiased; }
+h2 { font-size: 14px; color: #6B6B6B; margin-bottom: 30px; font-weight: 600; }
+.row { display: flex; gap: 28px; flex-wrap: wrap; }
+.option { }
+.option-label { font-size: 12px; font-weight: 700; color: #1B5E9E; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+.bar { width: 230px; background: var(--sidebar-bg); border-radius: 14px; padding: 20px 16px; min-height: 260px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+.nav-item.active { background: var(--sidebar-active); color: #fff; }
+.nav-item .ic { width: 20px; text-align: center; opacity: 0.8; }
+.nav-item.active .ic { color: var(--accent); }
+.sep { height: 1px; background: rgba(255,255,255,0.08); margin: 14px 4px; }
+
+/* A: name as subtitle */
+.brandA .t { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+.brandA .s { font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 2px; font-weight: 500; }
+
+/* B: possessive */
+.brandB .t { font-size: 21px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+.brandB .t span { color: var(--accent); }
+
+/* C: avatar + stacked */
+.brandC { display: flex; align-items: center; gap: 11px; }
+.brandC .av { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,#1B5E9E,#5B9CF6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.brandC .t { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.3px; line-height: 1.1; }
+.brandC .s { font-size: 11px; color: rgba(255,255,255,0.45); }
+
+.pad { padding: 8px 8px 4px; }
+</style>
+</head>
+<body>
+<h2>Three ways to put your name on it — pick one (and tell me the exact name/spelling you want)</h2>
+<div class="row">
+
+  <!-- Option A -->
+  <div class="option">
+    <div class="option-label">A · Name as subtitle</div>
+    <div class="bar">
+      <div class="pad brandA">
+        <div class="t">Cadence</div>
+        <div class="s">Rodney Balech</div>
+      </div>
+      <div class="sep"></div>
+      <div class="nav-item active"><span class="ic">☀</span> Today</div>
+      <div class="nav-item"><span class="ic">✎</span> Notes</div>
+      <div class="nav-item"><span class="ic">↓</span> Inbox</div>
+      <div class="nav-item"><span class="ic">▤</span> Projects</div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option">
+    <div class="option-label">B · Possessive</div>
+    <div class="bar">
+      <div class="pad brandB">
+        <div class="t"><span>Rodney's</span> Cadence</div>
+      </div>
+      <div class="sep"></div>
+      <div class="nav-item active"><span class="ic">☀</span> Today</div>
+      <div class="nav-item"><span class="ic">✎</span> Notes</div>
+      <div class="nav-item"><span class="ic">↓</span> Inbox</div>
+      <div class="nav-item"><span class="ic">▤</span> Projects</div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="option">
+    <div class="option-label">C · Avatar + name</div>
+    <div class="bar">
+      <div class="pad brandC">
+        <div class="av">RB</div>
+        <div>
+          <div class="t">Cadence</div>
+          <div class="s">Rodney Balech</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="nav-item active"><span class="ic">☀</span> Today</div>
+      <div class="nav-item"><span class="ic">✎</span> Notes</div>
+      <div class="nav-item"><span class="ic">↓</span> Inbox</div>
+      <div class="nav-item"><span class="ic">▤</span> Projects</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
