@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from './lib/store';
+import { isOverdue } from './lib/util';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar } from './components/Sidebar';
@@ -20,7 +21,7 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const badges = useMemo(() => ({
-    inbox: { count: data.work_items.filter((w) => w.inboxed && !w.done).length, cls: '' },
+    inbox: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: '' },
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
     decisions: { count: data.decisions.filter((d) => d.status === 'pending').length + data.work_items.filter((w) => w.type === 'decision' && !w.done).length, cls: 'purple' },
     outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
