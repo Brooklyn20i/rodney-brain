@@ -18,56 +18,49 @@ it organised on Rodney's behalf.
 
 ## Authentication — dedicated Kobe login
 
-Kobe has his own Cadence account:
+Kobe uses a dedicated Cadence account, not Rodney's personal login:
 
 | | |
 |---|---|
 | **Email** | `kobe-agent@cadence.app` |
-| **Password** | `<Rodney will tell you>` |
+| **Password** | Stored locally in macOS Keychain only. Never paste into chat, docs, repo, or logs. |
+
+The proper access model is `Cadence/backend/migrations/0003_kobe_agent.sql`:
+
+- Rodney remains the `owner_id` on all rows.
+- `cadence_agent_access` grants the Kobe account access to Rodney's workspace.
+- RLS permits Kobe to read/write Rodney-authorised rows only while that grant is active.
+- Access is revoked by setting `revoked_at` on the grant.
 
 Sign in to get a JWT (refresh on 401):
-
 ```http
 POST https://uimjzehrykeebocphdna.supabase.co/auth/v1/token?grant_type=password
 Content-Type: application/json
 apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
 
-{ "email": "kobe-agent@cadence.app", "password": "<ask Rodney>" }
+{ "email": "kobe-agent@cadence.app", "password": "<from local Keychain only>" }
 ```
 
-## Getting Rodney's owner_id (required for all INSERTs)
-
-After signing in, fetch any existing work item to get Rodney's UUID:
-
-```http
-GET https://uimjzehrykeebocphdna.supabase.co/rest/v1/work_items?limit=1
-apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
-Authorization: Bearer <your_jwt>
-```
-
-The `owner_id` field in that response is Rodney's UUID. Store it as `RODNEY_OWNER_ID`
-and pass it explicitly on every INSERT you make.
-
-Response contains `access_token`. Use it as Bearer on every subsequent request (refresh on 401):
+Response contains `access_token`. Use it as Bearer on every subsequent request:
 ```
 apikey: sb_publishable_QIu9g9ULRa-spgzHUJWSqQ_cVKMv9sr
-Authorization: Bearer <access_token>
+Authorization: Bearer ***
 ```
 
 ## IMPORTANT — owner_id on every INSERT
 
-All of Rodney's data rows have `owner_id = <Rodney's UUID>`. When you insert new rows,
-you MUST pass `owner_id` explicitly (the default would set it to your own UUID and the
-row would be invisible to Rodney). Rodney's UUID is printed when the setup SQL is run —
-store it as `RODNEY_OWNER_ID` and include it in every insert:
+Kobe writes into Rodney's workspace. On every INSERT, pass `owner_id` equal to the
+`owner_user_id` from the active `cadence_agent_access` grant:
 
 ```json
 {
-  "owner_id": "<RODNEY_OWNER_ID>",
+  "owner_id": "<owner_user_id from cadence_agent_access>",
   "title": "...",
   ...
 }
 ```
+
+The local bridge discovers this automatically from `cadence_agent_access` where possible.
 
 ---
 

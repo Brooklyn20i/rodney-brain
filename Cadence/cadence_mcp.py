@@ -1,14 +1,15 @@
 """
-Cadence MCP server — the agent cockpit interface.
+Cadence MCP server — LEGACY local JSON interface.
 
-Exposes Cadence as Model Context Protocol tools so any MCP-capable agent
-(Hermes, Claude, etc.) can read and drive the same store the human uses.
+This file is retained for the older local-file prototype only. The live Cadence
+app is Supabase-backed; use `agent/cadence_supabase_mcp.py` for Kobe/Hermes
+access to the same data Rodney sees in the app.
 
 Run it:
     pip install "mcp[cli]"
     python cadence_mcp.py            # stdio transport
 
-Point it at a shared store and version every change:
+Point it at a shared local prototype store and version every change:
     CADENCE_DATA=/path/to/cadence_data.json CADENCE_GIT_AUTOCOMMIT=1 python cadence_mcp.py
 
 Register with an MCP client (example, Claude Desktop / Code):
@@ -23,9 +24,8 @@ Register with an MCP client (example, Claude Desktop / Code):
       }
     }
 
-Every tool reads the latest store from disk, mutates, and writes back, so a
-human editing via the Streamlit cockpit and an agent calling these tools stay
-in sync. No external services are contacted.
+Every tool reads the latest local JSON store from disk, mutates, and writes back.
+This does not contact Supabase and should not be used for live Rodney/Kobe data.
 """
 
 from __future__ import annotations
