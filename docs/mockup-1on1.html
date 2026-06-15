@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1:1 Agenda — Cadence Mockup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --accent: #1B5E9E; --accent-lt: #4A8FD4; --blue-bg: #EDF4FD;
+    --text: #1A1A1A; --text2: #6B6B6B; --text3: #ABABAB;
+    --surface: #FFFFFF; --surface2: #F8F8F6; --border: rgba(0,0,0,0.09);
+    --red: #D93025; --red-bg: #FEF2F1;
+    --green: #1A7F37; --green-bg: #EDFAF1;
+    --orange: #E07D00; --orange-bg: #FFF8EE;
+    --purple: #6B3FA0; --purple-bg: #F3EEFA;
+    --radius: 12px; --radius-sm: 8px;
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    background: #1A1F2E; display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px; color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  /* ── Modal shell ── */
+  .modal { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-md);
+    width: 960px; max-width: 100%; display: flex; flex-direction: column;
+    max-height: 90vh; overflow: hidden; }
+
+  /* ── Header ── */
+  .header { padding: 18px 22px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; align-items: flex-start; gap: 14px; flex-shrink: 0; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; background: #3A7CA5;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .header-meta { flex: 1; min-width: 0; }
+  .header-person { font-size: 11px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px; }
+  .header-title { font-size: 20px; font-weight: 700; color: var(--text);
+    border: none; background: transparent; outline: none; width: 100%; font-family: inherit; }
+  .header-date { font-size: 12px; color: var(--text2); margin-top: 3px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .btn { padding: 7px 14px; border-radius: 8px; border: none; font-size: 13px;
+    font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+  /* ── Body layout ── */
+  .body { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Left column: Agenda ── */
+  .col-agenda { width: 54%; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; }
+  .col-header { padding: 12px 18px; background: var(--surface2);
+    border-bottom: 1px solid var(--border); display: flex; align-items: center;
+    gap: 8px; flex-shrink: 0; }
+  .col-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.7px; color: var(--text2); flex: 1; }
+  .col-scroll { overflow-y: auto; padding: 14px 18px; flex: 1; }
+
+  /* Import from Topics button */
+  .import-btn { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+    border-radius: 8px; border: 1px dashed var(--border); background: var(--surface2);
+    color: var(--text2); font-size: 13px; font-weight: 500; cursor: pointer;
+    width: 100%; margin-bottom: 14px; font-family: inherit; transition: border-color 0.12s; }
+  .import-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Agenda item */
+  .agenda-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--surface); margin-bottom: 8px;
+    align-items: flex-start; }
+  .agenda-item.covered { opacity: 0.55; }
+  .agenda-handle { color: var(--text3); font-size: 12px; cursor: grab; padding-top: 3px; user-select: none; }
+  .agenda-main { flex: 1; min-width: 0; }
+  .agenda-topic { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 5px;
+    display: flex; align-items: center; gap: 8px; }
+  .status-pill { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+  .status-discuss { background: var(--blue-bg); color: var(--accent); }
+  .status-covered { background: var(--green-bg); color: var(--green); }
+  .status-deferred { background: var(--orange-bg); color: var(--orange); }
+  .agenda-notes { font-size: 12px; color: var(--text2); line-height: 1.5;
+    background: var(--surface2); padding: 6px 8px; border-radius: 6px;
+    border-left: 2px solid var(--border); }
+  .agenda-status-btns { display: flex; gap: 4px; margin-top: 6px; }
+  .stn-btn { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; font-family: inherit; color: var(--text2);
+    font-weight: 500; transition: background 0.1s; }
+  .stn-btn:hover { background: var(--surface2); }
+  .stn-btn.active-discuss { background: var(--blue-bg); color: var(--accent); border-color: var(--accent-lt); }
+  .stn-btn.active-covered { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+  .stn-btn.active-defer { background: var(--orange-bg); color: var(--orange); border-color: var(--orange); }
+
+  .add-agenda { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .add-agenda input { flex: 1; border: 1px dashed var(--border); border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; color: var(--text); background: var(--surface2);
+    outline: none; font-family: inherit; }
+  .add-agenda input:focus { border-color: var(--accent); background: var(--surface); }
+
+  /* ── Right column: Action Items ── */
+  .col-actions { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .action-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--surface); margin-bottom: 8px;
+    align-items: flex-start; }
+  .action-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--border);
+    flex-shrink: 0; margin-top: 2px; appearance: none; cursor: pointer; }
+  .action-check:checked { background: var(--green); border-color: var(--green); }
+  .action-main { flex: 1; min-width: 0; }
+  .action-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .action-title.done { text-decoration: line-through; color: var(--text3); }
+  .action-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .owner-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .owner-me { background: var(--purple-bg); color: var(--purple); }
+  .owner-them { background: var(--blue-bg); color: var(--accent); }
+  .due-chip { font-size: 11px; color: var(--text2); }
+  .due-late { color: var(--red); font-weight: 600; }
+
+  .section-sep { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text3); margin: 12px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .section-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .add-action { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .add-action input { flex: 1; border: 1px dashed var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 13px; color: var(--text); background: var(--surface2);
+    outline: none; font-family: inherit; }
+  .add-action input:focus { border-color: var(--accent); background: var(--surface); }
+  .add-action select { border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px;
+    font-size: 12px; background: var(--surface2); color: var(--text); font-family: inherit; }
+
+  /* ── Bottom notes ── */
+  .notes-section { border-top: 1px solid var(--border); padding: 14px 22px;
+    flex-shrink: 0; background: var(--surface); }
+  .notes-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text2); margin-bottom: 8px; }
+  .notes-area { width: 100%; border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit; resize: none;
+    background: var(--surface2); color: var(--text); outline: none; line-height: 1.6; }
+  .notes-area:focus { border-color: var(--accent); background: var(--surface); }
+
+  /* ── Footer ── */
+  .footer { border-top: 1px solid var(--border); padding: 12px 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface2); flex-shrink: 0; }
+  .footer-left { font-size: 12px; color: var(--text2); }
+  .footer-right { display: flex; gap: 8px; }
+
+  /* Annotation labels */
+  .annotation { position: relative; }
+  .ann-label { position: absolute; right: -160px; top: 50%; transform: translateY(-50%);
+    font-size: 11px; color: #fff; background: rgba(27,94,158,0.85); padding: 4px 10px;
+    border-radius: 20px; white-space: nowrap; pointer-events: none; }
+  .ann-label::before { content: '←'; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<div class="modal">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="avatar">AC</div>
+    <div class="header-meta">
+      <div class="header-person">Amy Chen · Weekly 1:1</div>
+      <input class="header-title" value="Weekly 1:1 — 16 Jun 2026" readonly />
+      <div class="header-date">Monday · 30 min · Recurring</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm">→ Push all tasks</button>
+      <button class="btn btn-secondary btn-sm">Print</button>
+      <button class="btn btn-primary btn-sm">Save &amp; Close</button>
+    </div>
+  </div>
+
+  <!-- Two-column body -->
+  <div class="body">
+
+    <!-- LEFT: Agenda -->
+    <div class="col-agenda">
+      <div class="col-header">
+        <span class="col-title">📋 Agenda</span>
+        <button class="btn btn-secondary btn-sm">Import open topics ↓</button>
+      </div>
+      <div class="col-scroll">
+
+        <!-- Import button -->
+        <button class="import-btn">
+          ✦ Pull from Amy's open Topics (3 items)
+        </button>
+
+        <!-- Agenda item 1 - to discuss -->
+        <div class="agenda-item">
+          <span class="agenda-handle">⠿</span>
+          <div class="agenda-main">
+            <div class="agenda-topic">
+              Q2 Budget Review
+              <span class="status-pill status-discuss">To discuss</span>
+            </div>
+            <div class="agenda-notes">Waiting on final numbers from Finance. Need decision on headcount before end of month.</div>
+            <div class="agenda-status-btns">
+              <button class="stn-btn active-discuss">💬 Discuss</button>
+              <button class="stn-btn">✅ Covered</button>
+              <button class="stn-btn">⏭ Defer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agenda item 2 - covered -->
+        <div class="agenda-item covered">
+          <span class="agenda-handle">⠿</span>
+          <div class="agenda-main">
+            <div class="agenda-topic">
+              Project Phoenix Update
+              <span class="status-pill status-covered">Covered ✓</span>
+            </div>
+            <div class="agenda-notes">On track. Milestone 2 delivered last week.</div>
+            <div class="agenda-status-btns">
+              <button class="stn-btn">💬 Discuss</button>
+              <button class="stn-btn active-covered">✅ Covered</button>
+              <button class="stn-btn">⏭ Defer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agenda item 3 - deferred -->
+        <div class="agenda-item">
+          <span class="agenda-handle">⠿</span>
+          <div class="agenda-main">
+            <div class="agenda-topic">
+              Team Hiring Plan
+              <span class="status-pill status-deferred">Deferred</span>
+            </div>
+            <div class="agenda-notes">Move to next week — need recruitment brief first.</div>
+            <div class="agenda-status-btns">
+              <button class="stn-btn">💬 Discuss</button>
+              <button class="stn-btn">✅ Covered</button>
+              <button class="stn-btn active-defer">⏭ Defer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agenda item 4 -->
+        <div class="agenda-item">
+          <span class="agenda-handle">⠿</span>
+          <div class="agenda-main">
+            <div class="agenda-topic">
+              Roadmap Alignment
+              <span class="status-pill status-discuss">To discuss</span>
+            </div>
+            <div class="agenda-notes"></div>
+            <div class="agenda-status-btns">
+              <button class="stn-btn active-discuss">💬 Discuss</button>
+              <button class="stn-btn">✅ Covered</button>
+              <button class="stn-btn">⏭ Defer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add item -->
+        <div class="add-agenda">
+          <input type="text" placeholder="+ Add agenda item…" />
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: Actions -->
+    <div class="col-actions">
+      <div class="col-header">
+        <span class="col-title">✅ Action Items</span>
+        <button class="btn btn-secondary btn-sm">→ Push all to Tasks</button>
+      </div>
+      <div class="col-scroll">
+
+        <div class="section-sep">New this meeting</div>
+
+        <!-- Action 1 -->
+        <div class="action-item">
+          <input type="checkbox" class="action-check" />
+          <div class="action-main">
+            <div class="action-title">Send Q2 budget numbers to Rodney</div>
+            <div class="action-meta">
+              <span class="owner-chip owner-them">Amy</span>
+              <span class="due-chip">Due 20 Jun</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action 2 -->
+        <div class="action-item">
+          <input type="checkbox" class="action-check" />
+          <div class="action-main">
+            <div class="action-title">Review Project Phoenix roadmap doc</div>
+            <div class="action-meta">
+              <span class="owner-chip owner-me">Me</span>
+              <span class="due-chip">Due 22 Jun</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action 3 -->
+        <div class="action-item">
+          <input type="checkbox" class="action-check" />
+          <div class="action-main">
+            <div class="action-title">Draft recruitment brief for 2 x engineer roles</div>
+            <div class="action-meta">
+              <span class="owner-chip owner-them">Amy</span>
+              <span class="due-chip">Due next week</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-sep">Carry-forward (from 9 Jun)</div>
+
+        <!-- Overdue action -->
+        <div class="action-item" style="border-color: #FCA5A5; background: #FEF2F1;">
+          <input type="checkbox" class="action-check" />
+          <div class="action-main">
+            <div class="action-title">Send headcount plan to finance</div>
+            <div class="action-meta">
+              <span class="owner-chip owner-them">Amy</span>
+              <span class="due-chip due-late">Overdue · was 10 Jun</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Done action -->
+        <div class="action-item" style="opacity:0.55">
+          <input type="checkbox" class="action-check" checked />
+          <div class="action-main">
+            <div class="action-title done">Share Phoenix milestone report</div>
+            <div class="action-meta">
+              <span class="owner-chip owner-me">Me</span>
+              <span class="due-chip" style="color:var(--green)">Done ✓</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add action -->
+        <div class="add-action" style="margin-top:10px">
+          <input type="text" placeholder="+ Add action item…" />
+          <select>
+            <option>Me</option>
+            <option>Amy</option>
+          </select>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom: free notes -->
+  <div class="notes-section">
+    <div class="notes-label">📝 Meeting Notes</div>
+    <textarea class="notes-area" rows="3" placeholder="Key context, decisions, things to remember from this meeting…">Amy mentioned the finance team may push back on headcount — she'll have a pre-conversation with Sarah before submitting. Phoenix looks good, team morale is high.</textarea>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-left">3 agenda items · 3 new actions · 1 overdue from last meeting</div>
+    <div class="footer-right">
+      <button class="btn btn-ghost btn-sm" style="color:var(--red)">Delete</button>
+      <button class="btn btn-secondary btn-sm">← Previous 1:1</button>
+      <button class="btn btn-primary btn-sm">Save &amp; Close</button>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
