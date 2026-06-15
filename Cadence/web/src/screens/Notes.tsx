@@ -15,7 +15,8 @@ function stripHtml(html: string) {
 
 export function Notes({ onMenu }: { onMenu?: () => void }) {
   const { data: rawData, insert, update, remove } = useCadence();
-  const data = useMemo(() => ({ ...rawData, notes: rawData.notes.filter((n) => !n.title.startsWith('__')) }), [rawData]);
+  // Hide system notes (title or folder starting with __) — includes WIN state and meeting notes
+  const data = useMemo(() => ({ ...rawData, notes: rawData.notes.filter((n) => !n.title.startsWith('__') && !(n.folder || '').startsWith('__')) }), [rawData]);
   const [selected, setSelected] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [extraFolders, setExtraFolders] = useState<string[]>([]);

@@ -1,15 +1,29 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Person, WorkItem } from '../lib/types';
+import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
+import { RichEditor } from '../components/RichEditor';
 import { autoColor, AVATAR_COLORS, priorityScore } from '../lib/util';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-// ── Person create/edit modal (with colour picker) ──────────────────────────────
+const mtgFolder = (personId: string) => `__mtg__${personId}`;
+
+// Extract plain-text list items from HTML for task creation
+function extractListItems(html: string): string[] {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('li'))
+    .map((li) => li.textContent?.trim() || '')
+    .filter(Boolean);
+}
+
+// ── Person create/edit modal ───────────────────────────────────────────────────
 function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => void }) {
   const { insert, update, logActivity } = useCadence();
   const [name, setName] = useState(existing?.name || '');
@@ -30,14 +44,10 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
         if (existing) await update('people', existing.id, body);
         else await insert('people', body);
       };
-      try {
-        await write(full);
-      } catch (e: any) {
-        // Graceful fallback if migration 0004 (people.color) hasn't been run yet.
-        if (/color/i.test(String(e?.message || e))) {
-          const { color: _omit, ...noColor } = full as any;
-          await write(noColor);
-        } else throw e;
+      try { await write(full); }
+      catch (e: any) {
+        if (/color/i.test(String(e?.message || e))) { const { color: _omit, ...noColor } = full as any; await write(noColor); }
+        else throw e;
       }
       logActivity(existing ? 'edit_person' : 'add_person', name.trim());
       onClose();
@@ -71,7 +81,166 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
   );
 }
 
-// ── A single rich topic (backed by a work_item) ─────────────────────────────────
+// ── Meeting note editor (full-screen overlay) ──────────────────────────────────
+function MeetingNoteModal({ note, personName, personId, onClose }: {
+  note: Note; personName: string; personId: string; onClose: () => void;
+}) {
+  const { data, insert, update, remove, logActivity } = useCadence();
+  const [title, setTitle] = useState(note.title);
+  const [extracting, setExtracting] = useState(false);
+  const [tasks, setTasks] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  const saveBody = (html: string) => update('notes', note.id, { body: html } as Partial<Note>);
+  const saveTitle = () => update('notes', note.id, { title: title.trim() || note.title } as Partial<Note>);
+
+  const deleteNote = async () => {
+    if (!confirm('Delete this meeting note?')) return;
+    await remove('notes', note.id);
+    onClose();
+  };
+
+  const startExtract = () => {
+    const items = extractListItems(note.body);
+    if (!items.length) { alert('No list items found. Use bullet or numbered lists to capture action items.'); return; }
+    setTasks(items);
+    setSelected(new Set(items.map((_, i) => i)));
+    setExtracting(true);
+  };
+
+  const createTasks = async () => {
+    const toCreate = tasks.filter((_, i) => selected.has(i));
+    for (const t of toCreate) {
+      await insert('work_items', {
+        title: t, type: 'task', priority: 'medium',
+        person_id: personId, notes: `From meeting: ${title}`,
+        inboxed: false, source: 'you',
+      } as Partial<WorkItem>);
+    }
+    logActivity('extract_tasks', `${toCreate.length} tasks from ${title}`);
+    setExtracting(false);
+  };
+
+  return (
+    <div className="mtg-overlay">
+      <div className="mtg-modal">
+        <div className="mtg-header">
+          <div className="mtg-header-left">
+            <span className="mtg-person-chip">{personName}</span>
+            <input
+              className="mtg-title-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={saveTitle}
+            />
+            <span className="mtg-date">{fmtDate(note.created_at)}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="btn btn-secondary btn-sm" onClick={startExtract}>→ Extract Tasks</button>
+            <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
+            <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ Close</button>
+          </div>
+        </div>
+
+        {extracting ? (
+          <div className="mtg-extract">
+            <h3>Select action items to create as tasks</h3>
+            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+              {tasks.length} list item{tasks.length !== 1 ? 's' : ''} found in this note
+            </p>
+            <div className="mtg-task-list">
+              {tasks.map((t, i) => (
+                <label key={i} className="mtg-task-check">
+                  <input type="checkbox" checked={selected.has(i)}
+                    onChange={() => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })} />
+                  <span>{t}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setExtracting(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={createTasks} disabled={selected.size === 0}>
+                Create {selected.size} Task{selected.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mtg-body">
+            <RichEditor
+              key={note.id}
+              content={note.body || ''}
+              onBlur={saveBody}
+              placeholder="Meeting notes… Use bullet lists for action items, then hit '→ Extract Tasks' to create them."
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Meeting notes list ─────────────────────────────────────────────────────────
+function MeetingNotes({ person }: { person: Person }) {
+  const { data, insert } = useCadence();
+  const [open, setOpen] = useState<Note | null>(null);
+
+  const folder = mtgFolder(person.id);
+  const meetings = useMemo(() =>
+    data.notes.filter((n) => n.folder === folder)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [data.notes, folder]
+  );
+
+  const newMeeting = async () => {
+    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const title = `1:1 · ${person.name} · ${today}`;
+    let n: Note;
+    try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
+    catch (e: any) {
+      if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
+      else throw e;
+    }
+    setOpen(n);
+  };
+
+  // Keep modal in sync if note body changes (realtime)
+  const liveNote = open ? data.notes.find((n) => n.id === open.id) || open : null;
+
+  return (
+    <div className="detail-section">
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        📝 Meeting Notes
+        {meetings.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{meetings.length}</span>}
+        <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={newMeeting}>+ New 1:1</button>
+      </h3>
+      {meetings.length === 0 ? (
+        <p style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
+          No meeting notes yet. Hit "+ New 1:1" to start capturing.
+        </p>
+      ) : (
+        <div className="mtg-list">
+          {meetings.map((n) => (
+            <button key={n.id} className="mtg-card" onClick={() => setOpen(n)}>
+              <div className="mtg-card-date">{fmtShort(n.created_at)}</div>
+              <div className="mtg-card-title">{n.title}</div>
+              <div className="mtg-card-preview">{stripHtml(n.body).slice(0, 100) || 'Empty note'}</div>
+            </button>
+          ))}
+        </div>
+      )}
+      {liveNote && (
+        <MeetingNoteModal
+          note={liveNote}
+          personName={person.name}
+          personId={person.id}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Single topic (work_item) card ──────────────────────────────────────────────
 function TopicCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
   const { data, update } = useCadence();
   const proj = data.projects.find((p) => p.id === w.project_id);
@@ -93,12 +262,11 @@ function TopicCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }
   );
 }
 
-// ── Inline editable notes on the person ────────────────────────────────────────
+// ── Inline editable background notes ──────────────────────────────────────────
 function InlineNotes({ person }: { person: Person }) {
   const { update } = useCadence();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(person.notes);
-
   const save = () => { update('people', person.id, { notes: draft } as Partial<Person>); setEditing(false); };
 
   if (editing) return (
@@ -116,19 +284,20 @@ function InlineNotes({ person }: { person: Person }) {
 
   if (!person.notes) return (
     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--text3)', padding: '2px 0', marginBottom: 8 }}
-      onClick={() => { setDraft(''); setEditing(true); }}>+ Add notes</button>
+      onClick={() => { setDraft(''); setEditing(true); }}>+ Add background notes</button>
   );
 
   return (
     <div className="detail-section" style={{ cursor: 'text' }} onClick={() => { setDraft(person.notes); setEditing(true); }}>
-      <h3 style={{ display: 'flex', justifyContent: 'space-between' }}>Notes
-        <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>Click to edit</span></h3>
+      <h3 style={{ display: 'flex', justifyContent: 'space-between' }}>Background Notes
+        <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>Click to edit</span>
+      </h3>
       <p style={{ fontSize: 14, lineHeight: 1.6 }}>{person.notes}</p>
     </div>
   );
 }
 
-// ── Recently completed log (last 14 days) ──────────────────────────────────────
+// ── Recently completed log ─────────────────────────────────────────────────────
 function RecentlyDone({ items }: { items: WorkItem[] }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
@@ -152,9 +321,10 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
   );
 }
 
-// ── Person detail (keyed by person id by the parent, so state never bleeds) ─────
+// ── Person detail panel ────────────────────────────────────────────────────────
 function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
   const { data, insert, logActivity } = useCadence();
+  const [tab, setTab] = useState<'topics' | 'meetings'>('topics');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [draft, setDraft] = useState('');
@@ -163,6 +333,8 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const open = mine.filter((w) => !w.done).sort((a, b) => priorityScore(b) - priorityScore(a));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+
+  const meetingCount = data.notes.filter((n) => n.folder === mtgFolder(person.id)).length;
 
   const quickAdd = async () => {
     const title = draft.trim();
@@ -187,29 +359,43 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button className="btn btn-secondary btn-sm" onClick={onEditPerson}>Edit</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>+ Add Topic</button>
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="people-tabs">
+        <button className={`people-tab ${tab === 'topics' ? 'active' : ''}`} onClick={() => setTab('topics')}>
+          Topics {open.length > 0 && <span className="ptab-badge">{open.length}</span>}
+        </button>
+        <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
+          Meetings {meetingCount > 0 && <span className="ptab-badge">{meetingCount}</span>}
+        </button>
+      </div>
+
       <div className="split-panel-body">
-        {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
-        <InlineNotes person={person} />
-
-        <div className="detail-section">
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>📋 Topics
-            {open.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{open.length}</span>}
-            <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: 'var(--text3)', textTransform: 'none', letterSpacing: 0 }}>
-              To discuss & track</span>
-          </h3>
-          {open.map((w) => <TopicCard key={w.id} w={w} onEdit={setEditing} />)}
-          <div className="topic-add">
-            <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
-            <input value={draft} placeholder="Add a topic — press Enter (open it to add a due date, notes or project)"
-              onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') quickAdd(); }} />
-          </div>
-        </div>
-
-        <RecentlyDone items={recentDone} />
+        {tab === 'topics' && (
+          <>
+            {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
+            <InlineNotes person={person} />
+            <div className="detail-section">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>📋 Topics
+                {open.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{open.length}</span>}
+                <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setAdding(true)}>+ Add</button>
+              </h3>
+              {open.map((w) => <TopicCard key={w.id} w={w} onEdit={setEditing} />)}
+              <div className="topic-add">
+                <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
+                <input value={draft} placeholder="Quick add — press Enter"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') quickAdd(); }} />
+              </div>
+            </div>
+            <RecentlyDone items={recentDone} />
+          </>
+        )}
+        {tab === 'meetings' && <MeetingNotes person={person} />}
       </div>
+
       {adding && <ItemModal defaults={{ person_id: person.id, type: 'followUp', inboxed: false } as Partial<WorkItem>} onClose={() => setAdding(false)} />}
       {editing && <ItemModal existing={editing} onClose={() => setEditing(null)} />}
     </div>
@@ -229,26 +415,39 @@ export function People({ onMenu }: { onMenu?: () => void }) {
       <ScreenHeader title="People" onMenu={onMenu} />
       <div className="split-view">
         <div className="split-left">
-          <div className="split-panel-header"><h3>{sorted.length} {sorted.length === 1 ? 'person' : 'people'}</h3>
-            <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ Add</button></div>
+          <div className="split-panel-header">
+            <h3>{sorted.length} {sorted.length === 1 ? 'person' : 'people'}</h3>
+            <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ Add</button>
+          </div>
           <div className="split-panel-body">
             {sorted.length ? sorted.map((p) => {
               const openCount = data.work_items.filter((w) => w.person_id === p.id && !w.done).length;
+              const mtgCount = data.notes.filter((n) => n.folder === mtgFolder(p.id)).length;
               return (
                 <button className={`person-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
                   <span className="avatar" style={{ background: colorOf(p) }}>{initials(p.name)}</span>
                   <div className="project-info">
                     <div className="project-name">{p.name}</div>
-                    <div className="project-meta">{p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}</div>
+                    <div className="project-meta">
+                      {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}
+                      {mtgCount > 0 ? ` · ${mtgCount} meetings` : ''}
+                    </div>
                   </div>
                 </button>
               );
-            }) : <div className="empty-state"><div className="icon">✦</div><p>No people yet</p><small>Track topics, follow-ups and waiting items by person</small></div>}
+            }) : (
+              <div className="empty-state">
+                <div className="icon">✦</div>
+                <p>No people yet</p>
+                <small>Track topics, follow-ups and meeting notes by person</small>
+              </div>
+            )}
           </div>
         </div>
-        {person ? <Detail key={person.id} person={person} onEditPerson={() => setEditing(person)} /> : (
-          <div className="split-right"><div className="empty-state" style={{ margin: 'auto' }}><div className="icon">✦</div><p>Select a person</p></div></div>
-        )}
+        {person
+          ? <Detail key={person.id} person={person} onEditPerson={() => setEditing(person)} />
+          : <div className="split-right"><div className="empty-state" style={{ margin: 'auto' }}><div className="icon">✦</div><p>Select a person</p></div></div>
+        }
       </div>
       {creating && <PersonModal onClose={() => setCreating(false)} />}
       {editing && <PersonModal existing={editing} onClose={() => setEditing(null)} />}
