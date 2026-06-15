@@ -76,6 +76,19 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
     return name;
   };
 
+  const renameFolder = async (oldName: string) => {
+    const newName = window.prompt('Rename folder', oldName)?.trim();
+    if (!newName || newName === oldName) return;
+    const toUpdate = data.notes.filter((n) => folderOf(n) === oldName);
+    await Promise.all(toUpdate.map((n) => update('notes', n.id, { folder: newName } as Partial<Note>)));
+    setExtraFolders((f) => f.map((x) => (x === oldName ? newName : x)));
+    setCollapsed((c) => {
+      const next = { ...c };
+      if (oldName in next) { next[newName] = next[oldName]; delete next[oldName]; }
+      return next;
+    });
+  };
+
   const onFolderSelect = async (v: string) => {
     if (v === NEW_FOLDER) { const name = addFolder(); if (name) await moveNote(name); }
     else await moveNote(v);
@@ -109,6 +122,8 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
           <span style={{ fontSize: 14 }}>📁</span>
           <span className="folder-name">{name}</span>
           <span className="folder-count">{items.length}</span>
+          <button className="folder-add" title="Rename folder"
+            onClick={(e) => { e.stopPropagation(); renameFolder(name); }}>✎</button>
           <button className="folder-add" title="New note in this folder"
             onClick={(e) => { e.stopPropagation(); newNote(name); }}>＋</button>
         </div>
