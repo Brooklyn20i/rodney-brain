@@ -16,7 +16,7 @@ export interface ActionItem {
 export interface MeetingData {
   agenda: AgendaItem[];
   actions: ActionItem[];
-  notes: string; // rich HTML
+  notes: string;
 }
 
 const emptyMeeting = (): MeetingData => ({ agenda: [], actions: [], notes: '' });
@@ -33,7 +33,6 @@ export function parseMeeting(body: string): { data: MeetingData; isLegacy: boole
       };
     }
   } catch {}
-  // Legacy: plain text or HTML → preserve in notes field
   return { data: { agenda: [], actions: [], notes: body }, isLegacy: true };
 }
 
@@ -42,8 +41,7 @@ const fmtDate = (iso: string) =>
 const fmtShort = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-// ── Individual subcomponents ──────────────────────────────────────────────────
-
+// ── Agenda item row ───────────────────────────────────────────────────────────
 function AgendaItemRow({ item, onChange, onDelete }: {
   item: AgendaItem;
   onChange: (updated: AgendaItem) => void;
@@ -52,19 +50,11 @@ function AgendaItemRow({ item, onChange, onDelete }: {
   const [editingNotes, setEditingNotes] = useState(false);
   const set = (patch: Partial<AgendaItem>) => onChange({ ...item, ...patch });
 
-  const statusLabel: Record<AgendaItem['status'], string> = {
-    discuss: '💬 To discuss', covered: '✅ Covered', deferred: '⏭ Deferred',
-  };
-  const statusCls: Record<AgendaItem['status'], string> = {
-    discuss: 'status-discuss', covered: 'status-covered', deferred: 'status-deferred',
-  };
-
   return (
     <div className={`agenda-item${item.status === 'covered' ? ' covered' : ''}`}>
       <span className="agenda-handle" title="Drag to reorder">⠿</span>
       <div className="agenda-main">
         <div className="agenda-topic">
-          <span className={`status-pill ${statusCls[item.status]}`}>{statusLabel[item.status]}</span>
           <input
             className="agenda-topic-input"
             value={item.title}
@@ -98,47 +88,67 @@ function AgendaItemRow({ item, onChange, onDelete }: {
   );
 }
 
+// ── Action item row ───────────────────────────────────────────────────────────
 function ActionItemRow({ item, personName, onChange, onDelete }: {
   item: ActionItem; personName: string;
   onChange: (updated: ActionItem) => void;
   onDelete: () => void;
 }) {
   const set = (patch: Partial<ActionItem>) => onChange({ ...item, ...patch });
-  const isLate = item.due && !item.done && new Date(item.due) < new Date();
+  const isLate = !!item.due && !item.done && new Date(item.due) < new Date();
 
   return (
     <div className={`action-item${item.done ? ' done' : ''}${isLate ? ' late' : ''}`}>
-      <input
-        type="checkbox"
-        className="action-check"
-        checked={item.done}
-        onChange={(e) => set({ done: e.target.checked })}
-      />
+      <input type="checkbox" className="action-check" checked={item.done}
+        onChange={(e) => set({ done: e.target.checked })} />
       <div className="action-main">
-        <input
-          className="action-title-input"
-          value={item.title}
-          placeholder="Action item…"
-          onChange={(e) => set({ title: e.target.value })}
-        />
+        <input className="action-title-input" value={item.title} placeholder="Action item…"
+          onChange={(e) => set({ title: e.target.value })} />
         <div className="action-meta">
-          <button
-            className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}
+          <button className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}
             onClick={() => set({ owner: item.owner === 'me' ? 'them' : 'me' })}
-            title="Click to toggle owner"
-          >
+            title="Click to toggle owner">
             {item.owner === 'me' ? 'Me' : personName.split(' ')[0]}
           </button>
-          <input
-            className="due-input"
-            type="date"
-            value={item.due}
-            onChange={(e) => set({ due: e.target.value })}
-            title="Due date"
-          />
+          <input className="due-input" type="date" value={item.due}
+            onChange={(e) => set({ due: e.target.value })} title="Due date" />
           {isLate && <span className="due-late-label">Overdue</span>}
           {item.pushed && <span className="pushed-label">→ In Tasks</span>}
           <button className="action-delete" onClick={onDelete} title="Remove">✕</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Carry-forward row (read-only, local checked state) ────────────────────────
+function CarryForwardRow({ item, personName, onMarkDone }: {
+  item: ActionItem; personName: string; onMarkDone: () => void;
+}) {
+  const [checked, setChecked] = useState(false);
+  const isLate = !!item.due && new Date(item.due) < new Date();
+
+  const handleCheck = () => {
+    setChecked(true);
+    onMarkDone();
+  };
+
+  return (
+    <div className={`action-item carry-fwd${isLate ? ' late' : ''}${checked ? ' done' : ''}`}>
+      <input type="checkbox" className="action-check" checked={checked} onChange={handleCheck} />
+      <div className="action-main">
+        <div className="action-title-static" style={{ textDecoration: checked ? 'line-through' : 'none' }}>
+          {item.title}
+        </div>
+        <div className="action-meta">
+          <span className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}>
+            {item.owner === 'me' ? 'Me' : personName.split(' ')[0]}
+          </span>
+          {item.due && (
+            <span className={isLate ? 'due-late-label' : 'due-normal-label'}>
+              {isLate ? 'Overdue · ' : ''}{fmtShort(item.due)}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -149,7 +159,7 @@ function ActionItemRow({ item, personName, onChange, onDelete }: {
 interface Props {
   note: Note;
   person: Person;
-  allMeetings: Note[]; // sorted newest-first, for navigation & carry-forward
+  allMeetings: Note[];
   onClose: () => void;
   onNavigate: (noteId: string) => void;
 }
@@ -164,29 +174,54 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [title, setTitle] = useState(note.title);
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
+
+  // Refs always hold the latest state — used by the debounced save to avoid
+  // stale-closure overwrites when two updates land within the debounce window.
+  const agendaRef = useRef(agenda);
+  const actionsRef = useRef(actions);
+  const notesRef = useRef(notes);
+  const noteIdRef = useRef(note.id);
+  agendaRef.current = agenda;
+  actionsRef.current = actions;
+  notesRef.current = notes;
+  noteIdRef.current = note.id;
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync parsed state when note.id changes (navigating between meetings)
+  const flushSave = useCallback(() => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    const body = JSON.stringify({
+      agenda: agendaRef.current,
+      actions: actionsRef.current,
+      notes: notesRef.current,
+    });
+    update('notes', noteIdRef.current, { body } as Partial<Note>);
+  }, [update]);
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(flushSave, 600);
+  }, [flushSave]);
+
+  // Flush on unmount so "Save & Close" never loses pending changes
+  useEffect(() => () => { flushSave(); }, []);
+
+  // Reset state when navigating between meetings
   useEffect(() => {
     const { data: p } = parseMeeting(note.body);
-    setAgenda(p.agenda); setActions(p.actions); setNotes(p.notes);
+    setAgenda(p.agenda);
+    setActions(p.actions);
+    setNotes(p.notes);
     setTitle(note.title);
+    setShowImport(false);
+    setImportSel(new Set());
   }, [note.id]);
 
-  // Debounced save
-  const scheduleSave = useCallback((a: AgendaItem[], ac: ActionItem[], n: string) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const body = JSON.stringify({ agenda: a, actions: ac, notes: n });
-      update('notes', note.id, { body } as Partial<Note>);
-    }, 600);
-  }, [note.id, update]);
+  const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
+  const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
+  const setN = (n: string) => { setNotes(n); scheduleSave(); };
 
-  const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(a, actions, notes); };
-  const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(agenda, ac, notes); };
-  const setN = (n: string) => { setNotes(n); scheduleSave(agenda, actions, n); };
-
-  // Carry-forward: uncompleted actions from previous meeting
+  // Carry-forward: uncompleted actions from the meeting immediately before this one
   const prevMeeting = useMemo(() => {
     const idx = allMeetings.findIndex((m) => m.id === note.id);
     return idx < allMeetings.length - 1 ? allMeetings[idx + 1] : null;
@@ -196,7 +231,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     if (!prevMeeting) return [];
     const { data: prev } = parseMeeting(prevMeeting.body);
     return prev.actions.filter((a) => !a.done);
-  }, [prevMeeting]);
+  }, [prevMeeting?.id, prevMeeting?.body]);
 
   // Navigation
   const idx = allMeetings.findIndex((m) => m.id === note.id);
@@ -216,14 +251,10 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setImportSel(new Set());
   };
 
-  // Add agenda item
   const addAgendaItem = () => setA([...agenda, { id: uid(), title: '', notes: '', status: 'discuss' }]);
-
-  // Add action item
   const addAction = (owner: 'me' | 'them' = 'me') =>
     setAc([...actions, { id: uid(), title: '', owner, due: '', done: false, pushed: false }]);
 
-  // Push all unpushed actions to work_items
   const pushAllToTasks = async () => {
     const toPush = actions.filter((a) => !a.pushed && a.title.trim());
     for (const a of toPush) {
@@ -234,12 +265,11 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
         inboxed: false, source: 'you',
       } as Partial<WorkItem>);
     }
-    const updated = actions.map((a) => ({ ...a, pushed: a.pushed || (a.title.trim() ? true : false) }));
+    const updated = actions.map((a) => ({ ...a, pushed: a.pushed || !!a.title.trim() }));
     setAc(updated);
     logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
   };
 
-  // Mark a carry-forward item done in the previous meeting
   const markCarryForwardDone = (cfAction: ActionItem) => {
     if (!prevMeeting) return;
     const { data: prev } = parseMeeting(prevMeeting.body);
@@ -253,20 +283,24 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const deleteNote = async () => {
     if (!confirm('Delete this meeting note?')) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     await remove('notes', note.id);
     onClose();
   };
 
-  // Summary stats
+  const handleClose = () => { flushSave(); onClose(); };
+  const handleNavigate = (id: string) => { flushSave(); onNavigate(id); };
+
+  // Stats
   const toCover = agenda.filter((a) => a.status === 'discuss').length;
   const covered = agenda.filter((a) => a.status === 'covered').length;
   const newActions = actions.filter((a) => !a.done).length;
 
   return (
-    <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="mtg-modal mtg-modal-structured">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="mtg-hdr">
           <div className="mtg-hdr-left">
             <span className="avatar" style={{ background: person.color || '#3A7CA5', width: 40, height: 40, fontSize: 14 }}>
@@ -283,11 +317,11 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             <button className="btn btn-secondary btn-sm" onClick={pushAllToTasks}
               title="Create tasks in your system for all action items">→ Push to Tasks</button>
             <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
-            <button className="btn btn-primary btn-sm" onClick={onClose}>Save &amp; Close</button>
+            <button className="btn btn-primary btn-sm" onClick={handleClose}>Save &amp; Close</button>
           </div>
         </div>
 
-        {/* ── Two-column body ── */}
+        {/* Two-column body */}
         <div className="mtg-cols">
 
           {/* LEFT: Agenda */}
@@ -299,7 +333,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               </button>
             </div>
 
-            {/* Import panel */}
             {showImport && (
               <div className="mtg-import-panel">
                 {openTopics.length === 0
@@ -333,15 +366,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
             <div className="mtg-col-body">
               {agenda.length === 0 && !showImport && (
-                <p className="mtg-empty-hint">Add agenda items below, or import from Topics →</p>
+                <p className="mtg-empty-hint">Add agenda items below, or import from Topics ↑</p>
               )}
               {agenda.map((item, i) => (
-                <AgendaItemRow
-                  key={item.id}
-                  item={item}
+                <AgendaItemRow key={item.id} item={item}
                   onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
-                  onDelete={() => setA(agenda.filter((_, j) => j !== i))}
-                />
+                  onDelete={() => setA(agenda.filter((_, j) => j !== i))} />
               ))}
               <button className="mtg-add-row" onClick={addAgendaItem}>+ Add agenda item</button>
             </div>
@@ -353,71 +383,42 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               <span className="mtg-col-title">✅ Action Items</span>
             </div>
             <div className="mtg-col-body">
-              {/* New this meeting */}
               {actions.length === 0 && carryForward.length === 0 && (
                 <p className="mtg-empty-hint">Actions agreed in this meeting appear here.</p>
               )}
               {actions.map((item, i) => (
-                <ActionItemRow
-                  key={item.id}
-                  item={item}
-                  personName={person.name}
+                <ActionItemRow key={item.id} item={item} personName={person.name}
                   onChange={(updated) => setAc(actions.map((a, j) => j === i ? updated : a))}
-                  onDelete={() => setAc(actions.filter((_, j) => j !== i))}
-                />
+                  onDelete={() => setAc(actions.filter((_, j) => j !== i))} />
               ))}
               <div className="mtg-action-add-row">
                 <button className="mtg-add-row" onClick={() => addAction('me')}>+ For me</button>
                 <button className="mtg-add-row" onClick={() => addAction('them')}>+ For {person.name.split(' ')[0]}</button>
               </div>
 
-              {/* Carry-forward from previous meeting */}
               {carryForward.length > 0 && (
                 <>
                   <div className="mtg-section-sep">
                     Carry-forward · {prevMeeting ? fmtShort(prevMeeting.created_at) : 'last meeting'}
                   </div>
-                  {carryForward.map((cf) => {
-                    const isLate = cf.due && new Date(cf.due) < new Date();
-                    return (
-                      <div key={cf.id} className={`action-item carry-fwd${isLate ? ' late' : ''}`}>
-                        <input type="checkbox" className="action-check"
-                          onChange={() => markCarryForwardDone(cf)} />
-                        <div className="action-main">
-                          <div className="action-title-static">{cf.title}</div>
-                          <div className="action-meta">
-                            <span className={`owner-chip ${cf.owner === 'me' ? 'owner-me' : 'owner-them'}`}>
-                              {cf.owner === 'me' ? 'Me' : person.name.split(' ')[0]}
-                            </span>
-                            {cf.due && (
-                              <span className={isLate ? 'due-late-label' : 'due-normal-label'}>
-                                {isLate ? 'Overdue · ' : ''}{fmtShort(cf.due)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {carryForward.map((cf) => (
+                    <CarryForwardRow key={cf.id} item={cf} personName={person.name}
+                      onMarkDone={() => markCarryForwardDone(cf)} />
+                  ))}
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Free notes ── */}
+        {/* Free notes */}
         <div className="mtg-notes-section">
           <div className="mtg-notes-label">📝 Meeting Notes</div>
-          {isLegacy ? (
-            <RichEditor key={`${note.id}-legacy`} content={notes} onBlur={setN}
-              placeholder="Key context, decisions, things to remember…" />
-          ) : (
-            <RichEditor key={note.id} content={notes} onBlur={setN}
-              placeholder="Key context, decisions, things to remember…" />
-          )}
+          <RichEditor key={note.id} content={notes} onBlur={setN}
+            placeholder="Key context, decisions, things to remember…" />
         </div>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="mtg-footer">
           <div className="mtg-footer-stats">
             {toCover > 0 && <span>{toCover} to cover</span>}
@@ -427,12 +428,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           </div>
           <div className="mtg-footer-nav">
             {prevNote && (
-              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate(prevNote.id)}>
+              <button className="btn btn-secondary btn-sm" onClick={() => handleNavigate(prevNote.id)}>
                 ← {fmtShort(prevNote.created_at)}
               </button>
             )}
             {nextNote && (
-              <button className="btn btn-secondary btn-sm" onClick={() => onNavigate(nextNote.id)}>
+              <button className="btn btn-secondary btn-sm" onClick={() => handleNavigate(nextNote.id)}>
                 {fmtShort(nextNote.created_at)} →
               </button>
             )}

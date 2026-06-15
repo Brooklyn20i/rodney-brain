@@ -83,7 +83,6 @@ function Toolbar({ editor }: { editor: Editor }) {
       {/* Lists */}
       <ToolbarBtn active={editor.isActive('bulletList')} title="Bullet list" onClick={() => editor.chain().focus().toggleBulletList().run()}>• ≡</ToolbarBtn>
       <ToolbarBtn active={editor.isActive('orderedList')} title="Numbered list" onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. ≡</ToolbarBtn>
-      <ToolbarBtn active={editor.isActive('taskList')} title="Task list (checkboxes)" onClick={() => editor.chain().focus().toggleBulletList().run()}>☐ ≡</ToolbarBtn>
       <Divider />
 
       {/* Blocks */}
@@ -124,10 +123,14 @@ export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typ
     onBlur: ({ editor }) => onBlur?.(editor.getHTML()),
   });
 
-  // Sync content prop when switching notes (selected note changes)
+  // Sync when content prop changes due to external updates (e.g. navigation).
+  // Guard: skip if the editor already has equivalent content to avoid cursor jumps.
   useEffect(() => {
     if (!editor) return;
-    if (editor.getHTML() !== content) {
+    const current = editor.getHTML();
+    const isEmpty = current === '<p></p>' || current === '';
+    if (isEmpty && !content) return; // both empty — skip
+    if (current !== content) {
       editor.commands.setContent(content || '');
     }
   }, [content]);
