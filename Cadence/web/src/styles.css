@@ -608,3 +608,41 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   padding: 10px 20px; border-top: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
 .mtg-footer-stats { display: flex; gap: 12px; font-size: 12px; color: var(--text2); flex-wrap: wrap; }
 .mtg-footer-nav { display: flex; gap: 8px; }
+
+/* ── Share Panel ── */
+.btn-share { background: #217346; color: #fff; }
+.btn-share:hover { background: #1a5c38; }
+
+.share-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 20px; }
+.share-modal { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md);
+  width: 100%; max-width: 680px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.share-hdr { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;
+  border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.share-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+.onenote-badge { width: 22px; height: 22px; background: #7B2FBE; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 800; }
+.share-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 18px;
+  background: var(--surface); flex-shrink: 0; }
+.share-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px;
+  font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; font-family: inherit; margin-bottom: -1px; }
+.share-tab.active { color: #217346; border-bottom-color: #217346; font-weight: 600; }
+.share-preview { flex: 1; overflow-y: auto; background: #fff; padding: 24px 28px; }
+.share-doc { font-family: Calibri,'Segoe UI',sans-serif; font-size: 14px; line-height: 1.6; }
+.share-actions { padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface2);
+  display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.share-primary-btn { width: 100%; padding: 12px; border-radius: 10px; border: none;
+  background: #217346; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 0.15s; }
+.share-primary-btn:hover { background: #1a5c38; }
+.share-primary-btn.copied { background: var(--green); }
+.share-secondary-row { display: flex; gap: 8px; align-items: center; }
+.share-secondary-btn { flex: 1; padding: 9px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.12s; }
+.share-secondary-btn:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+.share-secondary-btn:disabled { opacity: 0.6; cursor: default; }
+.share-hint { font-size: 11px; color: var(--text3); text-align: center; }
+.share-hint-sm { font-size: 11px; color: var(--text3); flex: 1; text-align: center; }

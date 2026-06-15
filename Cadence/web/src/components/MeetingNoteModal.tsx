@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { RichEditor } from './RichEditor';
+import { SharePanel } from './SharePanel';
 
 // ── Data model stored as JSON in note.body ────────────────────────────────────
 export interface AgendaItem {
@@ -174,6 +175,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [title, setTitle] = useState(note.title);
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
+  const [showShare, setShowShare] = useState(false);
 
   // Refs always hold the latest state — used by the debounced save to avoid
   // stale-closure overwrites when two updates land within the debounce window.
@@ -297,6 +299,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const newActions = actions.filter((a) => !a.done).length;
 
   return (
+    <>
     <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="mtg-modal mtg-modal-structured">
 
@@ -316,6 +319,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           <div className="mtg-hdr-right">
             <button className="btn btn-secondary btn-sm" onClick={pushAllToTasks}
               title="Create tasks in your system for all action items">→ Push to Tasks</button>
+            <button className="btn btn-share btn-sm" onClick={() => setShowShare(true)}>📤 Share</button>
             <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
             <button className="btn btn-primary btn-sm" onClick={handleClose}>Save &amp; Close</button>
           </div>
@@ -442,5 +446,15 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
       </div>
     </div>
+
+    {showShare && (
+      <SharePanel
+        note={note}
+        person={person}
+        meetingData={{ agenda, actions, notes }}
+        onClose={() => setShowShare(false)}
+      />
+    )}
+    </>
   );
 }
