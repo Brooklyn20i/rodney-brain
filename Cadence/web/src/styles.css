@@ -646,3 +646,58 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .share-secondary-btn:disabled { opacity: 0.6; cursor: default; }
 .share-hint { font-size: 11px; color: var(--text3); text-align: center; }
 .share-hint-sm { font-size: 11px; color: var(--text3); flex: 1; text-align: center; }
+.share-plain-preview { font-size: 12px; color: var(--text); white-space: pre-wrap; word-break: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; line-height: 1.6; }
+
+/* ── Mobile / iPhone ─────────────────────────────────────────────────────────── */
+/* Mobile tab bar: hide on desktop */
+.mtg-mobile-tabs { display: none; }
+
+@media (max-width: 680px) {
+  /* Full-screen meeting overlay */
+  .mtg-overlay { padding: 0; align-items: stretch; }
+  .mtg-modal { border-radius: 0; max-height: 100dvh; height: 100dvh; }
+  .mtg-modal-structured { max-width: none; }
+
+  /* Header: safe-area for Dynamic Island / notch, then wrap buttons in 2×2 grid */
+  .mtg-hdr {
+    flex-direction: column; gap: 8px;
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .mtg-hdr-left { width: 100%; }
+  .mtg-hdr-right {
+    width: 100%;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .mtg-hdr-right .btn { justify-content: center; font-size: 12px; padding: 7px 6px; }
+
+  /* Show mobile tab bar */
+  .mtg-mobile-tabs {
+    display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .mtg-mobile-tab {
+    flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 6px; font-size: 13px; font-weight: 500; color: var(--text2);
+    cursor: pointer; font-family: inherit; margin-bottom: -1px;
+  }
+  .mtg-mobile-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  /* Active tab section fills screen; hidden sections vanish */
+  .mtg-hidden-mobile { display: none !important; }
+  .mtg-col-agenda { width: 100%; border-right: none; }
+  .mtg-col-actions { width: 100%; }
+
+  /* Notes tab: take the remaining height */
+  .mtg-notes-tab-active { max-height: none; flex: 1; border-top: none; }
+
+  /* Footer: safe-area for home indicator */
+  .mtg-footer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Full-screen share panel */
+  .share-overlay { padding: 0; align-items: stretch; }
+  .share-modal { border-radius: 0; max-height: 100dvh; height: 100dvh; max-width: none; }
+  .share-hdr { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+  .share-actions { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .share-preview { padding: 16px; }
+}

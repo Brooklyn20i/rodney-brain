@@ -176,6 +176,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
 
   // Refs always hold the latest state — used by the debounced save to avoid
   // stale-closure overwrites when two updates land within the debounce window.
@@ -325,11 +326,27 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           </div>
         </div>
 
+        {/* Mobile tab bar — hidden on desktop via CSS */}
+        <div className="mtg-mobile-tabs">
+          <button className={`mtg-mobile-tab${mobileTab === 'agenda' ? ' active' : ''}`}
+            onClick={() => setMobileTab('agenda')}>
+            📋 Agenda{toCover > 0 ? ` (${toCover})` : ''}
+          </button>
+          <button className={`mtg-mobile-tab${mobileTab === 'actions' ? ' active' : ''}`}
+            onClick={() => setMobileTab('actions')}>
+            ✅ Actions{newActions > 0 ? ` (${newActions})` : ''}
+          </button>
+          <button className={`mtg-mobile-tab${mobileTab === 'notes' ? ' active' : ''}`}
+            onClick={() => setMobileTab('notes')}>
+            📝 Notes
+          </button>
+        </div>
+
         {/* Two-column body */}
-        <div className="mtg-cols">
+        <div className={`mtg-cols${mobileTab === 'notes' ? ' mtg-hidden-mobile' : ''}`}>
 
           {/* LEFT: Agenda */}
-          <div className="mtg-col mtg-col-agenda">
+          <div className={`mtg-col mtg-col-agenda${mobileTab === 'actions' ? ' mtg-hidden-mobile' : ''}`}>
             <div className="mtg-col-hdr">
               <span className="mtg-col-title">📋 Agenda</span>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
@@ -382,7 +399,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           </div>
 
           {/* RIGHT: Actions */}
-          <div className="mtg-col mtg-col-actions">
+          <div className={`mtg-col mtg-col-actions${mobileTab === 'agenda' ? ' mtg-hidden-mobile' : ''}`}>
             <div className="mtg-col-hdr">
               <span className="mtg-col-title">✅ Action Items</span>
             </div>
@@ -416,7 +433,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
         </div>
 
         {/* Free notes */}
-        <div className="mtg-notes-section">
+        <div className={`mtg-notes-section${mobileTab !== 'notes' ? ' mtg-hidden-mobile' : ' mtg-notes-tab-active'}`}>
           <div className="mtg-notes-label">📝 Meeting Notes</div>
           <RichEditor key={note.id} content={notes} onBlur={setN}
             placeholder="Key context, decisions, things to remember…" />
