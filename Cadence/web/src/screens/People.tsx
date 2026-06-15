@@ -3,25 +3,16 @@ import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { RichEditor } from '../components/RichEditor';
+import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore } from '../lib/util';
 
+const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
-// Extract plain-text list items from HTML for task creation
-function extractListItems(html: string): string[] {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return Array.from(doc.querySelectorAll('li'))
-    .map((li) => li.textContent?.trim() || '')
-    .filter(Boolean);
-}
 
 // ── Person create/edit modal ───────────────────────────────────────────────────
 function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => void }) {
@@ -81,108 +72,11 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
   );
 }
 
-// ── Meeting note editor (full-screen overlay) ──────────────────────────────────
-function MeetingNoteModal({ note, personName, personId, onClose }: {
-  note: Note; personName: string; personId: string; onClose: () => void;
-}) {
-  const { data, insert, update, remove, logActivity } = useCadence();
-  const [title, setTitle] = useState(note.title);
-  const [extracting, setExtracting] = useState(false);
-  const [tasks, setTasks] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-
-  const saveBody = (html: string) => update('notes', note.id, { body: html } as Partial<Note>);
-  const saveTitle = () => update('notes', note.id, { title: title.trim() || note.title } as Partial<Note>);
-
-  const deleteNote = async () => {
-    if (!confirm('Delete this meeting note?')) return;
-    await remove('notes', note.id);
-    onClose();
-  };
-
-  const startExtract = () => {
-    const items = extractListItems(note.body);
-    if (!items.length) { alert('No list items found. Use bullet or numbered lists to capture action items.'); return; }
-    setTasks(items);
-    setSelected(new Set(items.map((_, i) => i)));
-    setExtracting(true);
-  };
-
-  const createTasks = async () => {
-    const toCreate = tasks.filter((_, i) => selected.has(i));
-    for (const t of toCreate) {
-      await insert('work_items', {
-        title: t, type: 'task', priority: 'medium',
-        person_id: personId, notes: `From meeting: ${title}`,
-        inboxed: false, source: 'you',
-      } as Partial<WorkItem>);
-    }
-    logActivity('extract_tasks', `${toCreate.length} tasks from ${title}`);
-    setExtracting(false);
-  };
-
-  return (
-    <div className="mtg-overlay">
-      <div className="mtg-modal">
-        <div className="mtg-header">
-          <div className="mtg-header-left">
-            <span className="mtg-person-chip">{personName}</span>
-            <input
-              className="mtg-title-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={saveTitle}
-            />
-            <span className="mtg-date">{fmtDate(note.created_at)}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn btn-secondary btn-sm" onClick={startExtract}>→ Extract Tasks</button>
-            <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
-            <button className="btn btn-secondary btn-sm" onClick={onClose}>✕ Close</button>
-          </div>
-        </div>
-
-        {extracting ? (
-          <div className="mtg-extract">
-            <h3>Select action items to create as tasks</h3>
-            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
-              {tasks.length} list item{tasks.length !== 1 ? 's' : ''} found in this note
-            </p>
-            <div className="mtg-task-list">
-              {tasks.map((t, i) => (
-                <label key={i} className="mtg-task-check">
-                  <input type="checkbox" checked={selected.has(i)}
-                    onChange={() => setSelected((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })} />
-                  <span>{t}</span>
-                </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => setExtracting(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={createTasks} disabled={selected.size === 0}>
-                Create {selected.size} Task{selected.size !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mtg-body">
-            <RichEditor
-              key={note.id}
-              content={note.body || ''}
-              onBlur={saveBody}
-              placeholder="Meeting notes… Use bullet lists for action items, then hit '→ Extract Tasks' to create them."
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Meeting notes list ─────────────────────────────────────────────────────────
 function MeetingNotes({ person }: { person: Person }) {
   const { data, insert } = useCadence();
-  const [open, setOpen] = useState<Note | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(person.id);
   const meetings = useMemo(() =>
@@ -200,11 +94,10 @@ function MeetingNotes({ person }: { person: Person }) {
       if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
       else throw e;
     }
-    setOpen(n);
+    setOpenId(n.id);
   };
 
-  // Keep modal in sync if note body changes (realtime)
-  const liveNote = open ? data.notes.find((n) => n.id === open.id) || open : null;
+  const openNote = openId ? data.notes.find((n) => n.id === openId) || null : null;
 
   return (
     <div className="detail-section">
@@ -219,21 +112,27 @@ function MeetingNotes({ person }: { person: Person }) {
         </p>
       ) : (
         <div className="mtg-list">
-          {meetings.map((n) => (
-            <button key={n.id} className="mtg-card" onClick={() => setOpen(n)}>
-              <div className="mtg-card-date">{fmtShort(n.created_at)}</div>
-              <div className="mtg-card-title">{n.title}</div>
-              <div className="mtg-card-preview">{stripHtml(n.body).slice(0, 100) || 'Empty note'}</div>
-            </button>
-          ))}
+          {meetings.map((n) => {
+            const preview = n.body.startsWith('{')
+              ? (() => { try { const p = JSON.parse(n.body); return (p.agenda?.[0]?.title || '') + (p.notes ? ' · ' + stripHtml(p.notes) : ''); } catch { return ''; } })()
+              : stripHtml(n.body);
+            return (
+              <button key={n.id} className="mtg-card" onClick={() => setOpenId(n.id)}>
+                <div className="mtg-card-date">{fmtShort(n.created_at)}</div>
+                <div className="mtg-card-title">{n.title}</div>
+                <div className="mtg-card-preview">{preview.slice(0, 100) || 'Empty note'}</div>
+              </button>
+            );
+          })}
         </div>
       )}
-      {liveNote && (
+      {openNote && (
         <MeetingNoteModal
-          note={liveNote}
-          personName={person.name}
-          personId={person.id}
-          onClose={() => setOpen(null)}
+          note={openNote}
+          person={person}
+          allMeetings={meetings}
+          onClose={() => setOpenId(null)}
+          onNavigate={setOpenId}
         />
       )}
     </div>
