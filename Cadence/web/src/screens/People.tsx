@@ -111,7 +111,7 @@ function MeetingNotes({ person }: { person: Person }) {
   const newMeeting = async () => {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-    const todayLabel = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const todayLabel = now.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const title = `1:1 · ${person.name} · ${todayLabel}`;
     let n: Note;
     try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
