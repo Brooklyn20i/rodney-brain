@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem, ProjectPhase, RaidItem, Stakeholder, Note } from '../lib/types';
 import { Modal, Due } from '../components/bits';
@@ -46,6 +46,21 @@ function useWinState() {
 }
 
 // ── Strategy / Priorities modal ────────────────────────────────────────────
+function PriorityRow({ p, idx, total, strategy, save }: { p: { id: string; name: string }; idx: number; total: number; strategy: StrategyContent; save: (s: StrategyContent) => void }) {
+  const [name, setName] = useState(p.name);
+  useEffect(() => { setName(p.name); }, [p.name]);
+  return (
+    <div className="priority-edit-row">
+      <input type="text" value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => { if (name.trim() && name !== p.name) save(renamePriority(strategy, p.id, name.trim())); }} />
+      <button className="btn-icon" disabled={idx === 0} onClick={() => save(movePriority(strategy, p.id, -1))}>↑</button>
+      <button className="btn-icon" disabled={idx === total - 1} onClick={() => save(movePriority(strategy, p.id, 1))}>↓</button>
+      <button className="btn-icon" onClick={() => save(removePriority(strategy, p.id))}>✕</button>
+    </div>
+  );
+}
+
 function StrategyModal({ strategy, save, onClose }: { strategy: StrategyContent; save: (s: StrategyContent) => void; onClose: () => void }) {
   const [addingPriority, setAddingPriority] = useState('');
   const [addingKpi, setAddingKpi] = useState('');
@@ -74,12 +89,7 @@ function StrategyModal({ strategy, save, onClose }: { strategy: StrategyContent;
         <label>Priorities <span style={{ color: 'var(--text3)', fontWeight: 400 }}>— group projects by theme</span></label>
         {priorities.length === 0 && <small style={{ color: 'var(--text3)', display: 'block', marginBottom: 8 }}>E.g. "Grow Revenue", "Build the Team", "Operational Excellence"</small>}
         {priorities.map((p, idx) => (
-          <div className="priority-edit-row" key={p.id}>
-            <input type="text" value={p.name} onChange={(e) => save(renamePriority(strategy, p.id, e.target.value))} />
-            <button className="btn-icon" disabled={idx === 0} onClick={() => save(movePriority(strategy, p.id, -1))}>↑</button>
-            <button className="btn-icon" disabled={idx === priorities.length - 1} onClick={() => save(movePriority(strategy, p.id, 1))}>↓</button>
-            <button className="btn-icon" onClick={() => save(removePriority(strategy, p.id))}>✕</button>
-          </div>
+          <PriorityRow key={p.id} p={p} idx={idx} total={priorities.length} strategy={strategy} save={save} />
         ))}
         <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
           <input type="text" placeholder="Add priority…" value={addingPriority}
@@ -314,14 +324,18 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   const [mTitle, setMTitle] = useState('');
   const [mDate, setMDate] = useState('');
+  const [mErr, setMErr] = useState('');
   const pct = milestones.length ? Math.round(milestones.filter((m) => m.done).length / milestones.length * 100) : 0;
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
   const linkedKpis = (project.kpi_ids || []).map((id) => getKpi(strategy, id)?.name).filter(Boolean);
 
   const addMilestone = async () => {
     if (!mTitle.trim()) return;
-    await insert('milestones', { project_id: project.id, title: mTitle.trim(), due_date: mDate || null, done: false } as Partial<Milestone>);
-    setMTitle(''); setMDate('');
+    setMErr('');
+    try {
+      await insert('milestones', { project_id: project.id, title: mTitle.trim(), due_date: mDate || null, done: false } as Partial<Milestone>);
+      setMTitle(''); setMDate('');
+    } catch { setMErr('Failed to add milestone — check connection'); }
   };
 
   return (
@@ -359,11 +373,13 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
           ))}
         </div>
       )}
-      <div className="form-row" style={{ gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div className="form-row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input type="text" placeholder="Add milestone…" value={mTitle} onChange={(e) => setMTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addMilestone(); }} />
         <input type="date" value={mDate} onChange={(e) => setMDate(e.target.value)} style={{ maxWidth: 150 }} />
         <button className="btn btn-ghost btn-sm" onClick={addMilestone}>+ Milestone</button>
       </div>
+      {mErr && <small style={{ color: 'var(--red)', display: 'block', marginTop: 4, marginBottom: 16 }}>{mErr}</small>}
+      <div style={{ marginBottom: 20 }} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <strong style={{ fontSize: 13 }}>Open Items ({items.length})</strong>
@@ -380,39 +396,51 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
 }
 
 // ── Advanced sub-components ────────────────────────────────────────────────
+function PhaseRow({ ph, milestones, onRemove }: { ph: ProjectPhase; milestones: Milestone[]; onRemove: () => void }) {
+  const { update } = useCadence();
+  const [name, setName] = useState(ph.name);
+  useEffect(() => { setName(ph.name); }, [ph.name]);
+  const ms = milestones.filter((m) => m.phase_id === ph.id);
+  const done = ms.filter((m) => m.done).length;
+  return (
+    <div className="phase-card">
+      <div className="phase-head">
+        <input className="phase-name" value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => { if (name.trim() && name !== ph.name) update('project_phases', ph.id, { name: name.trim() } as Partial<ProjectPhase>); }} />
+        <button className="btn-icon" onClick={onRemove}>✕</button>
+      </div>
+      <div className="phase-dates">
+        <label>Start <input type="date" value={ph.start_date || ''} onChange={(e) => update('project_phases', ph.id, { start_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
+        <label>End <input type="date" value={ph.end_date || ''} onChange={(e) => update('project_phases', ph.id, { end_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
+        {ms.length > 0 && <span className="phase-prog">{done}/{ms.length} milestones</span>}
+      </div>
+    </div>
+  );
+}
+
 const RAID_KINDS: RaidItem['kind'][] = ['risk', 'assumption', 'issue', 'dependency'];
 const RAID_LABEL: Record<RaidItem['kind'], string> = { risk: 'Risk', assumption: 'Assumption', issue: 'Issue', dependency: 'Dependency' };
 const RACI_LABEL: Record<Stakeholder['raci'], string> = { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' };
 
 function Phases({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
-  const { insert, update, remove } = useCadence();
+  const { insert, remove } = useCadence();
   const [name, setName] = useState('');
+  const [addErr, setAddErr] = useState('');
   const add = async () => {
     if (!name.trim()) return;
-    await insert('project_phases', { project_id: project.id, name: name.trim(), sort: phases.length, start_date: null, end_date: null } as Partial<ProjectPhase>);
-    setName('');
+    setAddErr('');
+    try {
+      await insert('project_phases', { project_id: project.id, name: name.trim(), sort: phases.length, start_date: null, end_date: null } as Partial<ProjectPhase>);
+      setName('');
+    } catch { setAddErr('Failed to add — check connection'); }
   };
   return (
     <div className="detail-section">
       <h3>Phases / Workstreams</h3>
-      {phases.map((ph) => {
-        const ms = milestones.filter((m) => m.phase_id === ph.id);
-        const done = ms.filter((m) => m.done).length;
-        return (
-          <div className="phase-card" key={ph.id}>
-            <div className="phase-head">
-              <input className="phase-name" value={ph.name} onChange={(e) => update('project_phases', ph.id, { name: e.target.value } as Partial<ProjectPhase>)} />
-              <button className="btn-icon" onClick={() => remove('project_phases', ph.id)}>✕</button>
-            </div>
-            <div className="phase-dates">
-              <label>Start <input type="date" value={ph.start_date || ''} onChange={(e) => update('project_phases', ph.id, { start_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
-              <label>End <input type="date" value={ph.end_date || ''} onChange={(e) => update('project_phases', ph.id, { end_date: e.target.value || null } as Partial<ProjectPhase>)} /></label>
-              {ms.length > 0 && <span className="phase-prog">{done}/{ms.length} milestones</span>}
-            </div>
-          </div>
-        );
-      })}
+      {phases.map((ph) => <PhaseRow key={ph.id} ph={ph} milestones={milestones} onRemove={() => remove('project_phases', ph.id)} />)}
       {!phases.length && <small style={{ color: 'var(--text3)' }}>No phases yet</small>}
+      {addErr && <small style={{ color: 'var(--red)', display: 'block', marginTop: 4 }}>{addErr}</small>}
       <div className="form-row" style={{ marginTop: 8 }}>
         <input type="text" placeholder="Add phase (e.g. Discovery)…" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
         <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
@@ -426,11 +454,15 @@ function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[]
   const [personId, setPersonId] = useState('');
   const [name, setName] = useState('');
   const [raci, setRaci] = useState<Stakeholder['raci']>('I');
+  const [addErr, setAddErr] = useState('');
   const add = async () => {
     const pname = personId ? (data.people.find((p) => p.id === personId)?.name || '') : name.trim();
     if (!pname) return;
-    await insert('stakeholders', { project_id: project.id, person_id: personId || null, name: pname, raci } as Partial<Stakeholder>);
-    setPersonId(''); setName('');
+    setAddErr('');
+    try {
+      await insert('stakeholders', { project_id: project.id, person_id: personId || null, name: pname, raci } as Partial<Stakeholder>);
+      setPersonId(''); setName('');
+    } catch { setAddErr('Failed to add — check connection'); }
   };
   return (
     <div className="detail-section">
@@ -444,6 +476,7 @@ function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[]
         </div>
       ))}
       {!rows.length && <small style={{ color: 'var(--text3)' }}>No stakeholders yet</small>}
+      {addErr && <small style={{ color: 'var(--red)', display: 'block', marginTop: 4 }}>{addErr}</small>}
       <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
         <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
           <option value="">Person…</option>
@@ -464,10 +497,14 @@ function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
   const [kind, setKind] = useState<RaidItem['kind']>('risk');
   const [text, setText] = useState('');
   const [severity, setSeverity] = useState<RaidItem['severity']>('medium');
+  const [addErr, setAddErr] = useState('');
   const add = async () => {
     if (!text.trim()) return;
-    await insert('raid_items', { project_id: project.id, kind, text: text.trim(), severity, status: 'open', owner: '' } as Partial<RaidItem>);
-    setText('');
+    setAddErr('');
+    try {
+      await insert('raid_items', { project_id: project.id, kind, text: text.trim(), severity, status: 'open', owner: '' } as Partial<RaidItem>);
+      setText('');
+    } catch { setAddErr('Failed to add — check connection'); }
   };
   const openItems = rows.filter((r) => r.status === 'open');
   return (
@@ -491,6 +528,7 @@ function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
         );
       })}
       {!rows.length && <small style={{ color: 'var(--text3)' }}>No RAID items</small>}
+      {addErr && <small style={{ color: 'var(--red)', display: 'block', marginTop: 4 }}>{addErr}</small>}
       <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
         <select value={kind} onChange={(e) => setKind(e.target.value as RaidItem['kind'])} style={{ maxWidth: 130 }}>
           {RAID_KINDS.map((k) => <option key={k} value={k}>{RAID_LABEL[k]}</option>)}
@@ -520,8 +558,8 @@ function Timeline({ project, phases, milestones }: { project: Project; phases: P
   return (
     <div className="detail-section">
       <h3>Timeline</h3>
-      {events.map((e, i) => (
-        <div className="tl-row" key={i}>
+      {events.map((e) => (
+        <div className="tl-row" key={`${e.date}-${e.label}`}>
           <span className={`tl-dot ${e.kind}`} />
           <span className={`tl-date ${isOverdue(e.date) && !e.done ? 'tl-overdue' : ''}`}>{fmtDate(e.date)}</span>
           <span className={`tl-label ${e.done ? 'done' : ''}`}>{e.label}{e.done ? ' ✓' : ''}</span>
@@ -533,6 +571,7 @@ function Timeline({ project, phases, milestones }: { project: Project; phases: P
 
 function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void }) {
   const { data } = useCadence();
+  const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   const phases = useMemo(() => data.project_phases.filter((p) => p.project_id === project.id).sort((a, b) => a.sort - b.sort), [data.project_phases, project.id]);
   const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
   const raid = useMemo(() => data.raid_items.filter((r) => r.project_id === project.id), [data.raid_items, project.id]);
@@ -558,9 +597,10 @@ function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void
       {closed.length > 0 && (
         <div className="detail-section">
           <h3>Completed ({closed.length})</h3>
-          {closed.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={() => {}} />)}
+          {closed.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />)}
         </div>
       )}
+      {editingItem && <ItemModal existing={editingItem} onClose={() => setEditingItem(null)} />}
     </div>
   );
 }
@@ -727,6 +767,10 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
   const [editing, setEditing] = useState<Project | null>(null);
   const [editStrategy, setEditStrategy] = useState(false);
 
+  useEffect(() => {
+    if (groupBy === 'priority' && !priorities.length) setGroupBy('status');
+  }, [priorities.length, groupBy]);
+
   const selected = selectedId ? (data.projects.find((p) => p.id === selectedId) || null) : null;
   const byName = (a: Project, b: Project) => a.name.localeCompare(b.name);
 
@@ -753,7 +797,7 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
           project={selected}
           strategy={strategy}
           onMenu={onMenu}
-          onBack={() => { setView('list'); }}
+          onBack={() => { setView('list'); setSelectedId(null); }}
           onEdit={() => setEditing(selected)}
         />
         {editing && <ProjectModal existing={editing} strategy={strategy} onClose={() => setEditing(null)} />}
