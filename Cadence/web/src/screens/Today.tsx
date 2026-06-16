@@ -1,10 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import { priorityScore, isOverdue, isDueToday } from '../lib/util';
+import { priorityScore, isOverdue, isDueToday, autoColor } from '../lib/util';
 import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
+
+const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+const fmtMtgDay = (iso: string) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  if (iso === today) return 'Today';
+  if (iso === tom) return 'Tomorrow';
+  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+};
 
 function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
   return (
@@ -47,6 +56,8 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
   const view = useMemo(() => {
     const active = data.work_items.filter((w) => !w.done);
     const scored = [...active].sort((a, b) => priorityScore(b) - priorityScore(a));
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
     return {
       focus: scored[0],
       top3: scored.slice(0, 3),
@@ -57,6 +68,14 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         ...data.decisions.filter((d) => d.status === 'pending'),
         ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
       ] as { id: string; title: string }[],
+      oneOnOnes: data.people
+        .filter((p) => p.next_meeting && p.next_meeting >= todayStr && p.next_meeting <= nextWeekStr)
+        .map((p) => ({
+          person: p,
+          openTopics: data.work_items.filter((w) => w.person_id === p.id && !w.done).length,
+          isToday: p.next_meeting === todayStr,
+        }))
+        .sort((a, b) => (a.person.next_meeting || '').localeCompare(b.person.next_meeting || '')),
     };
   }, [data]);
 
@@ -92,6 +111,31 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
             </div>
           ) : <div className="empty-state"><div className="icon">✓</div><p>All clear!</p></div>}
         </Section>
+
+        {view.oneOnOnes.length > 0 && (
+          <Section title="1:1s This Week" count={view.oneOnOnes.length} color="var(--green)">
+            {view.oneOnOnes.map(({ person, openTopics, isToday }) => (
+              <div key={person.id} className="card card-compact">
+                <div className="card-row">
+                  <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 30, height: 30, fontSize: 11, lineHeight: '30px', flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+                    {initials(person.name)}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="card-title">{person.name}{person.role ? <span style={{ fontWeight: 400, color: 'var(--text2)', fontSize: 12, marginLeft: 6 }}>{person.role}</span> : ''}</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{
+                        background: isToday ? 'var(--green-bg)' : 'var(--surface2)',
+                        color: isToday ? 'var(--green)' : 'var(--text2)',
+                        padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600
+                      }}>📅 {fmtMtgDay(person.next_meeting!)}</span>
+                      {openTopics > 0 && <span className="tag tag-info">{openTopics} topic{openTopics !== 1 ? 's' : ''}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </Section>
+        )}
 
         <Section title="Overdue" count={view.overdue.length} color="var(--red)">
           {view.overdue.length ? view.overdue.map((w) => <RowCard key={w.id} w={w} onEdit={setEditing} />)

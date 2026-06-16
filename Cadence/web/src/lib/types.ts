@@ -48,6 +48,7 @@ export interface Person {
   color?: string; // optional until migration 0004 is applied
   group_name?: string;  // optional until migration 0007
   sort_order?: number;  // optional until migration 0007
+  next_meeting?: string | null; // optional until migration 0008
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface TalkingPoint {

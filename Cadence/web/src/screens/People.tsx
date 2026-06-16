@@ -12,6 +12,14 @@ const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
 const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const fmtMeetingDate = (iso: string) => {
+  const today = todayISO();
+  const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  if (iso === today) return 'Today';
+  if (iso === tom) return 'Tomorrow';
+  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+};
 
 const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
 
@@ -24,6 +32,7 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
   const [notes, setNotes] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
   const [group, setGroup] = useState(existing?.group_name || 'Direct Reports');
+  const [nextMeeting, setNextMeeting] = useState(existing?.next_meeting || '');
   const [busy, setBusy] = useState(false);
 
   const effective = color || autoColor(name || existing?.name || 'person');
@@ -32,15 +41,26 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const full = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group } as Partial<Person>;
+      const full = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group, next_meeting: nextMeeting || null } as Partial<Person>;
       const write = async (body: Partial<Person>) => {
         if (existing) await update('people', existing.id, body);
         else await insert('people', body);
       };
       try { await write(full); }
       catch (e: any) {
-        if (/color/i.test(String(e?.message || e))) { const { color: _omit, ...noColor } = full as any; await write(noColor); }
-        else throw e;
+        const msg = String(e?.message || e);
+        if (/next_meeting/i.test(msg) || /column .+ does not exist/i.test(msg)) {
+          // next_meeting column not yet migrated — retry without it
+          const { next_meeting: _, ...withoutMtg } = full as any;
+          try { await write(withoutMtg); }
+          catch (e2: any) {
+            if (/color/i.test(String(e2?.message || e2))) {
+              const { color: __, ...base } = withoutMtg; await write(base);
+            } else throw e2;
+          }
+        } else if (/color/i.test(msg)) {
+          const { color: _omit, ...noColor } = full as any; await write(noColor);
+        } else throw e;
       }
       logActivity(existing ? 'edit_person' : 'add_person', name.trim());
       onClose();
@@ -70,6 +90,8 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
         <input type="email" value={email} placeholder="email@company.com" onChange={(e) => setEmail(e.target.value)} /></div>
       <div className="form-group"><label>Notes</label>
         <textarea value={notes} placeholder="Context about this person…" onChange={(e) => setNotes(e.target.value)} /></div>
+      <div className="form-group"><label>Next 1:1 <span style={{ color: 'var(--text3)', fontWeight: 400 }}>— appears in Today</span></label>
+        <input type="date" value={nextMeeting} onChange={(e) => setNextMeeting(e.target.value)} /></div>
       <div className="form-group">
         <label>Group</label>
         <div className="person-group-picker">
@@ -266,6 +288,15 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
           <div style={{ minWidth: 0 }}>
             <h3 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name}</h3>
             {person.role && <div style={{ fontSize: 12, color: 'var(--text2)' }}>{person.role}</div>}
+            {person.next_meeting && (
+              <div style={{ fontSize: 12, marginTop: 2 }}>
+                <span style={{
+                  background: person.next_meeting === todayISO() ? 'var(--green-bg)' : 'var(--blue-bg)',
+                  color: person.next_meeting === todayISO() ? 'var(--green)' : 'var(--accent)',
+                  padding: '1px 7px', borderRadius: 10, fontWeight: 600, fontSize: 11
+                }}>📅 {fmtMeetingDate(person.next_meeting)}</span>
+              </div>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -382,6 +413,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                               <div className="project-meta">
                                 {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}
                                 {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
+                                {p.next_meeting && p.next_meeting >= todayISO() ? ` · 📅 ${fmtMeetingDate(p.next_meeting)}` : ''}
                               </div>
                             </div>
                           </button>

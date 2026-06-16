@@ -433,7 +433,12 @@ function Phases({ project, phases, milestones }: { project: Project; phases: Pro
     try {
       await insert('project_phases', { project_id: project.id, name: name.trim(), sort: phases.length, start_date: null, end_date: null } as Partial<ProjectPhase>);
       setName('');
-    } catch { setAddErr('Failed to add — check connection'); }
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      setAddErr(/does not exist|relation|no such/i.test(msg)
+        ? 'Phases not available — run migration 0006 in Supabase'
+        : 'Could not save — tap Add to try again');
+    }
   };
   return (
     <div className="detail-section">
@@ -462,7 +467,12 @@ function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[]
     try {
       await insert('stakeholders', { project_id: project.id, person_id: personId || null, name: pname, raci } as Partial<Stakeholder>);
       setPersonId(''); setName('');
-    } catch { setAddErr('Failed to add — check connection'); }
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      setAddErr(/does not exist|relation|no such/i.test(msg)
+        ? 'Stakeholders not available — run migration 0006 in Supabase'
+        : 'Could not save — tap Add to try again');
+    }
   };
   return (
     <div className="detail-section">
@@ -504,7 +514,12 @@ function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
     try {
       await insert('raid_items', { project_id: project.id, kind, text: text.trim(), severity, status: 'open', owner: '' } as Partial<RaidItem>);
       setText('');
-    } catch { setAddErr('Failed to add — check connection'); }
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      setAddErr(/does not exist|relation|no such/i.test(msg)
+        ? 'RAID log not available — run migration 0006 in Supabase'
+        : 'Could not save — tap Add to try again');
+    }
   };
   const openItems = rows.filter((r) => r.status === 'open');
   return (
