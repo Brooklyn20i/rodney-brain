@@ -5,7 +5,7 @@ import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore } from '../lib/util';
-import { useMeetingDates } from '../lib/meetings';
+import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -119,8 +119,8 @@ function MeetingNotes({ person }: { person: Person }) {
       if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
       else throw e;
     }
-    // Pre-set the next 1:1 to today — user can change it in the meeting modal
-    try { await setMeetingDate(person.id, todayStr); } catch { /* non-critical */ }
+    // Store today's date keyed to this note — user can change it in the meeting modal
+    try { await setMeetingDate(n.id, todayStr); } catch { /* non-critical */ }
     setOpenId(n.id);
   };
 
@@ -251,7 +251,7 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
 function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
   const { data, insert, logActivity } = useCadence();
   const { dates } = useMeetingDates();
-  const nextMeeting = dates[person.id] || null;
+  const nextMeeting = getNextMeeting(person.id, data.notes, dates);
   const [tab, setTab] = useState<'topics' | 'meetings'>('topics');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
@@ -400,7 +400,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                     {gPeople.map((p, idx) => {
                       const openCount = data.work_items.filter(w => w.person_id === p.id && !w.done).length;
                       const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
-                      const pMeeting = dates[p.id] || null;
+                      const pMeeting = getNextMeeting(p.id, data.notes, dates);
                       return (
                         <div key={p.id} className="person-list-row">
                           <button className={`person-item${selected === p.id ? ' selected' : ''}`} onClick={() => setSelected(p.id)}>

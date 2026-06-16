@@ -180,12 +180,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
   const [meetingDate, setLocalMeetingDate] = useState(
-    dates[person.id] || new Date().toISOString().slice(0, 10)
+    dates[note.id] || new Date().toISOString().slice(0, 10)
   );
   const [dateErr, setDateErr] = useState('');
 
   // Keep the input in sync if the stored date changes elsewhere.
-  useEffect(() => { setLocalMeetingDate(dates[person.id] || ''); }, [dates, person.id]);
+  useEffect(() => { setLocalMeetingDate(dates[note.id] || ''); }, [dates, note.id]);
 
   const updateMeetingDate = async (date: string) => {
     setLocalMeetingDate(date);
@@ -200,7 +200,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
       update('notes', note.id, { title: newTitle } as Partial<Note>);
     }
 
-    try { await setMeetingDate(person.id, date || null); }
+    try { await setMeetingDate(note.id, date || null); }
     catch { setDateErr('Could not save date — check connection'); }
   };
 

@@ -5,7 +5,7 @@ import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
-import { useMeetingDates } from '../lib/meetings';
+import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const fmtMtgDay = (iso: string) => {
@@ -71,7 +71,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
       ] as { id: string; title: string }[],
       oneOnOnes: data.people
-        .map((p) => ({ p, mtg: dates[p.id] || null }))
+        .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
         .filter(({ mtg }) => mtg && mtg >= todayStr && mtg <= nextWeekStr)
         .map(({ p, mtg }) => ({
           person: p,
