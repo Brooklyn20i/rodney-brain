@@ -342,12 +342,17 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
               <div className="mtg-date">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="date"
-                    value={meetingDate}
-                    onChange={(e) => updateMeetingDate(e.target.value)}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-                  />
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}>
+                      📅 {meetingDate ? fmtDate(meetingDate + 'T12:00:00') : 'Set date'}
+                    </span>
+                    <input
+                      type="date"
+                      value={meetingDate}
+                      onChange={(e) => updateMeetingDate(e.target.value)}
+                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+                    />
+                  </div>
                   <span style={{ fontSize: 11, color: 'var(--text3)' }}>· shows in Today</span>
                 </div>
                 {dateErr && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3, lineHeight: 1.4 }}>{dateErr}</div>}
