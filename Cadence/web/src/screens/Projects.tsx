@@ -565,39 +565,49 @@ function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void
   );
 }
 
-// ── Bottom sheet ───────────────────────────────────────────────────────────
+// ── Full-screen project detail (push navigation) ──────────────────────────
 const HEALTH_PILL: Record<Health, [string, string]> = {
   green: ['health-green', 'On track'], amber: ['health-amber', 'At risk'], red: ['health-red', 'Off track'],
 };
 
-function ProjectSheet({ project, onClose, onEdit, strategy }: { project: Project; onClose: () => void; onEdit: () => void; strategy: StrategyContent }) {
+function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
+  project: Project; strategy: StrategyContent;
+  onBack: () => void; onEdit: () => void; onMenu?: () => void;
+}) {
   const [tab, setTab] = useState<'update' | 'plan' | 'advanced'>('update');
   const [pill, pillLabel] = HEALTH_PILL[project.health];
   return (
-    <div className="proj-sheet-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="proj-sheet">
-        <div className="proj-sheet-handle" />
-        <div className="proj-sheet-header">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span className={`health-pill ${pill}`} style={{ display: 'inline-flex', marginBottom: 4 }}>{healthIcon(project.health)} {pillLabel}</span>
-            <h2 className="proj-sheet-title">{project.name}</h2>
-          </div>
-          <button className="btn-icon" style={{ fontSize: 20, marginTop: 4 }} onClick={onClose}>✕</button>
+    <>
+      <div className="screen-header">
+        <button className="menu-btn" onClick={onMenu} aria-label="Open menu">☰</button>
+        <div className="header-left" style={{ flex: 1, minWidth: 0 }}>
+          <button className="proj-back-btn" onClick={onBack}>← Projects</button>
+          <h1 style={{ fontSize: 17, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</h1>
         </div>
-        <div className="proj-sheet-tabs">
-          {(['update', 'plan', 'advanced'] as const).map((t) => (
-            <button key={t} className={`proj-sheet-tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'update' ? 'Update' : t === 'plan' ? 'Plan' : 'Advanced'}
-            </button>
-          ))}
-        </div>
-        <div className="proj-sheet-body">
-          {tab === 'update' && <UpdateTab project={project} />}
-          {tab === 'plan' && <PlanTab project={project} strategy={strategy} />}
-          {tab === 'advanced' && <AdvancedTab project={project} onEdit={() => { onEdit(); onClose(); }} />}
+        <div className="header-actions">
+          <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit</button>
         </div>
       </div>
-    </div>
+      <div className="proj-detail-screen">
+        <div className="proj-detail-inner">
+          <div className="proj-detail-top">
+            <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
+          </div>
+          <div className="proj-detail-tabs">
+            {(['update', 'plan', 'advanced'] as const).map((t) => (
+              <button key={t} className={`proj-sheet-tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
+                {t === 'update' ? 'Update' : t === 'plan' ? 'Plan' : 'Advanced'}
+              </button>
+            ))}
+          </div>
+          <div className="proj-detail-body">
+            {tab === 'update' && <UpdateTab project={project} />}
+            {tab === 'plan' && <PlanTab project={project} strategy={strategy} />}
+            {tab === 'advanced' && <AdvancedTab project={project} onEdit={onEdit} />}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -710,7 +720,7 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
   const { state: winState, save: saveWinState } = useWinState();
   const priorities = useMemo(() => priorityList(strategy), [strategy]);
 
-  const [view, setView] = useState<'projects' | 'scoreboard'>('projects');
+  const [view, setView] = useState<'list' | 'scoreboard' | 'detail'>('list');
   const [groupBy, setGroupBy] = useState<'priority' | 'status'>(() => priorities.length ? 'priority' : 'status');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -735,17 +745,33 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
     })).filter((g) => g.items.length);
   }, [data.projects, groupBy, priorities]);
 
+  // Full-screen detail view — replaces the list entirely (push navigation)
+  if (view === 'detail' && selected) {
+    return (
+      <>
+        <ProjectDetail
+          project={selected}
+          strategy={strategy}
+          onMenu={onMenu}
+          onBack={() => { setView('list'); }}
+          onEdit={() => setEditing(selected)}
+        />
+        {editing && <ProjectModal existing={editing} strategy={strategy} onClose={() => setEditing(null)} />}
+      </>
+    );
+  }
+
   return (
     <>
       <ScreenHeader title="Projects" onMenu={onMenu} />
       <div className="proj-screen">
         <div className="proj-toolbar">
           <div className="seg">
-            <button className={view === 'projects' ? 'on' : ''} onClick={() => setView('projects')}>Projects</button>
+            <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>Projects</button>
             <button className={view === 'scoreboard' ? 'on' : ''} onClick={() => setView('scoreboard')}>Scoreboard</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {view === 'projects' && (
+            {view === 'list' && (
               <div className="seg">
                 <button className={groupBy === 'priority' ? 'on' : ''} onClick={() => setGroupBy('priority')}>Priority</button>
                 <button className={groupBy === 'status' ? 'on' : ''} onClick={() => setGroupBy('status')}>Status</button>
@@ -757,40 +783,35 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
         </div>
 
         <div className="proj-list">
-          {view === 'scoreboard' ? (
-            <ScoreboardView strategy={strategy} winState={winState} saveWinState={saveWinState} />
-          ) : data.projects.length === 0 ? (
-            <div className="proj-empty"><div className="icon">▤</div><p>No projects yet</p></div>
-          ) : groupBy === 'priority' && !priorities.length ? (
-            <div className="proj-empty">
-              <p>Add priorities to group projects by theme.</p>
-              <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditStrategy(true)}>Set up strategy</button>
-            </div>
-          ) : (
-            groups.map((g) => (
-              <React.Fragment key={g.key}>
-                <div className="proj-group-hdr">
-                  <span className="proj-group-name">{g.label}</span>
-                  <span className="proj-group-count">{g.items.length}</span>
-                  <HealthRoll items={g.items} />
-                </div>
-                {g.items.map((p) => (
-                  <ProjectCard key={p.id} project={p} strategy={strategy} onClick={() => setSelectedId(p.id)} />
-                ))}
-              </React.Fragment>
-            ))
-          )}
+          <div className="proj-content-wrap">
+            {view === 'scoreboard' ? (
+              <ScoreboardView strategy={strategy} winState={winState} saveWinState={saveWinState} />
+            ) : data.projects.length === 0 ? (
+              <div className="proj-empty"><div className="icon">▤</div><p>No projects yet</p></div>
+            ) : groupBy === 'priority' && !priorities.length ? (
+              <div className="proj-empty">
+                <p>Add priorities to group projects by theme.</p>
+                <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditStrategy(true)}>Set up strategy</button>
+              </div>
+            ) : (
+              groups.map((g) => (
+                <React.Fragment key={g.key}>
+                  <div className="proj-group-hdr">
+                    <span className="proj-group-name">{g.label}</span>
+                    <span className="proj-group-count">{g.items.length}</span>
+                    <HealthRoll items={g.items} />
+                  </div>
+                  {g.items.map((p) => (
+                    <ProjectCard key={p.id} project={p} strategy={strategy}
+                      onClick={() => { setSelectedId(p.id); setView('detail'); }} />
+                  ))}
+                </React.Fragment>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      {selected && (
-        <ProjectSheet
-          project={selected}
-          strategy={strategy}
-          onClose={() => setSelectedId(null)}
-          onEdit={() => { setEditing(selected); setSelectedId(null); }}
-        />
-      )}
       {creating && <ProjectModal strategy={strategy} onClose={() => setCreating(false)} />}
       {editing && <ProjectModal existing={editing} strategy={strategy} onClose={() => setEditing(null)} />}
       {editStrategy && <StrategyModal strategy={strategy} save={save} onClose={() => setEditStrategy(false)} />}
