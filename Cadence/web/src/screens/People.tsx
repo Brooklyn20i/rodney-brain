@@ -4,29 +4,22 @@ import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
-import { autoColor, AVATAR_COLORS, priorityScore } from '../lib/util';
+import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
-const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const fmtMeetingDate = (iso: string) => {
-  const today = todayISO();
-  const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  if (iso === today) return 'Today';
-  if (iso === tom) return 'Tomorrow';
-  return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit' });
-};
+const fmtNextMtg = (iso: string) =>
+  iso === todayStr() ? 'Today' : iso === addDaysStr(1) ? 'Tomorrow' : fmtWeekDM(iso);
 
 const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
 
 // ── Person create/edit modal ───────────────────────────────────────────────────
 function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose: () => void; groups?: string[] }) {
-  const { insert, update, logActivity } = useCadence();
+  const { data, insert, update, logActivity } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
   const [name, setName] = useState(existing?.name || '');
   const [role, setRole] = useState(existing?.role || '');
@@ -34,7 +27,9 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
   const [notes, setNotes] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
   const [group, setGroup] = useState(existing?.group_name || 'Direct Reports');
-  const [nextMeeting, setNextMeeting] = useState(existing ? (dates[existing.id] || '') : '');
+  const [nextMeeting, setNextMeeting] = useState(
+    existing ? (getNextMeeting(existing.id, data.notes, dates) || '') : ''
+  );
   const [busy, setBusy] = useState(false);
 
   const effective = color || autoColor(name || existing?.name || 'person');
@@ -43,13 +38,36 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
     if (!name.trim()) return;
     setBusy(true);
     try {
-      // The store auto-drops any column the DB doesn't have yet, so this always
-      // saves. The meeting date lives in a notes record (no migration needed).
-      const body = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group } as Partial<Person>;
+      const patch = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group } as Partial<Person>;
       let personId = existing?.id;
-      if (existing) await update('people', existing.id, body);
-      else { const created = await insert('people', body); personId = (created as any)?.id; }
-      if (personId) await setMeetingDate(personId, nextMeeting || null);
+      if (existing) await update('people', existing.id, patch);
+      else { const created = await insert('people', patch); personId = (created as any)?.id; }
+
+      if (personId) {
+        const folder = mtgFolder(personId);
+        const today = todayStr();
+        const upcomingNote = data.notes
+          .filter((n) => { const d = dates[n.id]; return n.folder === folder && !!d && d >= today; })
+          .sort((a, b) => (dates[a.id] || '').localeCompare(dates[b.id] || ''))[0];
+
+        if (nextMeeting) {
+          if (upcomingNote) {
+            await setMeetingDate(upcomingNote.id, nextMeeting);
+          } else {
+            const noteTitle = `1:1 · ${name.trim()} · ${fmtDMY(nextMeeting)}`;
+            let n: Note;
+            try { n = await insert('notes', { title: noteTitle, body: '', folder } as Partial<Note>); }
+            catch (e: any) {
+              if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title: noteTitle, body: '' } as Partial<Note>);
+              else throw e;
+            }
+            await setMeetingDate(n.id, nextMeeting);
+          }
+        } else if (upcomingNote) {
+          await setMeetingDate(upcomingNote.id, null);
+        }
+      }
+
       logActivity(existing ? 'edit_person' : 'add_person', name.trim());
       onClose();
     } finally { setBusy(false); }
@@ -109,9 +127,8 @@ function MeetingNotes({ person }: { person: Person }) {
   );
 
   const newMeeting = async () => {
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const todayLabel = now.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const todayDate = todayStr();
+    const todayLabel = fmtDMY(todayDate);
     const title = `1:1 · ${person.name} · ${todayLabel}`;
     let n: Note;
     try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
@@ -119,8 +136,7 @@ function MeetingNotes({ person }: { person: Person }) {
       if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
       else throw e;
     }
-    // Store today's date keyed to this note — user can change it in the meeting modal
-    try { await setMeetingDate(n.id, todayStr); } catch { /* non-critical */ }
+    try { await setMeetingDate(n.id, todayDate); } catch { /* non-critical */ }
     setOpenId(n.id);
   };
 
@@ -145,7 +161,7 @@ function MeetingNotes({ person }: { person: Person }) {
               : stripHtml(n.body);
             return (
               <button key={n.id} className="mtg-card" onClick={() => setOpenId(n.id)}>
-                <div className="mtg-card-date">{fmtShort(n.created_at)}</div>
+                <div className="mtg-card-date">{fmtDM(n.created_at)}</div>
                 <div className="mtg-card-title">{n.title}</div>
                 <div className="mtg-card-preview">{preview.slice(0, 100) || 'Empty note'}</div>
               </button>
@@ -227,7 +243,7 @@ function InlineNotes({ person }: { person: Person }) {
 function RecentlyDone({ items }: { items: WorkItem[] }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
-  const fmt = (ts: string | null) => ts ? new Date(ts).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' }) : '';
+  const fmt = (ts: string | null) => ts ? fmtDM(ts) : '';
   return (
     <div className="detail-section">
       <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setOpen((o) => !o)}>
@@ -286,10 +302,10 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
             {nextMeeting && (
               <div style={{ fontSize: 12, marginTop: 2 }}>
                 <span style={{
-                  background: nextMeeting === todayISO() ? 'var(--green-bg)' : 'var(--blue-bg)',
-                  color: nextMeeting === todayISO() ? 'var(--green)' : 'var(--accent)',
+                  background: nextMeeting === todayStr() ? 'var(--green-bg)' : 'var(--blue-bg)',
+                  color: nextMeeting === todayStr() ? 'var(--green)' : 'var(--accent)',
                   padding: '1px 7px', borderRadius: 10, fontWeight: 600, fontSize: 11
-                }}>📅 {fmtMeetingDate(nextMeeting)}</span>
+                }}>📅 {fmtNextMtg(nextMeeting)}</span>
               </div>
             )}
           </div>
@@ -410,7 +426,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                               <div className="project-meta">
                                 {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'action item' : 'action items'}
                                 {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
-                                {pMeeting && pMeeting >= todayISO() ? ` · 📅 ${fmtMeetingDate(pMeeting)}` : ''}
+                                {pMeeting ? ` · 📅 ${fmtNextMtg(pMeeting)}` : ''}
                               </div>
                             </div>
                           </button>

@@ -4,7 +4,7 @@ import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem
 import { Modal, Due } from '../components/bits';
 import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { healthIcon, fmtDate, isOverdue } from '../lib/util';
+import { healthIcon, fmtDate, fmtDMY, isOverdue, todayStr } from '../lib/util';
 import {
   readStrategy, priorityList, kpiList, getPillar, getKpi,
   addPriority, renamePriority, removePriority, movePriority,
@@ -13,7 +13,6 @@ import {
 import type { StrategyContent, WinState } from '../lib/strategy';
 
 const WIN_STATE_TITLE = '__win_state__';
-const todayISO = () => new Date().toISOString().slice(0, 10);
 
 function useStrategy() {
   const { data, insert, update } = useCadence();
@@ -126,7 +125,7 @@ function KpiScorecard({ kpi, readings, projects, strategy, onAdd }: {
   strategy: StrategyContent;
   onAdd: (r: { date: string; value: number }) => void;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(todayStr());
   const [val, setVal] = useState('');
   const latest = readings.length ? readings[readings.length - 1] : null;
   const prev = readings.length > 1 ? readings[readings.length - 2] : null;
@@ -286,7 +285,7 @@ function UpdateTab({ project }: { project: Project }) {
         ? updates.map((u) => (
           <div className="update-row" key={u.id}>
             <div className="ur-date">
-              {new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {fmtDMY(u.created_at)}
               {u.health ? ' · ' + healthIcon(u.health) : ''}
             </div>
             <div className="ur-text">{u.text}</div>

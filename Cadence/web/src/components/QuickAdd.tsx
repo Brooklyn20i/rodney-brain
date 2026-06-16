@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import type { ItemType, Priority, WorkItem } from '../lib/types';
+import { localDateStr } from '../lib/util';
 import { ItemModal } from './ItemModal';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -25,9 +26,6 @@ const TYPE_LABELS: Record<ItemType, string> = {
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
 const DAY_SHORT = ['sun','mon','tue','wed','thu','fri','sat'];
 
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function parseInput(
   raw: string,
@@ -58,18 +56,18 @@ function parseInput(
   // Date
   const today = new Date();
   if (/\btoday\b/.test(low)) {
-    due_date = isoDate(today); dateLabel = 'Today';
+    due_date = localDateStr(today); dateLabel = 'Today';
   } else if (/\btomorrow\b/.test(low)) {
     const d = new Date(today); d.setDate(d.getDate() + 1);
-    due_date = isoDate(d); dateLabel = 'Tomorrow';
+    due_date = localDateStr(d); dateLabel = 'Tomorrow';
   } else if (/\bend of (the )?week\b/.test(low)) {
     const d = new Date(today);
     const toFri = (5 - d.getDay() + 7) % 7 || 5;
     d.setDate(d.getDate() + toFri);
-    due_date = isoDate(d); dateLabel = 'End of week';
+    due_date = localDateStr(d); dateLabel = 'End of week';
   } else if (/\bnext week\b/.test(low)) {
     const d = new Date(today); d.setDate(d.getDate() + 7);
-    due_date = isoDate(d); dateLabel = 'Next week';
+    due_date = localDateStr(d); dateLabel = 'Next week';
   } else {
     const dm = low.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/);
     if (dm) {
@@ -81,7 +79,7 @@ function parseInput(
         let diff = idx - d.getDay();
         if (diff <= 0) diff += 7;
         d.setDate(d.getDate() + diff);
-        due_date = isoDate(d);
+        due_date = localDateStr(d);
         dateLabel = name.charAt(0).toUpperCase() + name.slice(1);
       }
     }

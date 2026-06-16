@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { fmtHeaderDate, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useCadence } from '../lib/store';
 import type { Note, OutboxEmail, Person } from '../lib/types';
 import type { MeetingData } from './MeetingNoteModal';
@@ -7,9 +8,7 @@ type Tab = 'full' | 'actions' | 'agenda' | 'onenote';
 
 // ── Plain text generator (for native share + fallback clipboard) ──────────────
 function generatePlainText(data: MeetingData, title: string, person: Person, createdAt: string, tab: Tab): string {
-  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
+  const dateStr = fmtHeaderDate(createdAt);
   const firstName = person.name.split(' ')[0];
   const lines: string[] = [title, dateStr, ''];
 
@@ -30,7 +29,7 @@ function generatePlainText(data: MeetingData, title: string, person: Person, cre
     lines.push('ACTION ITEMS', '');
     data.actions.forEach((a) => {
       const owner = a.owner === 'me' ? 'Rodney' : firstName;
-      const due = a.due ? ` — Due ${new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : '';
+      const due = a.due ? ` — Due ${fmtDM(a.due)}` : '';
       lines.push(`${a.done ? '✓' : '☐'} ${a.title}`);
       lines.push(`   ${owner}${due}`);
     });
@@ -48,10 +47,8 @@ function generatePlainText(data: MeetingData, title: string, person: Person, cre
 
 // ── Rich HTML generator (for desktop clipboard + download) ────────────────────
 function generateHtml(data: MeetingData, title: string, person: Person, createdAt: string, tab: Tab): string {
-  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-  const generatedOn = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = fmtHeaderDate(createdAt);
+  const generatedOn = fmtDMY(todayStr());
   const firstName = person.name.split(' ')[0];
 
   const sectionHead = (label: string) =>
@@ -87,7 +84,7 @@ function generateHtml(data: MeetingData, title: string, person: Person, createdA
       const ownerColor = isMe ? '#6B3FA0' : '#1A7F37';
       const ownerBg = isMe ? '#F3EEFA' : '#EDFAF1';
       const borderColor = isMe ? '#1B5E9E' : '#217346';
-      const dueStr = a.due ? new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      const dueStr = a.due ? fmtDMY(a.due) : '';
       return `<div style="display:flex;gap:10px;padding:9px 12px;border-radius:7px;background:#F8F8F6;border-left:3px solid ${borderColor};margin-bottom:8px;align-items:flex-start;">
         <span style="background:${ownerBg};color:${ownerColor};font-family:Calibri,Segoe UI,sans-serif;font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;flex-shrink:0;margin-top:2px;">${ownerName}</span>
         <div>
@@ -117,7 +114,7 @@ function generateHtml(data: MeetingData, title: string, person: Person, createdA
 
 // ── OneNote table-cell generator (compact fragment, not a full document) ───────
 function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: string): string {
-  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = fmtDMY(createdAt);
   const firstName = person.name.split(' ')[0];
   const f = 'font-family:Calibri,Segoe UI,sans-serif;';
   const parts: string[] = [];
@@ -144,7 +141,7 @@ function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: strin
     parts.push(`<ul style="${f}font-size:13px;margin:0;padding-left:18px;">`);
     data.actions.forEach((a) => {
       const owner = a.owner === 'me' ? 'Rodney' : firstName;
-      const due = a.due ? ` (Due ${new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : '';
+      const due = a.due ? ` (Due ${fmtDM(a.due)})` : '';
       parts.push(`<li>${a.done ? '✓' : '☐'} <b>${owner}</b> — ${a.title}${due}</li>`);
     });
     parts.push('</ul>');
@@ -154,7 +151,7 @@ function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: strin
 }
 
 function generateOneNotePlain(data: MeetingData, person: Person, createdAt: string): string {
-  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = fmtDMY(createdAt);
   const firstName = person.name.split(' ')[0];
   const lines: string[] = [dateStr, ''];
 
@@ -169,7 +166,7 @@ function generateOneNotePlain(data: MeetingData, person: Person, createdAt: stri
     lines.push('', 'Actions');
     data.actions.forEach((a) => {
       const owner = a.owner === 'me' ? 'Rodney' : firstName;
-      const due = a.due ? ` (Due ${new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : '';
+      const due = a.due ? ` (Due ${fmtDM(a.due)})` : '';
       lines.push(`${a.done ? '✓' : '☐'} ${owner} — ${a.title}${due}`);
     });
   }

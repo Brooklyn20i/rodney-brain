@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
+import { localDateStr } from '../lib/util';
 
 // Brings any older Cadence database fully up to date (folds in migrations
 // 0004/0006/0007). Idempotent — safe to run as many times as you like.
@@ -91,7 +92,7 @@ end $rt$;
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 function exportBackup(data: ReturnType<typeof useCadence>['data']) {
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = localDateStr();
   const backup = {
     exported_at: new Date().toISOString(),
     version: '1.0',

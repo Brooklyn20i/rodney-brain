@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { todayStr, fmtDM, fmtWeekDMY, fmtDMY } from '../lib/util';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { RichEditor } from './RichEditor';
@@ -38,10 +39,6 @@ export function parseMeeting(body: string): { data: MeetingData; isLegacy: boole
   return { data: { agenda: [], actions: [], notes: body }, isLegacy: true };
 }
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
-const fmtShort = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
 
 // ── Agenda item row ───────────────────────────────────────────────────────────
 function AgendaItemRow({ item, onChange, onDelete }: {
@@ -148,7 +145,7 @@ function CarryForwardRow({ item, personName, onMarkDone }: {
           </span>
           {item.due && (
             <span className={isLate ? 'due-late-label' : 'due-normal-label'}>
-              {isLate ? 'Overdue · ' : ''}{fmtShort(item.due)}
+              {isLate ? 'Overdue · ' : ''}{fmtDM(item.due)}
             </span>
           )}
         </div>
@@ -180,12 +177,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
   const [meetingDate, setLocalMeetingDate] = useState(
-    dates[note.id] || new Date().toISOString().slice(0, 10)
+    dates[note.id] || todayStr()
   );
   const [dateErr, setDateErr] = useState('');
 
   // Keep the input in sync if the stored date changes elsewhere.
-  useEffect(() => { setLocalMeetingDate(dates[note.id] || ''); }, [dates, note.id]);
+  useEffect(() => { setLocalMeetingDate(dates[note.id] || todayStr()); }, [dates, note.id]);
 
   const updateMeetingDate = async (date: string) => {
     setLocalMeetingDate(date);
@@ -194,8 +191,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     // Auto-update the note title when it follows the "1:1 · Name · DD/MM/YYYY" pattern
     const prefix = `1:1 · ${person.name} · `;
     if (date && title.startsWith(prefix)) {
-      const [y, m, d] = date.split('-');
-      const newTitle = `${prefix}${d}/${m}/${y}`;
+      const newTitle = `${prefix}${fmtDMY(date)}`;
       setTitle(newTitle);
       update('notes', note.id, { title: newTitle } as Partial<Note>);
     }
@@ -313,6 +309,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const deleteNote = async () => {
     if (!confirm('Delete this meeting note?')) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    try { await setMeetingDate(note.id, null); } catch { /* best-effort cleanup */ }
     await remove('notes', note.id);
     onClose();
   };
@@ -344,7 +341,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                     <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}>
-                      📅 {meetingDate ? fmtDate(meetingDate + 'T12:00:00') : 'Set date'}
+                      📅 {meetingDate ? fmtWeekDMY(meetingDate) : 'Set date'}
                     </span>
                     <input
                       type="date"
@@ -462,7 +459,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               {carryForward.length > 0 && (
                 <>
                   <div className="mtg-section-sep">
-                    Carry-forward · {prevMeeting ? fmtShort(prevMeeting.created_at) : 'last meeting'}
+                    Carry-forward · {prevMeeting ? fmtDM(prevMeeting.created_at) : 'last meeting'}
                   </div>
                   {carryForward.map((cf) => (
                     <CarryForwardRow key={cf.id} item={cf} personName={person.name}
@@ -492,12 +489,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           <div className="mtg-footer-nav">
             {prevNote && (
               <button className="btn btn-secondary btn-sm" onClick={() => handleNavigate(prevNote.id)}>
-                ← {fmtShort(prevNote.created_at)}
+                ← {fmtDM(prevNote.created_at)}
               </button>
             )}
             {nextNote && (
               <button className="btn btn-secondary btn-sm" onClick={() => handleNavigate(nextNote.id)}>
-                {fmtShort(nextNote.created_at)} →
+                {fmtDM(nextNote.created_at)} →
               </button>
             )}
           </div>

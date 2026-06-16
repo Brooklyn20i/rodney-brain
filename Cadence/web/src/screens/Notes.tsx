@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note } from '../lib/types';
 import { ScreenHeader } from '../components/bits';
+import { fmtDM } from '../lib/util';
 import { RichEditor } from '../components/RichEditor';
 
 const folderOf = (n: Note) => (n.folder || '').trim();
@@ -83,7 +84,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const NoteRow = (n: Note) => (
     <button className={`note-list-item ${selected === n.id ? 'selected' : ''}`} key={n.id} onClick={() => selectNote(n)}>
       <div className="nli-title">{n.title || 'Untitled note'}</div>
-      <div className="nli-sub">{new Date(n.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {stripHtml(n.body)}</div>
+      <div className="nli-sub">{fmtDM(n.updated_at)} · {stripHtml(n.body)}</div>
     </button>
   );
 

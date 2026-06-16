@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import { priorityScore, isOverdue, isDueToday, autoColor } from '../lib/util';
+import { priorityScore, isOverdue, isDueToday, autoColor, todayStr, addDaysStr, fmtWeekDM, fmtHeaderDate } from '../lib/util';
 import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
@@ -9,11 +9,9 @@ import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const fmtMtgDay = (iso: string) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  if (iso === today) return 'Today';
-  if (iso === tom) return 'Tomorrow';
-  return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  if (iso === todayStr()) return 'Today';
+  if (iso === addDaysStr(1)) return 'Tomorrow';
+  return fmtWeekDM(iso);
 };
 
 function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
@@ -58,8 +56,8 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
   const view = useMemo(() => {
     const active = data.work_items.filter((w) => !w.done);
     const scored = [...active].sort((a, b) => priorityScore(b) - priorityScore(a));
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const todayDate = todayStr();
+    const nextWeekStr = addDaysStr(7);
     return {
       focus: scored[0],
       top3: scored.slice(0, 3),
@@ -72,18 +70,18 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       ] as { id: string; title: string }[],
       oneOnOnes: data.people
         .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
-        .filter(({ mtg }) => mtg && mtg >= todayStr && mtg <= nextWeekStr)
+        .filter(({ mtg }) => mtg && mtg >= todayDate && mtg <= nextWeekStr)
         .map(({ p, mtg }) => ({
           person: p,
           meeting: mtg as string,
           openTopics: data.work_items.filter((w) => w.person_id === p.id && !w.done).length,
-          isToday: mtg === todayStr,
+          isToday: mtg === todayDate,
         }))
         .sort((a, b) => a.meeting.localeCompare(b.meeting)),
     };
   }, [data, dates]);
 
-  const dateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateLabel = fmtHeaderDate(todayStr());
 
   return (
     <>

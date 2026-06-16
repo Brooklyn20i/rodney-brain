@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { OutboxEmail, EmailStatus } from '../lib/types';
 import { EmptyState, ScreenHeader, Modal } from '../components/bits';
+import { fmtDMY } from '../lib/util';
 
 function Compose({ existing, onClose }: { existing?: OutboxEmail; onClose: () => void }) {
   const { data, insert, update, logActivity } = useCadence();
@@ -93,7 +94,7 @@ export function Outbox({ onMenu }: { onMenu?: () => void }) {
                     {m.status === 'queued' && <button className="btn btn-secondary btn-sm" onClick={() => setEditing(m)}>Edit</button>}
                     {m.status !== 'sent' && <button className="btn btn-danger btn-sm" onClick={() => remove('outbox', m.id)}>Delete</button>}
                   </div>
-                  {m.status === 'sent' && m.sent_at && <div className="card-meta">Sent {new Date(m.sent_at).toLocaleString('en-GB')}{m.sent_via ? ' · ' + m.sent_via : ''}</div>}
+                  {m.status === 'sent' && m.sent_at && <div className="card-meta">Sent {fmtDMY(m.sent_at)} {new Date(m.sent_at).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}{m.sent_via ? ' · ' + m.sent_via : ''}</div>}
                 </div>
               ))}
             </React.Fragment>

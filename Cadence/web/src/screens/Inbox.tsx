@@ -4,10 +4,7 @@ import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
-import { todayStr, priorityScore } from '../lib/util';
-
-// Date helpers for bucketing
-const addDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+import { todayStr, addDaysStr, priorityScore } from '../lib/util';
 
 type BucketKey = 'overdue' | 'today' | 'week' | 'later' | 'none';
 const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
@@ -23,7 +20,7 @@ function bucketOf(due: string | null): BucketKey {
   const today = todayStr();
   if (due < today) return 'overdue';
   if (due === today) return 'today';
-  if (due <= addDays(7)) return 'week';
+  if (due <= addDaysStr(7)) return 'week';
   return 'later';
 }
 

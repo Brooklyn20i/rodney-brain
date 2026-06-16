@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
-import { isOverdue } from '../lib/util';
+import { isOverdue, fmtHeaderDate, todayStr } from '../lib/util';
 
 export function Review({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
@@ -27,7 +27,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     { title: '📅 Next Week', items: ['Schedule focus time for top 3 priorities', 'Block time for deep work', 'Review upcoming deadlines'] },
   ];
 
-  const dateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateLabel = fmtHeaderDate(todayStr());
 
   return (
     <>

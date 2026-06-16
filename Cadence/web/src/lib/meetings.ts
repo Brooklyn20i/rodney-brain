@@ -1,20 +1,19 @@
-// Next 1:1 meeting dates.
+// Next 1:1 meeting dates — stored in a single synced `notes` record titled
+// `__meeting_dates__` as a JSON map { [noteId]: "YYYY-MM-DD" }.
 //
-// Stored in a single synced `notes` record (title `__meeting_dates__`) as a JSON
-// map. Keys are either:
-//   - a note ID  → date set via the meeting modal for that specific meeting note
-//   - a person ID → manual date set via the PersonModal "Next 1:1" field
+// Keys are note IDs (the ID of the meeting-note itself). Person-ID-keyed entries
+// written by older versions of the app are silently ignored — they will expire
+// naturally and no longer appear in the UI.
 //
-// "Next meeting" for a person = earliest future date across all their meeting
-// notes + any manual override. Deleting a meeting note automatically drops it
-// from the calculation (the note is gone so we skip its key).
+// getNextMeeting() returns the soonest FUTURE date across all of a person's
+// meeting notes. If all dates are in the past (or none exist), returns null.
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useCadence } from './store';
 import type { Note } from './types';
+import { todayStr } from './util';
 
 export const MEETING_DATES_NOTE_TITLE = '__meeting_dates__';
-
 export type MeetingDates = Record<string, string>;
 
 export function readMeetingDates(
@@ -37,15 +36,14 @@ export function readMeetingDates(
   return {};
 }
 
-// Returns the earliest upcoming date for a person, considering:
-//  • all meeting notes for that person that have a date in the map
-//  • any manual date stored under personId (from PersonModal)
+// Returns the earliest upcoming date for a person, considering only meeting
+// notes in that person's folder. Returns null when nothing is upcoming.
 export function getNextMeeting(
   personId: string,
   allNotes: Note[],
   dateMap: MeetingDates,
 ): string | null {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   const folder = `__mtg__${personId}`;
   const candidates: string[] = [];
 
@@ -55,31 +53,37 @@ export function getNextMeeting(
     }
   }
 
-  // Also include any manual date set on the person directly
-  if (dateMap[personId]) candidates.push(dateMap[personId]);
-
   const future = candidates.filter((d) => d >= today).sort();
   return future[0] || null;
 }
 
 export function useMeetingDates() {
   const { data, insert, update } = useCadence();
-  const note = useMemo(
+
+  const metaNote = useMemo(
     () =>
       data.notes
         .filter((n) => n.title === MEETING_DATES_NOTE_TITLE)
         .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0],
     [data.notes],
   );
+
   const dates = useMemo(() => readMeetingDates(data.notes), [data.notes]);
 
-  // key can be a noteId (for meeting modal) or personId (for PersonModal)
-  const setMeetingDate = async (key: string, date: string | null) => {
-    const next = { ...dates };
-    if (date) next[key] = date;
-    else delete next[key];
+  // Always holds the latest dates map so concurrent setMeetingDate calls don't
+  // clobber each other with a stale snapshot from the previous render cycle.
+  const datesRef = useRef<MeetingDates>({});
+  datesRef.current = dates;
+
+  const setMeetingDate = async (noteId: string, date: string | null) => {
+    const next = { ...datesRef.current };
+    if (date) next[noteId] = date;
+    else delete next[noteId];
+    // Optimistically update the ref so back-to-back calls see fresh state
+    // before React re-renders.
+    datesRef.current = next;
     const body = JSON.stringify(next);
-    if (note) await update('notes', note.id, { body } as any);
+    if (metaNote) await update('notes', metaNote.id, { body } as any);
     else await insert('notes', { title: MEETING_DATES_NOTE_TITLE, body } as any);
   };
 
