@@ -116,14 +116,14 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
 // ── Meeting notes list ─────────────────────────────────────────────────────────
 function MeetingNotes({ person }: { person: Person }) {
   const { data, insert } = useCadence();
-  const { setMeetingDate } = useMeetingDates();
+  const { dates, setMeetingDate } = useMeetingDates();
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(person.id);
   const meetings = useMemo(() =>
     data.notes.filter((n) => n.folder === folder)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at)),
-    [data.notes, folder]
+      .sort((a, b) => (dates[b.id] || b.created_at).localeCompare(dates[a.id] || a.created_at)),
+    [data.notes, folder, dates]
   );
 
   const newMeeting = async () => {
@@ -161,7 +161,7 @@ function MeetingNotes({ person }: { person: Person }) {
               : stripHtml(n.body);
             return (
               <button key={n.id} className="mtg-card" onClick={() => setOpenId(n.id)}>
-                <div className="mtg-card-date">{fmtDM(n.created_at)}</div>
+                <div className="mtg-card-date">{fmtDM(dates[n.id] || n.created_at)}</div>
                 <div className="mtg-card-title">{n.title}</div>
                 <div className="mtg-card-preview">{preview.slice(0, 100) || 'Empty note'}</div>
               </button>
