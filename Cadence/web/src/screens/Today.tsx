@@ -5,6 +5,7 @@ import type { WorkItem } from '../lib/types';
 import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
+import { useMeetingDates } from '../lib/meetings';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const fmtMtgDay = (iso: string) => {
@@ -50,6 +51,7 @@ function RowCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) 
 
 export function Today({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
+  const { dates } = useMeetingDates();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -69,15 +71,17 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
       ] as { id: string; title: string }[],
       oneOnOnes: data.people
-        .filter((p) => p.next_meeting && p.next_meeting >= todayStr && p.next_meeting <= nextWeekStr)
-        .map((p) => ({
+        .map((p) => ({ p, mtg: dates[p.id] || null }))
+        .filter(({ mtg }) => mtg && mtg >= todayStr && mtg <= nextWeekStr)
+        .map(({ p, mtg }) => ({
           person: p,
+          meeting: mtg as string,
           openTopics: data.work_items.filter((w) => w.person_id === p.id && !w.done).length,
-          isToday: p.next_meeting === todayStr,
+          isToday: mtg === todayStr,
         }))
-        .sort((a, b) => (a.person.next_meeting || '').localeCompare(b.person.next_meeting || '')),
+        .sort((a, b) => a.meeting.localeCompare(b.meeting)),
     };
-  }, [data]);
+  }, [data, dates]);
 
   const dateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -114,7 +118,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
         {view.oneOnOnes.length > 0 && (
           <Section title="1:1s This Week" count={view.oneOnOnes.length} color="var(--green)">
-            {view.oneOnOnes.map(({ person, openTopics, isToday }) => (
+            {view.oneOnOnes.map(({ person, meeting, openTopics, isToday }) => (
               <div key={person.id} className="card card-compact">
                 <div className="card-row">
                   <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 30, height: 30, fontSize: 11, lineHeight: '30px', flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
@@ -127,7 +131,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
                         background: isToday ? 'var(--green-bg)' : 'var(--surface2)',
                         color: isToday ? 'var(--green)' : 'var(--text2)',
                         padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600
-                      }}>📅 {fmtMtgDay(person.next_meeting!)}</span>
+                      }}>📅 {fmtMtgDay(meeting)}</span>
                       {openTopics > 0 && <span className="tag tag-info">{openTopics} action item{openTopics !== 1 ? 's' : ''}</span>}
                     </div>
                   </div>

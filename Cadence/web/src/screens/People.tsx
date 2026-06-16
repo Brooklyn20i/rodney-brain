@@ -5,6 +5,7 @@ import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore } from '../lib/util';
+import { useMeetingDates } from '../lib/meetings';
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -26,13 +27,14 @@ const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
 // ── Person create/edit modal ───────────────────────────────────────────────────
 function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose: () => void; groups?: string[] }) {
   const { insert, update, logActivity } = useCadence();
+  const { dates, setMeetingDate } = useMeetingDates();
   const [name, setName] = useState(existing?.name || '');
   const [role, setRole] = useState(existing?.role || '');
   const [email, setEmail] = useState(existing?.email || '');
   const [notes, setNotes] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
   const [group, setGroup] = useState(existing?.group_name || 'Direct Reports');
-  const [nextMeeting, setNextMeeting] = useState(existing?.next_meeting || '');
+  const [nextMeeting, setNextMeeting] = useState(existing ? (dates[existing.id] || '') : '');
   const [busy, setBusy] = useState(false);
 
   const effective = color || autoColor(name || existing?.name || 'person');
@@ -41,27 +43,13 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const full = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group, next_meeting: nextMeeting || null } as Partial<Person>;
-      const write = async (body: Partial<Person>) => {
-        if (existing) await update('people', existing.id, body);
-        else await insert('people', body);
-      };
-      try { await write(full); }
-      catch (e: any) {
-        const msg = String(e?.message || e);
-        if (/next_meeting/i.test(msg) || /column .+ does not exist/i.test(msg)) {
-          // next_meeting column not yet migrated — retry without it
-          const { next_meeting: _, ...withoutMtg } = full as any;
-          try { await write(withoutMtg); }
-          catch (e2: any) {
-            if (/color/i.test(String(e2?.message || e2))) {
-              const { color: __, ...base } = withoutMtg; await write(base);
-            } else throw e2;
-          }
-        } else if (/color/i.test(msg)) {
-          const { color: _omit, ...noColor } = full as any; await write(noColor);
-        } else throw e;
-      }
+      // The store auto-drops any column the DB doesn't have yet, so this always
+      // saves. The meeting date lives in a notes record (no migration needed).
+      const body = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group } as Partial<Person>;
+      let personId = existing?.id;
+      if (existing) await update('people', existing.id, body);
+      else { const created = await insert('people', body); personId = (created as any)?.id; }
+      if (personId) await setMeetingDate(personId, nextMeeting || null);
       logActivity(existing ? 'edit_person' : 'add_person', name.trim());
       onClose();
     } finally { setBusy(false); }
@@ -109,7 +97,8 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
 
 // ── Meeting notes list ─────────────────────────────────────────────────────────
 function MeetingNotes({ person }: { person: Person }) {
-  const { data, insert, update } = useCadence();
+  const { data, insert } = useCadence();
+  const { setMeetingDate } = useMeetingDates();
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(person.id);
@@ -130,9 +119,8 @@ function MeetingNotes({ person }: { person: Person }) {
       if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
       else throw e;
     }
-    // Pre-set next_meeting to today — user can change it in the meeting modal
-    try { await update('people', person.id, { next_meeting: todayStr } as any); }
-    catch { /* migration may not have run yet */ }
+    // Pre-set the next 1:1 to today — user can change it in the meeting modal
+    try { await setMeetingDate(person.id, todayStr); } catch { /* non-critical */ }
     setOpenId(n.id);
   };
 
@@ -262,6 +250,8 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
 // ── Person detail panel ────────────────────────────────────────────────────────
 function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
   const { data, insert, logActivity } = useCadence();
+  const { dates } = useMeetingDates();
+  const nextMeeting = dates[person.id] || null;
   const [tab, setTab] = useState<'topics' | 'meetings'>('topics');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
@@ -293,13 +283,13 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
           <div style={{ minWidth: 0 }}>
             <h3 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name}</h3>
             {person.role && <div style={{ fontSize: 12, color: 'var(--text2)' }}>{person.role}</div>}
-            {person.next_meeting && (
+            {nextMeeting && (
               <div style={{ fontSize: 12, marginTop: 2 }}>
                 <span style={{
-                  background: person.next_meeting === todayISO() ? 'var(--green-bg)' : 'var(--blue-bg)',
-                  color: person.next_meeting === todayISO() ? 'var(--green)' : 'var(--accent)',
+                  background: nextMeeting === todayISO() ? 'var(--green-bg)' : 'var(--blue-bg)',
+                  color: nextMeeting === todayISO() ? 'var(--green)' : 'var(--accent)',
                   padding: '1px 7px', borderRadius: 10, fontWeight: 600, fontSize: 11
-                }}>📅 {fmtMeetingDate(person.next_meeting)}</span>
+                }}>📅 {fmtMeetingDate(nextMeeting)}</span>
               </div>
             )}
           </div>
@@ -351,6 +341,7 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
 
 export function People({ onMenu }: { onMenu?: () => void }) {
   const { data, update } = useCadence();
+  const { dates } = useMeetingDates();
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
@@ -409,6 +400,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                     {gPeople.map((p, idx) => {
                       const openCount = data.work_items.filter(w => w.person_id === p.id && !w.done).length;
                       const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
+                      const pMeeting = dates[p.id] || null;
                       return (
                         <div key={p.id} className="person-list-row">
                           <button className={`person-item${selected === p.id ? ' selected' : ''}`} onClick={() => setSelected(p.id)}>
@@ -418,7 +410,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                               <div className="project-meta">
                                 {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'action item' : 'action items'}
                                 {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
-                                {p.next_meeting && p.next_meeting >= todayISO() ? ` · 📅 ${fmtMeetingDate(p.next_meeting)}` : ''}
+                                {pMeeting && pMeeting >= todayISO() ? ` · 📅 ${fmtMeetingDate(pMeeting)}` : ''}
                               </div>
                             </div>
                           </button>

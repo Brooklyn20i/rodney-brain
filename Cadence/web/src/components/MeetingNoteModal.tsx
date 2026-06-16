@@ -3,6 +3,7 @@ import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
+import { useMeetingDates } from '../lib/meetings';
 
 // ── Data model stored as JSON in note.body ────────────────────────────────────
 export interface AgendaItem {
@@ -167,6 +168,7 @@ interface Props {
 
 export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigate }: Props) {
   const { data, update, insert, remove, logActivity } = useCadence();
+  const { dates, setMeetingDate } = useMeetingDates();
 
   const { data: parsed, isLegacy } = useMemo(() => parseMeeting(note.body), [note.id]);
   const [agenda, setAgenda] = useState<AgendaItem[]>(parsed.agenda);
@@ -177,23 +179,20 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
-  const [meetingDate, setMeetingDate] = useState(
-    (person as any).next_meeting || new Date().toISOString().slice(0, 10)
+  const [meetingDate, setLocalMeetingDate] = useState(
+    dates[person.id] || new Date().toISOString().slice(0, 10)
   );
   const [dateErr, setDateErr] = useState('');
 
+  // Keep the input in sync if the stored date changes elsewhere.
+  useEffect(() => { setLocalMeetingDate(dates[person.id] || ''); }, [dates, person.id]);
+
   const updateMeetingDate = async (date: string) => {
-    setMeetingDate(date);
+    setLocalMeetingDate(date);
     setDateErr('');
-    try { await update('people', person.id, { next_meeting: date || null } as any); }
-    catch (e: any) {
-      const msg = String(e?.message || e || '');
-      if (/column|next_meeting|does not exist/i.test(msg)) {
-        setDateErr('Date not saved — go to Settings → Database Setup → Copy SQL and run it in Supabase, then try again');
-      } else {
-        setDateErr('Could not save date — check connection');
-      }
-    }
+    // Stored in a notes record (no DB migration needed), so this always persists.
+    try { await setMeetingDate(person.id, date || null); }
+    catch { setDateErr('Could not save date — check connection'); }
   };
 
   // Refs always hold the latest state — used by the debounced save to avoid
