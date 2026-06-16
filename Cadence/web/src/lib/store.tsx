@@ -100,7 +100,9 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => { await supabase.auth.signOut(); };
 
   const insert = async <K extends Table>(table: K, row: Partial<Row<K>>) => {
-    const { data: d, error } = await supabase.from(table as string).insert(row as any).select().single();
+    // Always include owner_id so tables that lack DEFAULT auth.uid() still work
+    const ownedRow = session?.user?.id ? { owner_id: session.user.id, ...row } : row;
+    const { data: d, error } = await supabase.from(table as string).insert(ownedRow as any).select().single();
     if (error) throw error;
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
     return d as Row<K>;

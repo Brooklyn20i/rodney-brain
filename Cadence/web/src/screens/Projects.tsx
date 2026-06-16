@@ -325,6 +325,8 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
   const [mTitle, setMTitle] = useState('');
   const [mDate, setMDate] = useState('');
   const [mErr, setMErr] = useState('');
+  const [nextAction, setNextAction] = useState(project.next_action || '');
+  useEffect(() => { setNextAction(project.next_action || ''); }, [project.next_action]);
   const pct = milestones.length ? Math.round(milestones.filter((m) => m.done).length / milestones.length * 100) : 0;
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
   const linkedKpis = (project.kpi_ids || []).map((id) => getKpi(strategy, id)?.name).filter(Boolean);
@@ -350,11 +352,17 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
 
       {project.goal && <p style={{ fontStyle: 'italic', color: 'var(--text2)', fontSize: 14, marginBottom: 14, lineHeight: 1.5 }}>{project.goal}</p>}
 
-      {project.next_action && (
-        <div style={{ background: 'var(--blue-bg)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 14 }}>
-          <strong>Next:</strong> {project.next_action}
-        </div>
-      )}
+      <div style={{ background: 'var(--blue-bg)', borderRadius: 8, padding: '8px 12px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <strong style={{ fontSize: 13, color: 'var(--accent)', flexShrink: 0 }}>→ Next:</strong>
+        <input
+          type="text"
+          value={nextAction}
+          placeholder="The single next step…"
+          onChange={(e) => setNextAction(e.target.value)}
+          onBlur={() => update('projects', project.id, { next_action: nextAction } as Partial<Project>)}
+          style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 14, color: 'var(--text)', outline: 'none', fontFamily: 'inherit', minWidth: 0 }}
+        />
+      </div>
 
       {milestones.length > 0 && (
         <div style={{ marginBottom: 16 }}>
