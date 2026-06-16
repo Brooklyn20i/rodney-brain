@@ -201,6 +201,25 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .proj-group-count { font-size: 11px; font-weight: 700; color: var(--text3); background: var(--surface2); border-radius: 10px; padding: 0 7px; }
 .proj-roll { display: inline-flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
 .proj-hint { padding: 24px 16px; text-align: center; color: var(--text3); font-size: 13px; }
+
+/* ── KPI Scoreboard ── */
+.kpi-scorecard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+.kpi-sc-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.kpi-sc-name { font-size: 15px; font-weight: 700; flex: 1; }
+.kpi-sc-target { font-size: 12px; color: var(--text3); }
+.kpi-sc-val { font-size: 18px; font-weight: 700; color: var(--text); margin-left: auto; }
+.kpi-trend { font-size: 13px; font-weight: 600; margin-left: 4px; }
+.kpi-trend.up { color: var(--green); }
+.kpi-trend.down { color: var(--red); }
+.kpi-sc-projects { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.kpi-sc-proj { font-size: 12px; color: var(--text2); background: var(--surface2); border-radius: 6px; padding: 2px 8px; }
+.kpi-sc-log { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.kpi-sc-log input { flex: 1; min-width: 80px; }
+.kpi-sc-history { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.kpi-sc-reading { font-size: 11px; color: var(--text3); background: var(--surface2); border-radius: 4px; padding: 2px 6px; }
+
+/* ── Project detail: advanced toggle ── */
+.proj-advanced-toggle { display: block; width: 100%; text-align: center; color: var(--text3); font-size: 12px; padding: 10px; border-radius: var(--radius); margin: 4px 0 12px; }
 .priority-edit-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .priority-edit-row input { flex: 1; }
 

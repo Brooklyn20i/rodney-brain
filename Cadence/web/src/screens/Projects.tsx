@@ -5,13 +5,15 @@ import { ScreenHeader, Modal, Due } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { healthIcon, fmtDate, isOverdue } from '../lib/util';
 import {
-  readStrategy, priorityList, getPillar, addPriority, renamePriority, removePriority,
-  movePriority, STRATEGY_NOTE_TITLE,
+  readStrategy, priorityList, kpiList, getPillar, getKpi,
+  addPriority, renamePriority, removePriority, movePriority,
+  STRATEGY_NOTE_TITLE, uid, emptyWinState,
 } from '../lib/strategy';
-import type { StrategyContent } from '../lib/strategy';
+import type { StrategyContent, WinState } from '../lib/strategy';
 
-// The strategy note (private, synced) holds the user's aspiration + priorities.
-// Projects is now the single home for strategy — no separate WIN screen.
+const WIN_STATE_TITLE = '__win_state__';
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 function useStrategy() {
   const { data, insert, update } = useCadence();
   const note = useMemo(() => data.notes.filter((n) => n.title === STRATEGY_NOTE_TITLE)
@@ -25,20 +27,51 @@ function useStrategy() {
   return { strategy, save };
 }
 
+function useWinState() {
+  const { data, insert, update } = useCadence();
+  const note = useMemo(() => data.notes.filter((n) => n.title === WIN_STATE_TITLE)
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0], [data.notes]);
+  const state: WinState = useMemo(() => {
+    if (!note) return emptyWinState();
+    try { return { ...emptyWinState(), ...JSON.parse(note.body || '{}') }; }
+    catch { return emptyWinState(); }
+  }, [note]);
+  const save = (mut: (s: WinState) => WinState) => {
+    const body = JSON.stringify(mut(state));
+    if (note) update('notes', note.id, { body } as Partial<Note>);
+    else insert('notes', { title: WIN_STATE_TITLE, body } as Partial<Note>);
+  };
+  return { state, save };
+}
+
+// ── Priorities + KPI editor modal ──────────────────────────────────────────
 function PrioritiesModal({ strategy, save, onClose }: { strategy: StrategyContent; save: (s: StrategyContent) => void; onClose: () => void }) {
-  const [aspiration, setAspiration] = useState(strategy.aspiration || '');
-  const [adding, setAdding] = useState('');
+  const [addingPriority, setAddingPriority] = useState('');
+  const [addingKpi, setAddingKpi] = useState('');
+  const [addingKpiTarget, setAddingKpiTarget] = useState('');
   const priorities = priorityList(strategy);
-  const add = () => { if (adding.trim()) { save(addPriority({ ...strategy, aspiration }, adding)); setAdding(''); } };
+  const kpis = kpiList(strategy);
+
+  const addPri = () => {
+    if (addingPriority.trim()) { save(addPriority(strategy, addingPriority)); setAddingPriority(''); }
+  };
+  const addKpi = () => {
+    if (!addingKpi.trim()) return;
+    const id = uid();
+    save({ ...strategy, kpis: { ...strategy.kpis, [id]: { name: addingKpi.trim(), proves: '', targetLabel: addingKpiTarget.trim() || '', target: parseFloat(addingKpiTarget) || null, unit: '', headline: false } } });
+    setAddingKpi(''); setAddingKpiTarget('');
+  };
+  const removeKpi = (id: string) => {
+    const kpis = { ...strategy.kpis }; delete kpis[id];
+    save({ ...strategy, kpis });
+  };
+
   return (
-    <Modal title="Priorities" onClose={onClose}
+    <Modal title="Strategy" onClose={onClose}
       footer={<button className="btn btn-primary" onClick={onClose}>Done</button>}>
-      <div className="form-group"><label>Winning aspiration <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(one line, optional)</span></label>
-        <input type="text" value={aspiration} placeholder="What does winning look like?"
-          onChange={(e) => setAspiration(e.target.value)}
-          onBlur={() => { if ((strategy.aspiration || '') !== aspiration) save({ ...strategy, aspiration }); }} /></div>
-      <div className="form-group"><label>Your priorities</label>
-        {priorities.length === 0 && <small style={{ color: 'var(--text3)' }}>No priorities yet — add a few strategic themes to group your projects under.</small>}
+      <div className="form-group">
+        <label>Priorities <span style={{ color: 'var(--text3)', fontWeight: 400 }}>— strategic themes to group projects under</span></label>
+        {priorities.length === 0 && <small style={{ color: 'var(--text3)', display: 'block', marginBottom: 8 }}>Add a few strategic themes (e.g. "Grow Revenue", "Build the Team").</small>}
         {priorities.map((p, idx) => (
           <div className="priority-edit-row" key={p.id}>
             <input type="text" value={p.name} onChange={(e) => save(renamePriority(strategy, p.id, e.target.value))} />
@@ -48,15 +81,109 @@ function PrioritiesModal({ strategy, save, onClose }: { strategy: StrategyConten
           </div>
         ))}
         <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
-          <input type="text" placeholder="Add priority (e.g. Grow the team)…" value={adding}
-            onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
-          <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
+          <input type="text" placeholder="Add priority…" value={addingPriority}
+            onChange={(e) => setAddingPriority(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addPri(); }} />
+          <button className="btn btn-ghost btn-sm" onClick={addPri}>+ Add</button>
         </div>
       </div>
-      <p className="card-meta" style={{ color: 'var(--text3)', fontSize: 12 }}>
-        Tag each project with a priority in its edit screen, then group Projects by priority to see strategy-to-execution health at a glance.
-      </p>
+
+      <div className="form-group" style={{ marginTop: 16 }}>
+        <label>Scoreboard KPIs <span style={{ color: 'var(--text3)', fontWeight: 400 }}>— outcomes you track</span></label>
+        {kpis.length === 0 && <small style={{ color: 'var(--text3)', display: 'block', marginBottom: 8 }}>Add the metrics that matter (e.g. "Revenue", "Headcount").</small>}
+        {kpis.map((k) => (
+          <div className="priority-edit-row" key={k.id}>
+            <span style={{ flex: 1, fontSize: 14 }}>{k.name}{k.targetLabel ? <span style={{ color: 'var(--text3)', marginLeft: 6 }}>/ {k.targetLabel}</span> : ''}</span>
+            <button className="btn-icon" onClick={() => removeKpi(k.id)}>✕</button>
+          </div>
+        ))}
+        <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
+          <input type="text" placeholder="KPI name (e.g. Revenue)…" value={addingKpi}
+            onChange={(e) => setAddingKpi(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addKpi(); }} style={{ flex: 2 }} />
+          <input type="text" placeholder="Target (e.g. €10m)" value={addingKpiTarget}
+            onChange={(e) => setAddingKpiTarget(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addKpi(); }} style={{ flex: 1, minWidth: 0 }} />
+          <button className="btn btn-ghost btn-sm" onClick={addKpi}>+ Add</button>
+        </div>
+      </div>
     </Modal>
+  );
+}
+
+// ── KPI Scoreboard ─────────────────────────────────────────────────────────
+function KpiScorecard({ kpi, readings, projects, strategy, onAdd }: {
+  kpi: { id: string; name: string; targetLabel: string; target: number | null; unit?: string };
+  readings: { date: string; value: number }[];
+  projects: Project[];
+  strategy: StrategyContent;
+  onAdd: (r: { date: string; value: number }) => void;
+}) {
+  const [date, setDate] = useState(todayISO());
+  const [val, setVal] = useState('');
+  const latest = readings.length ? readings[readings.length - 1] : null;
+  const prev = readings.length > 1 ? readings[readings.length - 2] : null;
+  const pct = kpi.target && latest ? Math.max(0, Math.min(100, (latest.value / kpi.target) * 100)) : 0;
+  const trend = latest && prev ? latest.value - prev.value : null;
+  const linked = projects.filter((p) => (p.kpi_ids || []).includes(kpi.id) && p.status !== 'completed');
+  const add = () => { const v = parseFloat(val); if (isNaN(v)) return; onAdd({ date, value: v }); setVal(''); };
+
+  return (
+    <div className="kpi-scorecard">
+      <div className="kpi-sc-head">
+        <span className="kpi-sc-name">{kpi.name}</span>
+        {kpi.targetLabel && <span className="kpi-sc-target">Target: {kpi.targetLabel}</span>}
+        {latest && (
+          <span className="kpi-sc-val">
+            {latest.value}{kpi.unit || ''}
+            {trend !== null && <span className={`kpi-trend ${trend >= 0 ? 'up' : 'down'}`}>{trend >= 0 ? ' ▲' : ' ▼'}{Math.abs(trend)}{kpi.unit || ''}</span>}
+          </span>
+        )}
+      </div>
+      {kpi.target && latest && (
+        <div className="win-bar"><div className="win-bar-fill" style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--green)' : 'var(--accent)' }} /></div>
+      )}
+      {linked.length > 0 && (
+        <div className="kpi-sc-projects">
+          {linked.map((p) => <span key={p.id} className="kpi-sc-proj">{healthIcon(p.health)} {p.name}</span>)}
+        </div>
+      )}
+      <div className="kpi-sc-log">
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <input type="text" placeholder={`value${kpi.unit ? ' (' + kpi.unit + ')' : ''}`} value={val}
+          onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+        <button className="btn btn-secondary btn-sm" onClick={add}>Log</button>
+      </div>
+      {readings.length > 1 && (
+        <div className="kpi-sc-history">
+          {[...readings].reverse().slice(0, 4).map((r, i) => (
+            <span key={i} className="kpi-sc-reading">{r.date.slice(5)}: {r.value}{kpi.unit || ''}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Scoreboard({ strategy, winState, saveWinState }: { strategy: StrategyContent; winState: WinState; saveWinState: (mut: (s: WinState) => WinState) => void }) {
+  const { data } = useCadence();
+  const kpis = kpiList(strategy);
+  return (
+    <div className="split-right">
+      <div className="split-panel-header"><h3>Scoreboard</h3></div>
+      <div className="split-panel-body">
+        {kpis.length === 0 ? (
+          <div className="empty-state" style={{ margin: 'auto' }}>
+            <div className="icon">◎</div>
+            <p style={{ color: 'var(--text2)' }}>No KPIs yet</p>
+            <small style={{ color: 'var(--text3)' }}>Add KPIs via Strategy to track your key outcomes here.</small>
+          </div>
+        ) : kpis.map((k) => (
+          <KpiScorecard key={k.id} kpi={k}
+            readings={winState.readings[k.id] || []}
+            projects={data.projects}
+            strategy={strategy}
+            onAdd={(r) => saveWinState((s) => ({ ...s, readings: { ...s.readings, [k.id]: [...(s.readings[k.id] || []), r].sort((a, b) => a.date.localeCompare(b.date)) } }))} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -74,6 +201,7 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
   const { data, insert, update, logActivity } = useCadence();
   const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
   const priorities = priorityList(strategy);
+  const kpis = kpiList(strategy);
   const [name, setName] = useState(existing?.name || '');
   const [goal, setGoal] = useState(existing?.goal || '');
   const [status, setStatus] = useState<ProjectStatus>(existing?.status || 'active');
@@ -83,18 +211,18 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
   const [nextAction, setNextAction] = useState(existing?.next_action || '');
   const [color, setColor] = useState(existing?.color || '#1B5E9E');
   const [pillarId, setPillarId] = useState(existing?.pillar_id || '');
+  const [kpiIds, setKpiIds] = useState<string[]>(existing?.kpi_ids || []);
   const [busy, setBusy] = useState(false);
+  const toggleKpi = (id: string) => setKpiIds((k) => k.includes(id) ? k.filter((x) => x !== id) : [...k, id]);
 
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      // kpi_ids is no longer edited in the UI but preserved so existing links aren't lost.
-      const full = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color, pillar_id: pillarId, kpi_ids: existing?.kpi_ids || [] } as Partial<Project>;
+      const full = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color, pillar_id: pillarId, kpi_ids: kpiIds } as Partial<Project>;
       const write = async (body: Partial<Project>) => { if (existing) await update('projects', existing.id, body); else await insert('projects', body); };
       try { await write(full); }
       catch (e: any) {
-        // Graceful fallback if migration 0006 (pillar_id/kpi_ids) isn't applied yet
         if (/pillar_id|kpi_ids|column/i.test(String(e?.message || e))) {
           const { pillar_id: _a, kpi_ids: _b, ...rest } = full as any; await write(rest);
         } else throw e;
@@ -130,14 +258,20 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
       </div>
       <div className="form-group"><label>Next Action</label>
         <input type="text" value={nextAction} placeholder="The single next step" onChange={(e) => setNextAction(e.target.value)} /></div>
-
-      <div className="form-group"><label>Priority</label>
-        <select value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
-          <option value="">— None —</option>
-          {priorities.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        {priorities.length === 0 && <small style={{ color: 'var(--text3)' }}>Add priorities from the Projects screen to group work by strategic theme.</small>}
-      </div>
+      {priorities.length > 0 && (
+        <div className="form-group"><label>Priority</label>
+          <select value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
+            <option value="">— None —</option>
+            {priorities.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></div>
+      )}
+      {kpis.length > 0 && (
+        <div className="form-group"><label>KPIs this project moves</label>
+          <div className="win-kpi-pick">
+            {kpis.map((k) => <button key={k.id} type="button" className={`win-kpi-chip ${kpiIds.includes(k.id) ? 'on' : ''}`} onClick={() => toggleKpi(k.id)}>{k.name}</button>)}
+          </div>
+        </div>
+      )}
       <div className="form-group"><label>Colour</label>
         <select value={color} onChange={(e) => setColor(e.target.value)}>
           {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -194,7 +328,6 @@ function WorkItemRow({ w, phases, onEdit }: { w: WorkItem; phases: ProjectPhase[
   );
 }
 
-// ── Phases / workstreams ───────────────────────────────────────────────────
 function Phases({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
   const { insert, update, remove } = useCadence();
   const [name, setName] = useState('');
@@ -231,7 +364,6 @@ function Phases({ project, phases, milestones }: { project: Project; phases: Pro
   );
 }
 
-// ── Stakeholders / RACI ────────────────────────────────────────────────────
 function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[] }) {
   const { data, insert, remove } = useCadence();
   const [personId, setPersonId] = useState('');
@@ -269,7 +401,6 @@ function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[]
   );
 }
 
-// ── RAID log ────────────────────────────────────────────────────────────────
 function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
   const { insert, update, remove } = useCadence();
   const [kind, setKind] = useState<RaidItem['kind']>('risk');
@@ -316,7 +447,6 @@ function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
   );
 }
 
-// ── Timeline (chronological key dates) ──────────────────────────────────────
 function Timeline({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
   const events = useMemo(() => {
     const ev: { date: string; label: string; kind: string; done?: boolean }[] = [];
@@ -362,14 +492,18 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
   const [mTitle, setMTitle] = useState('');
   const [mDate, setMDate] = useState('');
   const [mPhase, setMPhase] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [pill, pillLabel] = HEALTH_PILL[project.health];
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
+  const linkedKpis = (project.kpi_ids || []).map((id) => getKpi(strategy, id)?.name).filter(Boolean);
 
   const addMilestone = async () => {
     if (!mTitle.trim()) return;
     await insert('milestones', { project_id: project.id, title: mTitle.trim(), due_date: mDate || null, done: false, phase_id: mPhase || null } as Partial<Milestone>);
     setMTitle(''); setMDate(''); setMPhase('');
   };
+
+  const hasAdvanced = phases.length > 0 || raid.length > 0 || stake.length > 0 || links.length > 0 || closed.length > 0;
 
   return (
     <div className="split-right">
@@ -381,14 +515,16 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
         </div>
       </div>
       <div className="split-panel-body">
+        {/* Overview card */}
         <div className="card">
           <div className="card-row" style={{ justifyContent: 'space-between' }}>
             <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
             <button className="btn btn-ghost btn-sm" onClick={() => setPosting(true)}>Post update</button>
           </div>
-          {pillar && (
+          {(pillar || linkedKpis.length > 0) && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-              <span className="tag tag-decision">◎ {pillar.name}</span>
+              {pillar && <span className="tag tag-decision">◎ {pillar.name}</span>}
+              {linkedKpis.map((n) => <span className="tag tag-info" key={n}>{n}</span>)}
             </div>
           )}
           {project.goal && <p style={{ fontStyle: 'italic', color: 'var(--text2)', fontSize: 14, marginTop: 10 }}>{project.goal}</p>}
@@ -401,8 +537,13 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
           <div className="progress-bar"><div className="progress-bar-fill" style={{ width: pct + '%' }} /></div>
         </div>
 
-        <Phases project={project} phases={phases} milestones={milestones} />
+        {/* Open items */}
+        <div className="detail-section">
+          <h3>Open Items ({open.length})</h3>
+          {open.length ? open.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />) : <small style={{ color: 'var(--text3)' }}>No open items</small>}
+        </div>
 
+        {/* Milestones */}
         <div className="detail-section">
           <h3>Milestones ({milestones.filter((m) => m.done).length}/{milestones.length})</h3>
           {milestones.length ? milestones.map((m) => {
@@ -425,19 +566,10 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
           </div>
         </div>
 
-        <Timeline project={project} phases={phases} milestones={milestones} />
-
-        <div className="detail-section">
-          <h3>Open Items ({open.length})</h3>
-          {open.length ? open.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />) : <small style={{ color: 'var(--text3)' }}>No open items</small>}
-        </div>
-
-        <Stakeholders project={project} rows={stake} />
-        <Raid project={project} rows={raid} />
-
+        {/* Status updates (latest 3 always visible) */}
         <div className="detail-section">
           <h3>Status Updates</h3>
-          {updates.length ? updates.map((u) => (
+          {updates.slice(0, 3).length ? updates.slice(0, 3).map((u) => (
             <div className="update-row" key={u.id}>
               <div className="ur-date">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {u.author}{u.health ? ' · ' + healthIcon(u.health) : ''}</div>
               <div className="ur-text">{u.text}</div>
@@ -445,19 +577,40 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
           )) : <small style={{ color: 'var(--text3)' }}>No updates posted yet</small>}
         </div>
 
-        <div className="detail-section">
-          <h3>Files &amp; Links</h3>
-          {links.length ? links.map((l) => (
-            <div className="link-row" key={l.id}>🔗 <a href={l.url} target="_blank" rel="noreferrer">{l.title || l.url}</a></div>
-          )) : <small style={{ color: 'var(--text3)' }}>No files linked.</small>}
-        </div>
+        {/* Advanced toggle */}
+        <button className="btn btn-ghost btn-sm proj-advanced-toggle" onClick={() => setShowAdvanced((v) => !v)}>
+          {showAdvanced ? '▲ Less detail' : `▼ More detail${hasAdvanced ? '' : ' (phases, RAID, stakeholders…)'}`}
+        </button>
 
-        {closed.length > 0 && (
+        {showAdvanced && <>
+          <Phases project={project} phases={phases} milestones={milestones} />
+          <Timeline project={project} phases={phases} milestones={milestones} />
+          <Stakeholders project={project} rows={stake} />
+          <Raid project={project} rows={raid} />
           <div className="detail-section">
-            <h3>Completed ({closed.length})</h3>
-            {closed.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />)}
+            <h3>Files &amp; Links</h3>
+            {links.length ? links.map((l) => (
+              <div className="link-row" key={l.id}>🔗 <a href={l.url} target="_blank" rel="noreferrer">{l.title || l.url}</a></div>
+            )) : <small style={{ color: 'var(--text3)' }}>No files linked.</small>}
           </div>
-        )}
+          {closed.length > 0 && (
+            <div className="detail-section">
+              <h3>Completed ({closed.length})</h3>
+              {closed.map((w) => <WorkItemRow key={w.id} w={w} phases={phases} onEdit={setEditingItem} />)}
+            </div>
+          )}
+          {updates.length > 3 && (
+            <div className="detail-section">
+              <h3>Older updates</h3>
+              {updates.slice(3).map((u) => (
+                <div className="update-row" key={u.id}>
+                  <div className="ur-date">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {u.author}{u.health ? ' · ' + healthIcon(u.health) : ''}</div>
+                  <div className="ur-text">{u.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>}
       </div>
       {posting && <UpdateModal project={project} onClose={() => setPosting(false)} />}
       {addingItem && <ItemModal defaults={{ project_id: project.id }} onClose={() => setAddingItem(false)} />}
@@ -484,17 +637,18 @@ function HealthRoll({ items }: { items: Project[] }) {
 export function Projects({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const { strategy, save } = useStrategy();
+  const { state: winState, save: saveWinState } = useWinState();
   const priorities = useMemo(() => priorityList(strategy), [strategy]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useState<'projects' | 'scoreboard'>('projects');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
-  const [editPriorities, setEditPriorities] = useState(false);
+  const [editStrategy, setEditStrategy] = useState(false);
   const [groupBy, setGroupBy] = useState<'status' | 'priority'>(() => priorities.length ? 'priority' : 'status');
 
   const project = data.projects.find((p) => p.id === selected) || null;
   const byName = (a: Project, b: Project) => a.name.localeCompare(b.name);
 
-  // Build the grouped list according to the active grouping.
   const groups = useMemo(() => {
     const all = [...data.projects];
     if (groupBy === 'priority' && priorities.length) {
@@ -517,7 +671,8 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
     const ms = data.milestones.filter((m) => m.project_id === p.id);
     const pct = ms.length ? Math.round(ms.filter((m) => m.done).length / ms.length * 100) : 0;
     return (
-      <button className={`project-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
+      <button className={`project-item ${selected === p.id ? 'selected' : ''}`} key={p.id}
+        onClick={() => { setSelected(p.id); setView('projects'); }}>
         <span className="project-dot" style={{ background: p.color || 'var(--accent)' }} />
         <div className="project-info">
           <div className="project-name">{p.name}</div>
@@ -533,22 +688,25 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
       <ScreenHeader title="Projects" onMenu={onMenu} />
       <div className="split-view">
         <div className="split-left">
-          <div className="split-panel-header"><h3>Projects</h3><button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ New</button></div>
-          {strategy.aspiration && (
-            <div className="proj-aspiration" onClick={() => setEditPriorities(true)} title="Edit priorities">◎ {strategy.aspiration}</div>
-          )}
+          <div className="split-panel-header">
+            <h3>Projects</h3>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(null); setView('scoreboard'); }}>◎ Score</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ New</button>
+            </div>
+          </div>
           <div className="proj-toolbar">
             <div className="seg">
               <button className={groupBy === 'status' ? 'on' : ''} onClick={() => setGroupBy('status')}>Status</button>
               <button className={groupBy === 'priority' ? 'on' : ''} onClick={() => setGroupBy('priority')}>Priority</button>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditPriorities(true)}>◎ Priorities</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditStrategy(true)}>Strategy</button>
           </div>
           <div className="split-panel-body">
             {data.projects.length === 0 ? <div className="empty-state"><div className="icon">▤</div><p>No projects yet</p></div> : (
               groupBy === 'priority' && !priorities.length ? (
-                <div className="proj-hint">Add priorities to group your projects by strategic theme.
-                  <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditPriorities(true)}>Set priorities</button>
+                <div className="proj-hint">Add priorities to group projects by strategic theme.
+                  <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditStrategy(true)}>Set up strategy</button>
                 </div>
               ) : groups.map((g) => (
                 <React.Fragment key={g.key}>
@@ -563,13 +721,19 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
             )}
           </div>
         </div>
-        {project ? <Detail project={project} onEditProject={() => setEditing(project)} /> : (
-          <div className="split-right"><div className="empty-state" style={{ margin: 'auto' }}><div className="icon">▤</div><p>Select a project</p></div></div>
+
+        {view === 'scoreboard' || (!project && view !== 'projects') ? (
+          <Scoreboard strategy={strategy} winState={winState} saveWinState={saveWinState} />
+        ) : project ? (
+          <Detail project={project} onEditProject={() => setEditing(project)} />
+        ) : (
+          <Scoreboard strategy={strategy} winState={winState} saveWinState={saveWinState} />
         )}
       </div>
+
       {creating && <ProjectModal onClose={() => setCreating(false)} />}
       {editing && <ProjectModal existing={editing} onClose={() => setEditing(null)} />}
-      {editPriorities && <PrioritiesModal strategy={strategy} save={save} onClose={() => setEditPriorities(false)} />}
+      {editStrategy && <PrioritiesModal strategy={strategy} save={save} onClose={() => setEditStrategy(false)} />}
     </>
   );
 }
