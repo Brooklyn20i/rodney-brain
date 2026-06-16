@@ -2,54 +2,89 @@ import React, { useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 
-const MIGRATION_SQL = `-- Cadence migrations (safe to re-run)
+// Brings any older Cadence database fully up to date (folds in migrations
+// 0004/0006/0007). Idempotent — safe to run as many times as you like.
+const MIGRATION_SQL = `-- Cadence — update database (safe to re-run)
 
--- migration 0006: advanced project tables
-CREATE TABLE IF NOT EXISTS project_phases (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id uuid NOT NULL DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  name text NOT NULL DEFAULT '', start_date date, end_date date, sort integer NOT NULL DEFAULT 0,
-  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), deleted_at timestamptz
+-- updated_at helper (used by triggers below)
+create or replace function set_updated_at() returns trigger as $$
+begin new.updated_at = now(); return new; end;
+$$ language plpgsql;
+
+-- People: avatar colour + grouping
+alter table people add column if not exists color      text    not null default '#1B5E9E';
+alter table people add column if not exists group_name text    not null default 'Direct Reports';
+alter table people add column if not exists sort_order integer not null default 0;
+
+-- Projects: strategy linkage (priority + KPIs)
+alter table projects add column if not exists pillar_id text  not null default '';
+alter table projects add column if not exists kpi_ids   jsonb not null default '[]'::jsonb;
+
+-- Phases / workstreams
+create table if not exists project_phases (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  name text not null default '', start_date date, end_date date, sort int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
-ALTER TABLE project_phases ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='project_phases' AND policyname='owner') THEN
-  CREATE POLICY "owner" ON project_phases USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid()); END IF; END $$;
+alter table milestones add column if not exists phase_id uuid references project_phases(id) on delete set null;
+alter table work_items add column if not exists phase_id uuid references project_phases(id) on delete set null;
 
-CREATE TABLE IF NOT EXISTS raid_items (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id uuid NOT NULL DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  kind text NOT NULL DEFAULT 'risk', text text NOT NULL DEFAULT '', owner text NOT NULL DEFAULT '',
-  severity text NOT NULL DEFAULT 'medium', status text NOT NULL DEFAULT 'open',
-  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), deleted_at timestamptz
+-- RAID (Risks, Assumptions, Issues, Dependencies)
+create table if not exists raid_items (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  kind text not null default 'risk', text text not null default '', owner text not null default '',
+  severity text not null default 'medium', status text not null default 'open',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
-ALTER TABLE raid_items ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='raid_items' AND policyname='owner') THEN
-  CREATE POLICY "owner" ON raid_items USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid()); END IF; END $$;
 
-CREATE TABLE IF NOT EXISTS stakeholders (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  owner_id uuid NOT NULL DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  person_id uuid REFERENCES people(id) ON DELETE SET NULL,
-  name text NOT NULL DEFAULT '', raci text NOT NULL DEFAULT 'I',
-  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now(), deleted_at timestamptz
+-- Stakeholders / RACI
+create table if not exists stakeholders (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  person_id uuid references people(id) on delete set null,
+  name text not null default '', raci text not null default 'I',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
-ALTER TABLE stakeholders ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='stakeholders' AND policyname='owner') THEN
-  CREATE POLICY "owner" ON stakeholders USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid()); END IF; END $$;
 
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS pillar_id text;
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS kpi_ids text[] DEFAULT '{}';
-ALTER TABLE milestones ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
-ALTER TABLE work_items ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
-ALTER TABLE people ADD COLUMN IF NOT EXISTS color text;
-ALTER TABLE people ADD COLUMN IF NOT EXISTS group_name text;
-ALTER TABLE people ADD COLUMN IF NOT EXISTS sort_order integer;
+-- Triggers + row-level security for the new tables
+do $$
+declare t text;
+begin
+  foreach t in array array['project_phases','raid_items','stakeholders'] loop
+    execute format('drop trigger if exists trg_%1$s_updated on %1$s;', t);
+    execute format('create trigger trg_%1$s_updated before update on %1$s for each row execute function set_updated_at();', t);
+    execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists %1$s_all on %1$s;', t);
+    execute format('create policy %1$s_all on %1$s using (owner_id = auth.uid()) with check (owner_id = auth.uid());', t);
+  end loop;
+end $$;
 
--- migration 0008: 1:1 meeting dates
-ALTER TABLE people ADD COLUMN IF NOT EXISTS next_meeting date;
+-- Realtime cross-device sync for every table (base + new)
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'projects','milestones','project_updates','people','talking_points',
+    'work_items','comments','decisions','notes','outbox','links','activity',
+    'project_phases','raid_items','stakeholders'
+  ] loop
+    execute format('alter table %I replica identity full;', t);
+    if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename=t) then
+      execute format('alter publication supabase_realtime add table %I;', t);
+    end if;
+  end loop;
+end $$;
 `;
 
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -171,12 +206,20 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
         <div className="settings-group">
           <div className="settings-row">
             <div>
-              <div className="settings-row-label">Run migrations</div>
-              <div className="settings-row-sub">If Phases, RAID or Stakeholders show errors in Projects, paste this SQL into your Supabase SQL Editor and run it</div>
+              <div className="settings-row-label">Update database</div>
+              <div className="settings-row-sub">Unlocks project Priority grouping, Phases, RAID &amp; Stakeholders. Run once.</div>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={copyMigration}>
-              {copied ? '✓ Copied' : '⎘ Copy SQL'}
+            <button className="btn btn-primary btn-sm" onClick={copyMigration}>
+              {copied ? '✓ Copied — now paste in Supabase' : '⎘ Copy SQL'}
             </button>
+          </div>
+          <div className="settings-row" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="settings-row-sub" style={{ color: 'var(--text3)', fontSize: 12, lineHeight: 1.6 }}>
+              1. Tap <strong>Copy SQL</strong> above.<br />
+              2. Open your Supabase project → <strong>SQL Editor</strong> → <strong>New query</strong>.<br />
+              3. Paste and tap <strong>Run</strong>. It's safe to run more than once.<br />
+              4. Come back here and pull to refresh. Done.
+            </div>
           </div>
         </div>
 

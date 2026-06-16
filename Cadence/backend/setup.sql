@@ -288,3 +288,84 @@ DROP POLICY IF EXISTS activity_select ON activity; CREATE POLICY activity_select
 DROP POLICY IF EXISTS activity_insert ON activity; CREATE POLICY activity_insert ON activity FOR INSERT WITH CHECK (owner_id = auth.uid());
 DROP POLICY IF EXISTS activity_update ON activity; CREATE POLICY activity_update ON activity FOR UPDATE USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
 DROP POLICY IF EXISTS activity_delete ON activity; CREATE POLICY activity_delete ON activity FOR DELETE USING (owner_id = auth.uid());
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Later migrations folded in (0004 colour+realtime, 0006 projects depth,
+-- 0007 people groups). Idempotent. Keep setup.sql complete so fresh installs
+-- get the full current schema in one run.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- People: avatar colour + grouping
+ALTER TABLE people ADD COLUMN IF NOT EXISTS color      text    NOT NULL DEFAULT '#1B5E9E';
+ALTER TABLE people ADD COLUMN IF NOT EXISTS group_name text    NOT NULL DEFAULT 'Direct Reports';
+ALTER TABLE people ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
+
+-- Projects: strategy linkage (priority + KPIs)
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS pillar_id text  NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS kpi_ids   jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- Phases / workstreams
+CREATE TABLE IF NOT EXISTS project_phases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name text NOT NULL DEFAULT '', start_date date, end_date date, sort int NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+ALTER TABLE milestones ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
+ALTER TABLE work_items ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
+
+-- RAID (Risks, Assumptions, Issues, Dependencies)
+CREATE TABLE IF NOT EXISTS raid_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  kind text NOT NULL DEFAULT 'risk', text text NOT NULL DEFAULT '', owner text NOT NULL DEFAULT '',
+  severity text NOT NULL DEFAULT 'medium', status text NOT NULL DEFAULT 'open',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+
+-- Stakeholders / RACI
+CREATE TABLE IF NOT EXISTS stakeholders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  person_id uuid REFERENCES people(id) ON DELETE SET NULL,
+  name text NOT NULL DEFAULT '', raci text NOT NULL DEFAULT 'I',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz
+);
+
+-- Triggers + RLS for the new tables
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['project_phases','raid_items','stakeholders'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%1$s_updated ON %1$s;', t);
+    EXECUTE format('CREATE TRIGGER trg_%1$s_updated BEFORE UPDATE ON %1$s FOR EACH ROW EXECUTE FUNCTION set_updated_at();', t);
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('DROP POLICY IF EXISTS %1$s_all ON %1$s;', t);
+    EXECUTE format('CREATE POLICY %1$s_all ON %1$s USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());', t);
+  END LOOP;
+END $$;
+
+-- Realtime cross-device sync for every table (base + new)
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'projects','milestones','project_updates','people','talking_points',
+    'work_items','comments','decisions','notes','outbox','links','activity',
+    'project_phases','raid_items','stakeholders'
+  ] LOOP
+    EXECUTE format('ALTER TABLE %I REPLICA IDENTITY FULL;', t);
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename=t) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I;', t);
+    END IF;
+  END LOOP;
+END $$;
