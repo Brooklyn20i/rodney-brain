@@ -342,7 +342,7 @@ CREATE TABLE IF NOT EXISTS stakeholders (
 );
 
 -- Triggers + RLS for the new tables
-DO $$
+DO $rls$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['project_phases','raid_items','stakeholders'] LOOP
@@ -352,10 +352,10 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %1$s_all ON %1$s;', t);
     EXECUTE format('CREATE POLICY %1$s_all ON %1$s USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());', t);
   END LOOP;
-END $$;
+END $rls$;
 
 -- Realtime cross-device sync for every table (base + new)
-DO $$
+DO $rt$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
@@ -368,4 +368,4 @@ BEGIN
       EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I;', t);
     END IF;
   END LOOP;
-END $$;
+END $rt$;

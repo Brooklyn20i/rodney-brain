@@ -5,11 +5,12 @@ import { ScreenHeader } from '../components/bits';
 // Brings any older Cadence database fully up to date (folds in migrations
 // 0004/0006/0007). Idempotent — safe to run as many times as you like.
 const MIGRATION_SQL = `-- Cadence — update database (safe to re-run)
+-- Uses named dollar-quote tags ($fn$/$rls$/$rt$) so it survives iPad/Safari copy-paste.
 
 -- updated_at helper (used by triggers below)
-create or replace function set_updated_at() returns trigger as $$
+create or replace function set_updated_at() returns trigger as $fn$
 begin new.updated_at = now(); return new; end;
-$$ language plpgsql;
+$fn$ language plpgsql;
 
 -- People: avatar colour + grouping
 alter table people add column if not exists color      text    not null default '#1B5E9E';
@@ -58,7 +59,7 @@ create table if not exists stakeholders (
 );
 
 -- Triggers + row-level security for the new tables
-do $$
+do $rls$
 declare t text;
 begin
   foreach t in array array['project_phases','raid_items','stakeholders'] loop
@@ -68,10 +69,10 @@ begin
     execute format('drop policy if exists %1$s_all on %1$s;', t);
     execute format('create policy %1$s_all on %1$s using (owner_id = auth.uid()) with check (owner_id = auth.uid());', t);
   end loop;
-end $$;
+end $rls$;
 
 -- Realtime cross-device sync for every table (base + new)
-do $$
+do $rt$
 declare t text;
 begin
   foreach t in array array[
@@ -84,7 +85,7 @@ begin
       execute format('alter publication supabase_realtime add table %I;', t);
     end if;
   end loop;
-end $$;
+end $rt$;
 `;
 
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
