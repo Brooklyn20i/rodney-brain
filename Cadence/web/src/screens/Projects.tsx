@@ -1,10 +1,64 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem, ProjectPhase, RaidItem, Stakeholder } from '../lib/types';
+import type { Project, Milestone, ProjectUpdate, ProjectStatus, Health, WorkItem, ProjectPhase, RaidItem, Stakeholder, Note } from '../lib/types';
 import { ScreenHeader, Modal, Due } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { healthIcon, fmtDate, isOverdue } from '../lib/util';
-import { readStrategy, pillarList, kpiList, getPillar, getKpi } from '../lib/strategy';
+import {
+  readStrategy, priorityList, getPillar, addPriority, renamePriority, removePriority,
+  movePriority, STRATEGY_NOTE_TITLE,
+} from '../lib/strategy';
+import type { StrategyContent } from '../lib/strategy';
+
+// The strategy note (private, synced) holds the user's aspiration + priorities.
+// Projects is now the single home for strategy — no separate WIN screen.
+function useStrategy() {
+  const { data, insert, update } = useCadence();
+  const note = useMemo(() => data.notes.filter((n) => n.title === STRATEGY_NOTE_TITLE)
+    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0], [data.notes]);
+  const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
+  const save = (next: StrategyContent) => {
+    const body = JSON.stringify(next);
+    if (note) update('notes', note.id, { body } as Partial<Note>);
+    else insert('notes', { title: STRATEGY_NOTE_TITLE, body } as Partial<Note>);
+  };
+  return { strategy, save };
+}
+
+function PrioritiesModal({ strategy, save, onClose }: { strategy: StrategyContent; save: (s: StrategyContent) => void; onClose: () => void }) {
+  const [aspiration, setAspiration] = useState(strategy.aspiration || '');
+  const [adding, setAdding] = useState('');
+  const priorities = priorityList(strategy);
+  const add = () => { if (adding.trim()) { save(addPriority({ ...strategy, aspiration }, adding)); setAdding(''); } };
+  return (
+    <Modal title="Priorities" onClose={onClose}
+      footer={<button className="btn btn-primary" onClick={onClose}>Done</button>}>
+      <div className="form-group"><label>Winning aspiration <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(one line, optional)</span></label>
+        <input type="text" value={aspiration} placeholder="What does winning look like?"
+          onChange={(e) => setAspiration(e.target.value)}
+          onBlur={() => { if ((strategy.aspiration || '') !== aspiration) save({ ...strategy, aspiration }); }} /></div>
+      <div className="form-group"><label>Your priorities</label>
+        {priorities.length === 0 && <small style={{ color: 'var(--text3)' }}>No priorities yet — add a few strategic themes to group your projects under.</small>}
+        {priorities.map((p, idx) => (
+          <div className="priority-edit-row" key={p.id}>
+            <input type="text" value={p.name} onChange={(e) => save(renamePriority(strategy, p.id, e.target.value))} />
+            <button className="btn-icon" disabled={idx === 0} onClick={() => save(movePriority(strategy, p.id, -1))}>↑</button>
+            <button className="btn-icon" disabled={idx === priorities.length - 1} onClick={() => save(movePriority(strategy, p.id, 1))}>↓</button>
+            <button className="btn-icon" onClick={() => save(removePriority(strategy, p.id))}>✕</button>
+          </div>
+        ))}
+        <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
+          <input type="text" placeholder="Add priority (e.g. Grow the team)…" value={adding}
+            onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+          <button className="btn btn-ghost btn-sm" onClick={add}>+ Add</button>
+        </div>
+      </div>
+      <p className="card-meta" style={{ color: 'var(--text3)', fontSize: 12 }}>
+        Tag each project with a priority in its edit screen, then group Projects by priority to see strategy-to-execution health at a glance.
+      </p>
+    </Modal>
+  );
+}
 
 const STATUSES: ProjectStatus[] = ['active', 'onHold', 'completed'];
 const HEALTHS: { v: Health; label: string }[] = [
@@ -19,8 +73,7 @@ const RACI_LABEL: Record<Stakeholder['raci'], string> = { R: 'Responsible', A: '
 function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () => void }) {
   const { data, insert, update, logActivity } = useCadence();
   const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
-  const pillars = pillarList(strategy);
-  const kpis = kpiList(strategy);
+  const priorities = priorityList(strategy);
   const [name, setName] = useState(existing?.name || '');
   const [goal, setGoal] = useState(existing?.goal || '');
   const [status, setStatus] = useState<ProjectStatus>(existing?.status || 'active');
@@ -30,15 +83,14 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
   const [nextAction, setNextAction] = useState(existing?.next_action || '');
   const [color, setColor] = useState(existing?.color || '#1B5E9E');
   const [pillarId, setPillarId] = useState(existing?.pillar_id || '');
-  const [kpiIds, setKpiIds] = useState<string[]>(existing?.kpi_ids || []);
   const [busy, setBusy] = useState(false);
-  const toggleKpi = (id: string) => setKpiIds((k) => k.includes(id) ? k.filter((x) => x !== id) : [...k, id]);
 
   const save = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const full = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color, pillar_id: pillarId, kpi_ids: kpiIds } as Partial<Project>;
+      // kpi_ids is no longer edited in the UI but preserved so existing links aren't lost.
+      const full = { name: name.trim(), goal, status, health, owner, target_date: target || null, next_action: nextAction, color, pillar_id: pillarId, kpi_ids: existing?.kpi_ids || [] } as Partial<Project>;
       const write = async (body: Partial<Project>) => { if (existing) await update('projects', existing.id, body); else await insert('projects', body); };
       try { await write(full); }
       catch (e: any) {
@@ -79,21 +131,13 @@ function ProjectModal({ existing, onClose }: { existing?: Project; onClose: () =
       <div className="form-group"><label>Next Action</label>
         <input type="text" value={nextAction} placeholder="The single next step" onChange={(e) => setNextAction(e.target.value)} /></div>
 
-      {/* Strategy link — a project IS an initiative */}
-      <div className="form-group"><label>Strategy — pillar (WIN)</label>
+      <div className="form-group"><label>Priority</label>
         <select value={pillarId} onChange={(e) => setPillarId(e.target.value)}>
-          <option value="">— Not linked —</option>
-          {pillars.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value="">— None —</option>
+          {priorities.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        {pillars.length === 0 && <small style={{ color: 'var(--text3)' }}>Set up your strategy in WIN to link projects to pillars/KPIs.</small>}
+        {priorities.length === 0 && <small style={{ color: 'var(--text3)' }}>Add priorities from the Projects screen to group work by strategic theme.</small>}
       </div>
-      {kpis.length > 0 && (
-        <div className="form-group"><label>KPIs this project moves</label>
-          <div className="win-kpi-pick">
-            {kpis.map((k) => <button key={k.id} type="button" className={`win-kpi-chip ${kpiIds.includes(k.id) ? 'on' : ''}`} onClick={() => toggleKpi(k.id)}>{k.name}</button>)}
-          </div>
-        </div>
-      )}
       <div className="form-group"><label>Colour</label>
         <select value={color} onChange={(e) => setColor(e.target.value)}>
           {COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -320,7 +364,6 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
   const [mPhase, setMPhase] = useState('');
   const [pill, pillLabel] = HEALTH_PILL[project.health];
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
-  const linkedKpis = (project.kpi_ids || []).map((id) => getKpi(strategy, id)?.name).filter(Boolean);
 
   const addMilestone = async () => {
     if (!mTitle.trim()) return;
@@ -343,10 +386,9 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
             <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
             <button className="btn btn-ghost btn-sm" onClick={() => setPosting(true)}>Post update</button>
           </div>
-          {(pillar || linkedKpis.length > 0) && (
+          {pillar && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-              {pillar && <span className="tag tag-decision">◎ {pillar.name}</span>}
-              {linkedKpis.map((n) => <span className="tag tag-info" key={n}>{n}</span>)}
+              <span className="tag tag-decision">◎ {pillar.name}</span>
             </div>
           )}
           {project.goal && <p style={{ fontStyle: 'italic', color: 'var(--text2)', fontSize: 14, marginTop: 10 }}>{project.goal}</p>}
@@ -424,15 +466,67 @@ function Detail({ project, onEditProject }: { project: Project; onEditProject: (
   );
 }
 
+const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', onHold: 'On Hold', completed: 'Completed' };
+
+function HealthRoll({ items }: { items: Project[] }) {
+  const mix = { green: 0, amber: 0, red: 0 } as Record<Health, number>;
+  items.forEach((p) => { if (p.status !== 'completed') mix[p.health]++; });
+  if (!mix.green && !mix.amber && !mix.red) return null;
+  return (
+    <span className="proj-roll">
+      {mix.green > 0 && <span className="win-pill on">{mix.green} on track</span>}
+      {mix.amber > 0 && <span className="win-pill risk">{mix.amber} at risk</span>}
+      {mix.red > 0 && <span className="win-pill stall">{mix.red} off track</span>}
+    </span>
+  );
+}
+
 export function Projects({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
+  const { strategy, save } = useStrategy();
+  const priorities = useMemo(() => priorityList(strategy), [strategy]);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
+  const [editPriorities, setEditPriorities] = useState(false);
+  const [groupBy, setGroupBy] = useState<'status' | 'priority'>(() => priorities.length ? 'priority' : 'status');
 
-  const sorted = useMemo(() => [...data.projects].sort((a, b) =>
-    STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || a.name.localeCompare(b.name)), [data]);
   const project = data.projects.find((p) => p.id === selected) || null;
+  const byName = (a: Project, b: Project) => a.name.localeCompare(b.name);
+
+  // Build the grouped list according to the active grouping.
+  const groups = useMemo(() => {
+    const all = [...data.projects];
+    if (groupBy === 'priority' && priorities.length) {
+      const out = priorities.map((pr) => ({
+        key: pr.id, label: pr.name, roll: true,
+        items: all.filter((p) => p.pillar_id === pr.id).sort(byName),
+      }));
+      const unassigned = all.filter((p) => !p.pillar_id || !priorities.some((pr) => pr.id === p.pillar_id)).sort(byName);
+      if (unassigned.length) out.push({ key: '__none__', label: 'No priority', roll: true, items: unassigned });
+      return out.filter((g) => g.items.length);
+    }
+    return STATUSES.map((s) => ({
+      key: s, label: STATUS_LABEL[s], roll: false,
+      items: all.filter((p) => p.status === s).sort(byName),
+    })).filter((g) => g.items.length);
+  }, [data.projects, groupBy, priorities]);
+
+  const renderItem = (p: Project) => {
+    const openCount = data.work_items.filter((w) => w.project_id === p.id && !w.done).length;
+    const ms = data.milestones.filter((m) => m.project_id === p.id);
+    const pct = ms.length ? Math.round(ms.filter((m) => m.done).length / ms.length * 100) : 0;
+    return (
+      <button className={`project-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
+        <span className="project-dot" style={{ background: p.color || 'var(--accent)' }} />
+        <div className="project-info">
+          <div className="project-name">{p.name}</div>
+          <div className="project-meta">{healthIcon(p.health)} {openCount} open · {pct}% done{p.target_date ? ' · ' + fmtDate(p.target_date) : ''}</div>
+          <div className="progress-bar"><div className="progress-bar-fill" style={{ width: pct + '%' }} /></div>
+        </div>
+      </button>
+    );
+  };
 
   return (
     <>
@@ -440,22 +534,33 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
       <div className="split-view">
         <div className="split-left">
           <div className="split-panel-header"><h3>Projects</h3><button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ New</button></div>
+          {strategy.aspiration && (
+            <div className="proj-aspiration" onClick={() => setEditPriorities(true)} title="Edit priorities">◎ {strategy.aspiration}</div>
+          )}
+          <div className="proj-toolbar">
+            <div className="seg">
+              <button className={groupBy === 'status' ? 'on' : ''} onClick={() => setGroupBy('status')}>Status</button>
+              <button className={groupBy === 'priority' ? 'on' : ''} onClick={() => setGroupBy('priority')}>Priority</button>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditPriorities(true)}>◎ Priorities</button>
+          </div>
           <div className="split-panel-body">
-            {sorted.length ? sorted.map((p) => {
-              const openCount = data.work_items.filter((w) => w.project_id === p.id && !w.done).length;
-              const ms = data.milestones.filter((m) => m.project_id === p.id);
-              const pct = ms.length ? Math.round(ms.filter((m) => m.done).length / ms.length * 100) : 0;
-              return (
-                <button className={`project-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
-                  <span className="project-dot" style={{ background: p.color || 'var(--accent)' }} />
-                  <div className="project-info">
-                    <div className="project-name">{p.name}</div>
-                    <div className="project-meta">{healthIcon(p.health)} {openCount} open · {pct}% done{p.target_date ? ' · ' + fmtDate(p.target_date) : ''}</div>
-                    <div className="progress-bar"><div className="progress-bar-fill" style={{ width: pct + '%' }} /></div>
+            {data.projects.length === 0 ? <div className="empty-state"><div className="icon">▤</div><p>No projects yet</p></div> : (
+              groupBy === 'priority' && !priorities.length ? (
+                <div className="proj-hint">Add priorities to group your projects by strategic theme.
+                  <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditPriorities(true)}>Set priorities</button>
+                </div>
+              ) : groups.map((g) => (
+                <React.Fragment key={g.key}>
+                  <div className="proj-group-hdr">
+                    <span className="proj-group-name">{g.label}</span>
+                    <span className="proj-group-count">{g.items.length}</span>
+                    {g.roll && <HealthRoll items={g.items} />}
                   </div>
-                </button>
-              );
-            }) : <div className="empty-state"><div className="icon">▤</div><p>No projects yet</p></div>}
+                  {g.items.map(renderItem)}
+                </React.Fragment>
+              ))
+            )}
           </div>
         </div>
         {project ? <Detail project={project} onEditProject={() => setEditing(project)} /> : (
@@ -464,6 +569,7 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
       </div>
       {creating && <ProjectModal onClose={() => setCreating(false)} />}
       {editing && <ProjectModal existing={editing} onClose={() => setEditing(null)} />}
+      {editPriorities && <PrioritiesModal strategy={strategy} save={save} onClose={() => setEditPriorities(false)} />}
     </>
   );
 }

@@ -27,11 +27,12 @@ export interface StrategyContent {
   pillars: Record<string, PillarContent>;
   shifts: Record<string, ShiftContent>;
   kpis: Record<string, KpiContent>;
+  order?: string[]; // user-defined ordering of priority (pillar) ids
 }
 
 export const emptyStrategy = (): StrategyContent => ({
   title: '', tagline: '', aspiration: '', coreMessage: '', operatingRule: '',
-  pillars: {}, shifts: {}, kpis: {},
+  pillars: {}, shifts: {}, kpis: {}, order: [],
 });
 
 // Has the user set up their strategy yet?
@@ -47,6 +48,43 @@ export const shiftList = (s: StrategyContent) =>
   SHIFT_IDS.map((id) => ({ id, ...(s.shifts[id] || { from: '', to: '' }) })).filter((sh) => sh.from || sh.to);
 export const getPillar = (s: StrategyContent, id: string) => s.pillars[id];
 export const getKpi = (s: StrategyContent, id: string) => s.kpis[id];
+
+// ── Priorities ──────────────────────────────────────────────────────────────
+// A "priority" is just a pillar, viewed as a lightweight strategic theme that
+// projects are tagged against. Unlike the old fixed-slug pillars, priorities can
+// be freely added/renamed/reordered. IDs are random (non-confidential); the name
+// lives only in the user's private strategy note.
+export interface Priority { id: string; name: string; detail?: string; }
+
+// Ordered list of the user's priorities, honouring their custom order and
+// tolerating pillars that predate the `order` array (appended at the end).
+export const priorityList = (s: StrategyContent): Priority[] => {
+  const order = s.order && s.order.length ? s.order.filter((id) => s.pillars[id]) : [];
+  const rest = Object.keys(s.pillars).filter((id) => !order.includes(id));
+  return [...order, ...rest]
+    .map((id) => ({ id, name: s.pillars[id]?.name || '', detail: s.pillars[id]?.detail }))
+    .filter((p) => p.name);
+};
+export const hasPriorities = (s: StrategyContent) => priorityList(s).length > 0;
+
+// Pure mutations — each returns a new StrategyContent for the synced note.
+export const addPriority = (s: StrategyContent, name: string): StrategyContent => {
+  const id = uid();
+  return { ...s, pillars: { ...s.pillars, [id]: { name: name.trim(), detail: '' } }, order: [...(s.order || Object.keys(s.pillars)), id] };
+};
+export const renamePriority = (s: StrategyContent, id: string, name: string): StrategyContent =>
+  s.pillars[id] ? { ...s, pillars: { ...s.pillars, [id]: { ...s.pillars[id], name: name.trim() } } } : s;
+export const removePriority = (s: StrategyContent, id: string): StrategyContent => {
+  const pillars = { ...s.pillars }; delete pillars[id];
+  return { ...s, pillars, order: (s.order || Object.keys(s.pillars)).filter((x) => x !== id) };
+};
+export const movePriority = (s: StrategyContent, id: string, dir: -1 | 1): StrategyContent => {
+  const order = priorityList(s).map((p) => p.id);
+  const i = order.indexOf(id); const j = i + dir;
+  if (i < 0 || j < 0 || j >= order.length) return s;
+  [order[i], order[j]] = [order[j], order[i]];
+  return { ...s, order };
+};
 
 // ── Management layer (initiatives, readings, reviews) — the user's data ──────
 export type InitiativeStatus = 'onTrack' | 'atRisk' | 'stalled';
