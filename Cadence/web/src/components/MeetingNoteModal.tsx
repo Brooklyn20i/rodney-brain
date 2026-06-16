@@ -177,6 +177,15 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
+  const [meetingDate, setMeetingDate] = useState(
+    (person as any).next_meeting || new Date().toISOString().slice(0, 10)
+  );
+
+  const updateMeetingDate = async (date: string) => {
+    setMeetingDate(date);
+    try { await update('people', person.id, { next_meeting: date || null } as any); }
+    catch { /* next_meeting column may not exist yet — run migration in Settings */ }
+  };
 
   // Refs always hold the latest state — used by the debounced save to avoid
   // stale-closure overwrites when two updates land within the debounce window.
@@ -314,7 +323,15 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               <div className="mtg-person-chip">{person.name}</div>
               <input className="mtg-title-input" value={title}
                 onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
-              <div className="mtg-date">{fmtDate(note.created_at)}</div>
+              <div className="mtg-date" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="date"
+                  value={meetingDate}
+                  onChange={(e) => updateMeetingDate(e.target.value)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>· shows in Today</span>
+              </div>
             </div>
           </div>
           <div className="mtg-hdr-right">

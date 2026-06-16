@@ -109,7 +109,7 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
 
 // ── Meeting notes list ─────────────────────────────────────────────────────────
 function MeetingNotes({ person }: { person: Person }) {
-  const { data, insert } = useCadence();
+  const { data, insert, update } = useCadence();
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(person.id);
@@ -120,14 +120,19 @@ function MeetingNotes({ person }: { person: Person }) {
   );
 
   const newMeeting = async () => {
-    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const title = `1:1 · ${person.name} · ${today}`;
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const todayLabel = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const title = `1:1 · ${person.name} · ${todayLabel}`;
     let n: Note;
     try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
     catch (e: any) {
       if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
       else throw e;
     }
+    // Pre-set next_meeting to today — user can change it in the meeting modal
+    try { await update('people', person.id, { next_meeting: todayStr } as any); }
+    catch { /* migration may not have run yet */ }
     setOpenId(n.id);
   };
 
