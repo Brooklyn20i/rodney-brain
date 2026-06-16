@@ -68,7 +68,20 @@ export function useMeetingDates() {
     [data.notes],
   );
 
-  const dates = useMemo(() => readMeetingDates(data.notes), [data.notes]);
+  const dates = useMemo(() => {
+    if (!metaNote) return {} as MeetingDates;
+    try {
+      const parsed = JSON.parse(metaNote.body || '{}');
+      if (parsed && typeof parsed === 'object') {
+        const out: MeetingDates = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string' && v) out[k] = v;
+        }
+        return out;
+      }
+    } catch { /* unparseable */ }
+    return {} as MeetingDates;
+  }, [metaNote]);
 
   // Always holds the latest dates map so concurrent setMeetingDate calls don't
   // clobber each other with a stale snapshot from the previous render cycle.

@@ -64,7 +64,7 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
             await setMeetingDate(n.id, nextMeeting);
           }
         } else if (upcomingNote) {
-          await setMeetingDate(upcomingNote.id, null);
+          try { await setMeetingDate(upcomingNote.id, null); } catch { /* best-effort */ }
         }
       }
 

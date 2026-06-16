@@ -94,7 +94,7 @@ function ActionItemRow({ item, personName, onChange, onDelete }: {
   onDelete: () => void;
 }) {
   const set = (patch: Partial<ActionItem>) => onChange({ ...item, ...patch });
-  const isLate = !!item.due && !item.done && new Date(item.due) < new Date();
+  const isLate = !!item.due && !item.done && item.due < todayStr();
 
   return (
     <div className={`action-item${item.done ? ' done' : ''}${isLate ? ' late' : ''}`}>
@@ -125,7 +125,7 @@ function CarryForwardRow({ item, personName, onMarkDone }: {
   item: ActionItem; personName: string; onMarkDone: () => void;
 }) {
   const [checked, setChecked] = useState(false);
-  const isLate = !!item.due && new Date(item.due) < new Date();
+  const isLate = !!item.due && !checked && item.due < todayStr();
 
   const handleCheck = () => {
     setChecked(true);
@@ -167,7 +167,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const { data, update, insert, remove, logActivity } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
 
-  const { data: parsed, isLegacy } = useMemo(() => parseMeeting(note.body), [note.id]);
+  const { data: parsed, isLegacy } = useMemo(() => parseMeeting(note.body), [note.id, note.body]);
   const [agenda, setAgenda] = useState<AgendaItem[]>(parsed.agenda);
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
   const [notes, setNotes] = useState<string>(parsed.notes);
@@ -177,12 +177,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
   const [meetingDate, setLocalMeetingDate] = useState(
-    dates[note.id] || todayStr()
+    dates[note.id] || ''
   );
   const [dateErr, setDateErr] = useState('');
 
   // Keep the input in sync if the stored date changes elsewhere.
-  useEffect(() => { setLocalMeetingDate(dates[note.id] || todayStr()); }, [dates, note.id]);
+  useEffect(() => { setLocalMeetingDate(dates[note.id] || ''); }, [dates, note.id]);
 
   const updateMeetingDate = async (date: string) => {
     setLocalMeetingDate(date);
@@ -231,7 +231,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // Flush on unmount so "Save & Close" never loses pending changes
   useEffect(() => () => { flushSave(); }, []);
 
-  // Reset state when navigating between meetings
+  // Reset state when navigating between meetings (note.id change only — body changes
+  // from real-time sync are intentionally NOT reset to avoid clobbering in-progress edits).
   useEffect(() => {
     const { data: p } = parseMeeting(note.body);
     setAgenda(p.agenda);
@@ -240,7 +241,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setTitle(note.title);
     setShowImport(false);
     setImportSel(new Set());
-  }, [note.id]);
+  }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
@@ -340,8 +341,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               <div className="mtg-date">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}>
-                      📅 {meetingDate ? fmtWeekDMY(meetingDate) : 'Set date'}
+                    <span style={{ color: meetingDate ? 'var(--accent)' : 'var(--text3)', fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}>
+                      📅 {meetingDate ? fmtWeekDMY(meetingDate) : 'Set date…'}
                     </span>
                     <input
                       type="date"
@@ -484,7 +485,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             {toCover > 0 && <span>{toCover} to cover</span>}
             {covered > 0 && <span style={{ color: 'var(--green)' }}>{covered} covered</span>}
             {newActions > 0 && <span>{newActions} open action{newActions !== 1 ? 's' : ''}</span>}
-            {carryForward.length > 0 && <span style={{ color: 'var(--orange)' }}>{carryForward.length} overdue from last meeting</span>}
+            {carryForward.length > 0 && <span style={{ color: 'var(--orange)' }}>{carryForward.length} incomplete from last meeting</span>}
           </div>
           <div className="mtg-footer-nav">
             {prevNote && (
