@@ -190,7 +190,16 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const updateMeetingDate = async (date: string) => {
     setLocalMeetingDate(date);
     setDateErr('');
-    // Stored in a notes record (no DB migration needed), so this always persists.
+
+    // Auto-update the note title when it follows the "1:1 · Name · DD/MM/YYYY" pattern
+    const prefix = `1:1 · ${person.name} · `;
+    if (date && title.startsWith(prefix)) {
+      const [y, m, d] = date.split('-');
+      const newTitle = `${prefix}${d}/${m}/${y}`;
+      setTitle(newTitle);
+      update('notes', note.id, { title: newTitle } as Partial<Note>);
+    }
+
     try { await setMeetingDate(person.id, date || null); }
     catch { setDateErr('Could not save date — check connection'); }
   };
