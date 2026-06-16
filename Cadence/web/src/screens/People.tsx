@@ -13,15 +13,17 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString()
 const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
+const GROUPS = ['Direct Reports', 'Leaders', 'Support Partners'];
 
 // ── Person create/edit modal ───────────────────────────────────────────────────
-function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => void }) {
+function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose: () => void; groups?: string[] }) {
   const { insert, update, logActivity } = useCadence();
   const [name, setName] = useState(existing?.name || '');
   const [role, setRole] = useState(existing?.role || '');
   const [email, setEmail] = useState(existing?.email || '');
   const [notes, setNotes] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
+  const [group, setGroup] = useState(existing?.group_name || 'Direct Reports');
   const [busy, setBusy] = useState(false);
 
   const effective = color || autoColor(name || existing?.name || 'person');
@@ -30,7 +32,7 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const full = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective } as Partial<Person>;
+      const full = { name: name.trim(), role: role.trim(), email: email.trim(), notes, color: effective, group_name: group } as Partial<Person>;
       const write = async (body: Partial<Person>) => {
         if (existing) await update('people', existing.id, body);
         else await insert('people', body);
@@ -68,6 +70,16 @@ function PersonModal({ existing, onClose }: { existing?: Person; onClose: () => 
         <input type="email" value={email} placeholder="email@company.com" onChange={(e) => setEmail(e.target.value)} /></div>
       <div className="form-group"><label>Notes</label>
         <textarea value={notes} placeholder="Context about this person…" onChange={(e) => setNotes(e.target.value)} /></div>
+      <div className="form-group">
+        <label>Group</label>
+        <div className="person-group-picker">
+          {(groups || ['Direct Reports', 'Leaders', 'Support Partners']).map(g => (
+            <button key={g} type="button"
+              className={`person-group-opt${group === g ? ' active' : ''}`}
+              onClick={() => setGroup(g)}>{g}</button>
+          ))}
+        </div>
+      </div>
     </Modal>
   );
 }
@@ -302,11 +314,43 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
 }
 
 export function People({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, update } = useCadence();
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
-  const sorted = useMemo(() => [...data.people].sort((a, b) => a.name.localeCompare(b.name)), [data]);
+
+  const sorted = useMemo(() =>
+    [...data.people].sort((a, b) => {
+      const gA = GROUPS.indexOf(a.group_name || 'Direct Reports');
+      const gB = GROUPS.indexOf(b.group_name || 'Direct Reports');
+      if (gA !== gB) return (gA < 0 ? 99 : gA) - (gB < 0 ? 99 : gB);
+      const sA = a.sort_order ?? 0, sB = b.sort_order ?? 0;
+      if (sA !== sB) return sA - sB;
+      return a.name.localeCompare(b.name);
+    }), [data.people]);
+
+  const grouped = useMemo(() => {
+    const res: Record<string, Person[]> = {};
+    GROUPS.forEach(g => { res[g] = []; });
+    sorted.forEach(p => {
+      const g = p.group_name || 'Direct Reports';
+      if (!res[g]) res[g] = [];
+      res[g].push(p);
+    });
+    return res;
+  }, [sorted]);
+
+  const moveInGroup = async (person: Person, dir: 'up' | 'down') => {
+    const group = person.group_name || 'Direct Reports';
+    const gp = sorted.filter(p => (p.group_name || 'Direct Reports') === group);
+    const idx = gp.findIndex(p => p.id === person.id);
+    const ti = dir === 'up' ? idx - 1 : idx + 1;
+    if (ti < 0 || ti >= gp.length) return;
+    const newOrder = [...gp];
+    [newOrder[idx], newOrder[ti]] = [newOrder[ti], newOrder[idx]];
+    await Promise.all(newOrder.map((p, i) => update('people', p.id, { sort_order: i } as Partial<Person>)));
+  };
+
   const person = data.people.find((p) => p.id === selected) || null;
 
   return (
@@ -319,22 +363,41 @@ export function People({ onMenu }: { onMenu?: () => void }) {
             <button className="btn btn-primary btn-sm" onClick={() => setCreating(true)}>+ Add</button>
           </div>
           <div className="split-panel-body">
-            {sorted.length ? sorted.map((p) => {
-              const openCount = data.work_items.filter((w) => w.person_id === p.id && !w.done).length;
-              const mtgCount = data.notes.filter((n) => n.folder === mtgFolder(p.id)).length;
-              return (
-                <button className={`person-item ${selected === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelected(p.id)}>
-                  <span className="avatar" style={{ background: colorOf(p) }}>{initials(p.name)}</span>
-                  <div className="project-info">
-                    <div className="project-name">{p.name}</div>
-                    <div className="project-meta">
-                      {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}
-                      {mtgCount > 0 ? ` · ${mtgCount} meetings` : ''}
-                    </div>
+            {sorted.length ? (
+              GROUPS.map(groupName => {
+                const gPeople = grouped[groupName] || [];
+                if (!gPeople.length) return null;
+                return (
+                  <div key={groupName}>
+                    <div className="people-group-hdr">{groupName}</div>
+                    {gPeople.map((p, idx) => {
+                      const openCount = data.work_items.filter(w => w.person_id === p.id && !w.done).length;
+                      const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
+                      return (
+                        <div key={p.id} className="person-list-row">
+                          <button className={`person-item${selected === p.id ? ' selected' : ''}`} onClick={() => setSelected(p.id)}>
+                            <span className="avatar" style={{ background: colorOf(p) }}>{initials(p.name)}</span>
+                            <div className="project-info">
+                              <div className="project-name">{p.name}</div>
+                              <div className="project-meta">
+                                {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}
+                                {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
+                              </div>
+                            </div>
+                          </button>
+                          <div className="person-reorder-btns">
+                            <button className="person-reorder-btn" title="Move up"
+                              disabled={idx === 0} onClick={() => moveInGroup(p, 'up')}>↑</button>
+                            <button className="person-reorder-btn" title="Move down"
+                              disabled={idx === gPeople.length - 1} onClick={() => moveInGroup(p, 'down')}>↓</button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </button>
-              );
-            }) : (
+                );
+              })
+            ) : (
               <div className="empty-state">
                 <div className="icon">✦</div>
                 <p>No people yet</p>
@@ -348,8 +411,8 @@ export function People({ onMenu }: { onMenu?: () => void }) {
           : <div className="split-right"><div className="empty-state" style={{ margin: 'auto' }}><div className="icon">✦</div><p>Select a person</p></div></div>
         }
       </div>
-      {creating && <PersonModal onClose={() => setCreating(false)} />}
-      {editing && <PersonModal existing={editing} onClose={() => setEditing(null)} />}
+      {creating && <PersonModal onClose={() => setCreating(false)} groups={GROUPS} />}
+      {editing && <PersonModal existing={editing} onClose={() => setEditing(null)} groups={GROUPS} />}
     </>
   );
 }

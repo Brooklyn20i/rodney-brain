@@ -3,7 +3,7 @@ import { useCadence } from '../lib/store';
 import type { Note, OutboxEmail, Person } from '../lib/types';
 import type { MeetingData } from './MeetingNoteModal';
 
-type Tab = 'full' | 'actions' | 'agenda';
+type Tab = 'full' | 'actions' | 'agenda' | 'onenote';
 
 // ── Plain text generator (for native share + fallback clipboard) ──────────────
 function generatePlainText(data: MeetingData, title: string, person: Person, createdAt: string, tab: Tab): string {
@@ -115,6 +115,68 @@ function generateHtml(data: MeetingData, title: string, person: Person, createdA
 </body></html>`;
 }
 
+// ── OneNote table-cell generator (compact fragment, not a full document) ───────
+function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: string): string {
+  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const firstName = person.name.split(' ')[0];
+  const f = 'font-family:Calibri,Segoe UI,sans-serif;';
+  const parts: string[] = [];
+
+  parts.push(`<p style="${f}font-size:13px;margin:0 0 6px;"><b>${dateStr}</b></p>`);
+
+  const covered = data.agenda.filter((a) => a.status === 'covered');
+  const discuss = data.agenda.filter((a) => a.status === 'discuss');
+  const deferred = data.agenda.filter((a) => a.status === 'deferred');
+
+  if (covered.length || discuss.length || deferred.length) {
+    parts.push(`<ul style="${f}font-size:13px;margin:0 0 8px;padding-left:18px;">`);
+    covered.forEach((a) => {
+      const sub = a.notes ? `<ul style="padding-left:14px;margin:2px 0;"><li style="color:#555;font-style:italic;">${a.notes}</li></ul>` : '';
+      parts.push(`<li>✅ <b>${a.title}</b>${sub}</li>`);
+    });
+    discuss.forEach((a) => parts.push(`<li>💬 <b>${a.title}</b> — not reached</li>`));
+    deferred.forEach((a) => parts.push(`<li>⏭ <b>${a.title}</b> — deferred</li>`));
+    parts.push('</ul>');
+  }
+
+  if (data.actions.length) {
+    parts.push(`<p style="${f}font-size:13px;font-weight:700;margin:4px 0;"><b>Actions</b></p>`);
+    parts.push(`<ul style="${f}font-size:13px;margin:0;padding-left:18px;">`);
+    data.actions.forEach((a) => {
+      const owner = a.owner === 'me' ? 'Rodney' : firstName;
+      const due = a.due ? ` (Due ${new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : '';
+      parts.push(`<li>${a.done ? '✓' : '☐'} <b>${owner}</b> — ${a.title}${due}</li>`);
+    });
+    parts.push('</ul>');
+  }
+
+  return parts.join('\n');
+}
+
+function generateOneNotePlain(data: MeetingData, person: Person, createdAt: string): string {
+  const dateStr = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const firstName = person.name.split(' ')[0];
+  const lines: string[] = [dateStr, ''];
+
+  data.agenda.filter((a) => a.status === 'covered').forEach((a) => {
+    lines.push(`✅ ${a.title}`);
+    if (a.notes) lines.push(`   ${a.notes}`);
+  });
+  data.agenda.filter((a) => a.status === 'discuss').forEach((a) => lines.push(`💬 ${a.title} — not reached`));
+  data.agenda.filter((a) => a.status === 'deferred').forEach((a) => lines.push(`⏭ ${a.title} — deferred`));
+
+  if (data.actions.length) {
+    lines.push('', 'Actions');
+    data.actions.forEach((a) => {
+      const owner = a.owner === 'me' ? 'Rodney' : firstName;
+      const due = a.due ? ` (Due ${new Date(a.due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : '';
+      lines.push(`${a.done ? '✓' : '☐'} ${owner} — ${a.title}${due}`);
+    });
+  }
+
+  return lines.join('\n');
+}
+
 // ── Capability detection ──────────────────────────────────────────────────────
 const canNativeShare = typeof navigator !== 'undefined' && !!navigator.share;
 // iOS Safari supports ClipboardItem but NOT text/html — only text/plain and image/png
@@ -131,7 +193,7 @@ interface Props {
 
 export function SharePanel({ note, person, meetingData, onClose }: Props) {
   const { insert } = useCadence();
-  const [tab, setTab] = useState<Tab>('full');
+  const [tab, setTab] = useState<Tab>('onenote');
   const [copied, setCopied] = useState(false);
   const [emailDone, setEmailDone] = useState(false);
 
@@ -143,24 +205,33 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
     () => generatePlainText(meetingData, note.title, person, note.created_at, tab),
     [meetingData, note.title, person.name, note.created_at, tab],
   );
+  const oneNoteHtml = useMemo(
+    () => generateOneNoteHtml(meetingData, person, note.created_at),
+    [meetingData, person.name, note.created_at],
+  );
+  const oneNotePlain = useMemo(
+    () => generateOneNotePlain(meetingData, person, note.created_at),
+    [meetingData, person.name, note.created_at],
+  );
+
+  const isOneNote = tab === 'onenote';
 
   // ── Copy / Share ─────────────────────────────────────────────────────────────
   const copyToClipboard = async () => {
+    const htmlContent = isOneNote ? oneNoteHtml : html;
+    const textContent = isOneNote ? oneNotePlain : plainText;
     try {
       if (canHtmlClipboard) {
-        // Desktop: copy rich HTML — pastes with full formatting into OneNote/Word
-        const blob = new Blob([html], { type: 'text/html' });
+        const blob = new Blob([htmlContent], { type: 'text/html' });
         await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
       } else {
-        // iOS / fallback: copy plain text
-        await navigator.clipboard.writeText(plainText);
+        await navigator.clipboard.writeText(textContent);
       }
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      // Last resort: select from a textarea
       const ta = document.createElement('textarea');
-      ta.value = plainText;
+      ta.value = textContent;
       ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
       document.body.appendChild(ta);
       ta.focus(); ta.select();
@@ -173,8 +244,9 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
 
   // iOS native share sheet — best UX on iPhone/iPad
   const nativeShare = async () => {
+    const textContent = isOneNote ? oneNotePlain : plainText;
     try {
-      await navigator.share({ title: note.title, text: plainText });
+      await navigator.share({ title: note.title, text: textContent });
     } catch {
       // User cancelled — no-op
     }
@@ -185,7 +257,6 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     if (isIOS) {
-      // iOS Safari: open in new tab (user can then use share sheet to save)
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 15000);
     } else {
@@ -215,15 +286,26 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
     ? '✅ Copied!'
     : canNativeShare && isIOS
       ? '📤 Share…'
-      : canHtmlClipboard
+      : isOneNote
         ? '📋 Copy for OneNote'
-        : '📋 Copy text';
+        : canHtmlClipboard
+          ? '📋 Copy for OneNote'
+          : '📋 Copy text';
 
   const primaryAction = canNativeShare && isIOS ? nativeShare : copyToClipboard;
 
-  const primaryHint = isIOS
-    ? 'Opens iOS share sheet — paste into OneNote, Notes, Mail and more'
-    : 'Paste into OneNote — formatting, colours and action owners are preserved';
+  const primaryHint = isOneNote
+    ? 'Paste directly into your OneNote 1:1 table — date, topics covered, and actions'
+    : isIOS
+      ? 'Opens iOS share sheet — paste into OneNote, Notes, Mail and more'
+      : 'Paste into OneNote — formatting, colours and action owners are preserved';
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'onenote', label: '📋 OneNote' },
+    { key: 'full', label: 'Full' },
+    { key: 'actions', label: 'Actions' },
+    { key: 'agenda', label: 'Agenda' },
+  ];
 
   return (
     <div className="share-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -239,18 +321,21 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
         </div>
 
         <div className="share-tabs">
-          {(['full', 'actions', 'agenda'] as const).map((t) => (
-            <button key={t} className={`share-tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
-              {t === 'full' ? 'Full' : t === 'actions' ? 'Actions' : 'Agenda'}
+          {TABS.map(({ key, label }) => (
+            <button key={key} className={`share-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>
+              {label}
             </button>
           ))}
         </div>
 
-        {/* Preview — show plain text on iOS (since that's what gets shared), HTML on desktop */}
         <div className="share-preview">
-          {isIOS
-            ? <pre className="share-plain-preview">{plainText}</pre>
-            : <div className="share-doc" dangerouslySetInnerHTML={{ __html: html }} />}
+          {isOneNote ? (
+            <pre className="share-plain-preview">{oneNotePlain}</pre>
+          ) : isIOS ? (
+            <pre className="share-plain-preview">{plainText}</pre>
+          ) : (
+            <div className="share-doc" dangerouslySetInnerHTML={{ __html: html }} />
+          )}
         </div>
 
         <div className="share-actions">
@@ -258,7 +343,6 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
             {primaryLabel}
           </button>
 
-          {/* On desktop, also show native share if available (e.g. macOS Safari) */}
           {canNativeShare && !isIOS && (
             <button className="share-secondary-btn" onClick={nativeShare}>📤 Share via…</button>
           )}
@@ -281,3 +365,4 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
     </div>
   );
 }
+

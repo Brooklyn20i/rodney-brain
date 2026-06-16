@@ -46,6 +46,8 @@ export interface Person {
   id: string; owner_id: string;
   name: string; role: string; email: string; notes: string;
   color?: string; // optional until migration 0004 is applied
+  group_name?: string;  // optional until migration 0007
+  sort_order?: number;  // optional until migration 0007
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface TalkingPoint {
