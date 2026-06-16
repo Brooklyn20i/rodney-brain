@@ -13,7 +13,7 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString()
 const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
-const GROUPS = ['Direct Reports', 'Leaders', 'Support Partners'];
+const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
 
 // ── Person create/edit modal ───────────────────────────────────────────────────
 function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose: () => void; groups?: string[] }) {
