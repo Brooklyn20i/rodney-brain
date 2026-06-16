@@ -10,7 +10,7 @@ const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
-const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const fmtShort = (iso: string) => new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtMeetingDate = (iso: string) => {
@@ -18,7 +18,7 @@ const fmtMeetingDate = (iso: string) => {
   const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   if (iso === today) return 'Today';
   if (iso === tom) return 'Tomorrow';
-  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit' });
 };
 
 const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
@@ -239,7 +239,7 @@ function InlineNotes({ person }: { person: Person }) {
 function RecentlyDone({ items }: { items: WorkItem[] }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
-  const fmt = (ts: string | null) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+  const fmt = (ts: string | null) => ts ? new Date(ts).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' }) : '';
   return (
     <div className="detail-section">
       <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setOpen((o) => !o)}>
@@ -312,7 +312,7 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
       {/* Tabs */}
       <div className="people-tabs">
         <button className={`people-tab ${tab === 'topics' ? 'active' : ''}`} onClick={() => setTab('topics')}>
-          Topics {open.length > 0 && <span className="ptab-badge">{open.length}</span>}
+          Action Items {open.length > 0 && <span className="ptab-badge">{open.length}</span>}
         </button>
         <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
           Meetings {meetingCount > 0 && <span className="ptab-badge">{meetingCount}</span>}
@@ -325,7 +325,7 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
             {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
             <InlineNotes person={person} />
             <div className="detail-section">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>📋 Topics
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>📋 Action Items
                 {open.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{open.length}</span>}
                 <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setAdding(true)}>+ Add</button>
               </h3>
@@ -416,7 +416,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                             <div className="project-info">
                               <div className="project-name">{p.name}</div>
                               <div className="project-meta">
-                                {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'topic' : 'topics'}
+                                {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'action item' : 'action items'}
                                 {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
                                 {p.next_meeting && p.next_meeting >= todayISO() ? ` · 📅 ${fmtMeetingDate(p.next_meeting)}` : ''}
                               </div>

@@ -38,9 +38,9 @@ export function parseMeeting(body: string): { data: MeetingData; isLegacy: boole
 }
 
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 const fmtShort = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
 
 // ── Agenda item row ───────────────────────────────────────────────────────────
 function AgendaItemRow({ item, onChange, onDelete }: {
@@ -180,11 +180,20 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [meetingDate, setMeetingDate] = useState(
     (person as any).next_meeting || new Date().toISOString().slice(0, 10)
   );
+  const [dateErr, setDateErr] = useState('');
 
   const updateMeetingDate = async (date: string) => {
     setMeetingDate(date);
+    setDateErr('');
     try { await update('people', person.id, { next_meeting: date || null } as any); }
-    catch { /* next_meeting column may not exist yet — run migration in Settings */ }
+    catch (e: any) {
+      const msg = String(e?.message || e || '');
+      if (/column|next_meeting|does not exist/i.test(msg)) {
+        setDateErr('Date not saved — go to Settings → Database Setup → Copy SQL and run it in Supabase, then try again');
+      } else {
+        setDateErr('Could not save date — check connection');
+      }
+    }
   };
 
   // Refs always hold the latest state — used by the debounced save to avoid
@@ -323,14 +332,17 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               <div className="mtg-person-chip">{person.name}</div>
               <input className="mtg-title-input" value={title}
                 onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
-              <div className="mtg-date" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  type="date"
-                  value={meetingDate}
-                  onChange={(e) => updateMeetingDate(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-                />
-                <span style={{ fontSize: 11, color: 'var(--text3)' }}>· shows in Today</span>
+              <div className="mtg-date">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="date"
+                    value={meetingDate}
+                    onChange={(e) => updateMeetingDate(e.target.value)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>· shows in Today</span>
+                </div>
+                {dateErr && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3, lineHeight: 1.4 }}>{dateErr}</div>}
               </div>
             </div>
           </div>
@@ -367,14 +379,14 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             <div className="mtg-col-hdr">
               <span className="mtg-col-title">📋 Agenda</span>
               <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
-                Import Topics ↓
+                Import Action Items ↓
               </button>
             </div>
 
             {showImport && (
               <div className="mtg-import-panel">
                 {openTopics.length === 0
-                  ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open topics for {person.name.split(' ')[0]}.</p>
+                  ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open action items for {person.name.split(' ')[0]}.</p>
                   : <>
                     <div className="mtg-import-list">
                       {openTopics.map((w) => (
@@ -404,7 +416,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
             <div className="mtg-col-body">
               {agenda.length === 0 && !showImport && (
-                <p className="mtg-empty-hint">Add agenda items below, or import from Topics ↑</p>
+                <p className="mtg-empty-hint">Add agenda items below, or import from Action Items ↑</p>
               )}
               {agenda.map((item, i) => (
                 <AgendaItemRow key={item.id} item={item}

@@ -13,7 +13,8 @@ export function fmtDate(d: string | null): string {
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff < 7) return `${diff}d`;
-  return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const sameYear = t.getFullYear() === new Date().getFullYear();
+  return t.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', ...(sameYear ? {} : { year: 'numeric' }) });
 }
 
 // Same prioritisation the agent uses (cadence_core.priority_score).

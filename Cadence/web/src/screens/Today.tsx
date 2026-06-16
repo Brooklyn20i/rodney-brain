@@ -12,7 +12,7 @@ const fmtMtgDay = (iso: string) => {
   const tom = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   if (iso === today) return 'Today';
   if (iso === tom) return 'Tomorrow';
-  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return new Date(iso).toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit' });
 };
 
 function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
@@ -128,7 +128,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
                         color: isToday ? 'var(--green)' : 'var(--text2)',
                         padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600
                       }}>📅 {fmtMtgDay(person.next_meeting!)}</span>
-                      {openTopics > 0 && <span className="tag tag-info">{openTopics} topic{openTopics !== 1 ? 's' : ''}</span>}
+                      {openTopics > 0 && <span className="tag tag-info">{openTopics} action item{openTopics !== 1 ? 's' : ''}</span>}
                     </div>
                   </div>
                 </div>
