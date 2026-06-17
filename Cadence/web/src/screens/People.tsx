@@ -18,8 +18,8 @@ const fmtNextMtg = (iso: string) =>
 const GROUPS = ['Favourites', 'Direct Reports', 'Leaders', 'Support Partners'];
 
 // ── Person create/edit modal ───────────────────────────────────────────────────
-function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose: () => void; groups?: string[] }) {
-  const { data, insert, update, logActivity } = useCadence();
+function PersonModal({ existing, onClose, onDelete, groups }: { existing?: Person; onClose: () => void; onDelete?: () => void; groups?: string[] }) {
+  const { data, insert, update, remove, logActivity } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
   const [name, setName] = useState(existing?.name || '');
   const [role, setRole] = useState(existing?.role || '');
@@ -73,10 +73,21 @@ function PersonModal({ existing, onClose, groups }: { existing?: Person; onClose
     } finally { setBusy(false); }
   };
 
+  const del = async () => {
+    if (!existing) return;
+    if (!confirm(`Delete ${existing.name}? This cannot be undone.`)) return;
+    await remove('people', existing.id);
+    logActivity('delete_person', existing.name);
+    onDelete?.();
+  };
+
   return (
     <Modal title={existing ? 'Edit Person' : 'Add Person'} onClose={onClose}
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></>}>
+      footer={<>
+        {existing && <button className="btn btn-danger btn-sm" style={{ marginRight: 'auto' }} onClick={del}>Delete</button>}
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      </>}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
         <span className="avatar" style={{ background: effective, width: 48, height: 48, fontSize: 17 }}>{initials(name || '?')}</span>
         <div className="color-swatches">
@@ -462,7 +473,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
         }
       </div>
       {creating && <PersonModal onClose={() => setCreating(false)} groups={GROUPS} />}
-      {editing && <PersonModal existing={editing} onClose={() => setEditing(null)} groups={GROUPS} />}
+      {editing && <PersonModal existing={editing} onClose={() => setEditing(null)} onDelete={() => { setEditing(null); setSelected(null); }} groups={GROUPS} />}
     </>
   );
 }

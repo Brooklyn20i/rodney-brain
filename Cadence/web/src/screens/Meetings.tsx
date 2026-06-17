@@ -12,8 +12,8 @@ const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
 // ── Meeting Group create/edit modal ───────────────────────────────────────────
-function MeetingGroupModal({ existing, onClose }: { existing?: Person; onClose: () => void }) {
-  const { insert, update, logActivity } = useCadence();
+function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person; onClose: () => void; onDelete?: () => void }) {
+  const { insert, update, remove, logActivity } = useCadence();
   const [name, setName] = useState(existing?.name || '');
   const [description, setDescription] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
@@ -33,10 +33,21 @@ function MeetingGroupModal({ existing, onClose }: { existing?: Person; onClose: 
     } finally { setBusy(false); }
   };
 
+  const del = async () => {
+    if (!existing) return;
+    if (!confirm(`Delete "${existing.name}"? This cannot be undone.`)) return;
+    await remove('people', existing.id);
+    logActivity('delete_meeting_group', existing.name);
+    onDelete?.();
+  };
+
   return (
     <Modal title={existing ? 'Edit Meeting Group' : 'Add Meeting Group'} onClose={onClose}
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></>}>
+      footer={<>
+        {existing && <button className="btn btn-danger btn-sm" style={{ marginRight: 'auto' }} onClick={del}>Delete</button>}
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      </>}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
         <span className="avatar" style={{ background: effective, width: 48, height: 48, fontSize: 17 }}>{initials(name || '?')}</span>
         <div className="color-swatches">
@@ -397,7 +408,7 @@ export function Meetings({ onMenu }: { onMenu?: () => void }) {
         }
       </div>
       {creating && <MeetingGroupModal onClose={() => setCreating(false)} />}
-      {editing && <MeetingGroupModal existing={editing} onClose={() => setEditing(null)} />}
+      {editing && <MeetingGroupModal existing={editing} onClose={() => setEditing(null)} onDelete={() => { setEditing(null); setSelected(null); }} />}
     </>
   );
 }
