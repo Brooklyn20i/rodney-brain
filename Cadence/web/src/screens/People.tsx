@@ -76,6 +76,20 @@ function PersonModal({ existing, onClose, onDelete, groups }: { existing?: Perso
   const del = async () => {
     if (!existing) return;
     if (!confirm(`Delete ${existing.name}? This cannot be undone.`)) return;
+    // Clean up orphans so deleted people leave nothing dangling behind.
+    const folder = mtgFolder(existing.id);
+    const mtgNotes = data.notes.filter((n) => n.folder === folder);
+    for (const n of mtgNotes) {
+      try { await setMeetingDate(n.id, null); } catch { /* best-effort */ }
+      await remove('notes', n.id);
+    }
+    for (const tp of data.talking_points.filter((t) => t.person_id === existing.id)) {
+      await remove('talking_points', tp.id);
+    }
+    // Unassign (don't delete) any work items linked to this person — preserve the task.
+    for (const w of data.work_items.filter((w) => w.person_id === existing.id)) {
+      await update('work_items', w.id, { person_id: null } as Partial<WorkItem>);
+    }
     await remove('people', existing.id);
     logActivity('delete_person', existing.name);
     onDelete?.();

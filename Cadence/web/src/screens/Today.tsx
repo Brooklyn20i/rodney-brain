@@ -69,6 +69,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
       ] as { id: string; title: string }[],
       oneOnOnes: data.people
+        .filter((p) => !p.type || p.type === 'person')
         .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
         .filter(({ mtg }) => mtg && mtg >= todayDate && mtg <= nextWeekStr)
         .map(({ p, mtg }) => ({

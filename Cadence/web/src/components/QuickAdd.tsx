@@ -113,7 +113,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const parsed = parseInput(text, data.people, data.projects);
+  const parsed = parseInput(text, data.people.filter((p) => !p.type || p.type === 'person'), data.projects);
 
   const chips: { label: string; cls: string }[] = [];
   if (parsed.type !== 'task')       chips.push({ label: TYPE_LABELS[parsed.type], cls: `tag tag-${parsed.type}` });

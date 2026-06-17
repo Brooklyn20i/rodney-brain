@@ -16,7 +16,8 @@ export function Search({ onMenu }: { onMenu?: () => void }) {
     data.work_items.forEach((w) => { if (m(w.title) || m(w.notes)) out.push({ id: w.id, tag: 'Item', tagCls: 'tag-task', title: w.title, meta: w.done ? 'Done' : 'Open' }); });
     data.decisions.forEach((d) => { if (m(d.title) || m(d.context)) out.push({ id: d.id, tag: 'Decision', tagCls: 'tag-decision', title: d.title, meta: d.status }); });
     data.projects.forEach((p) => { if (m(p.name) || m(p.goal)) out.push({ id: p.id, tag: 'Project', tagCls: 'tag-info', title: p.name, meta: p.goal }); });
-    data.people.forEach((p) => { if (m(p.name) || m(p.role)) out.push({ id: p.id, tag: 'Person', tagCls: 'tag-action', title: p.name, meta: p.role }); });
+    data.people.forEach((p) => { if ((!p.type || p.type === 'person') && (m(p.name) || m(p.role))) out.push({ id: p.id, tag: 'Person', tagCls: 'tag-action', title: p.name, meta: p.role }); });
+    data.people.forEach((p) => { if (p.type === 'meeting_group' && (m(p.name) || m(p.notes))) out.push({ id: p.id, tag: 'Meeting', tagCls: 'tag-info', title: p.name, meta: p.notes }); });
     return out;
   }, [q, data]);
 

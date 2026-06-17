@@ -80,7 +80,7 @@ export function ItemModal({ existing, defaults, onClose }: {
       <div className="form-group"><label>Person (waiting on / follow up with)</label>
         <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
           <option value="">No person</option>
-          {data.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {data.people.filter((p) => !p.type || p.type === 'person').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
       <div className="form-group"><label>Notes</label>

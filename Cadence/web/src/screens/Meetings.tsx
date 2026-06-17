@@ -13,7 +13,8 @@ const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
 // ── Meeting Group create/edit modal ───────────────────────────────────────────
 function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person; onClose: () => void; onDelete?: () => void }) {
-  const { insert, update, remove, logActivity } = useCadence();
+  const { data, insert, update, remove, logActivity } = useCadence();
+  const { setMeetingDate } = useMeetingDates();
   const [name, setName] = useState(existing?.name || '');
   const [description, setDescription] = useState(existing?.notes || '');
   const [color, setColor] = useState(existing?.color || '');
@@ -36,6 +37,13 @@ function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person;
   const del = async () => {
     if (!existing) return;
     if (!confirm(`Delete "${existing.name}"? This cannot be undone.`)) return;
+    // Remove this group's meeting notes and their date entries so nothing lingers.
+    const folder = mtgFolder(existing.id);
+    const mtgNotes = data.notes.filter((n) => n.folder === folder);
+    for (const n of mtgNotes) {
+      try { await setMeetingDate(n.id, null); } catch { /* best-effort */ }
+      await remove('notes', n.id);
+    }
     await remove('people', existing.id);
     logActivity('delete_meeting_group', existing.name);
     onDelete?.();

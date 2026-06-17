@@ -146,7 +146,7 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
               {showOwnerPicker && (
                 <>
                   <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowOwnerPicker(false)} />
-                  <div className="action-send-picker" style={{ left: 0, right: 'auto' }}>
+                  <div className="action-send-picker action-send-picker--left">
                     <div className="send-picker-section">Assign to</div>
                     {(people || []).filter((p) => !p.type || p.type === 'person').map((p) => (
                       <button key={p.id} className="send-picker-option" onClick={() => selectOwner(p)}>

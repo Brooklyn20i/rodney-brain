@@ -497,7 +497,7 @@ function Stakeholders({ project, rows }: { project: Project; rows: Stakeholder[]
       <div className="form-row" style={{ marginTop: 8, gap: 6 }}>
         <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
           <option value="">Person…</option>
-          {data.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {data.people.filter((p) => !p.type || p.type === 'person').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         {!personId && <input type="text" placeholder="or name" value={name} onChange={(e) => setName(e.target.value)} />}
         <select value={raci} onChange={(e) => setRaci(e.target.value as Stakeholder['raci'])} style={{ maxWidth: 140 }}>
