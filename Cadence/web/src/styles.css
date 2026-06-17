@@ -671,7 +671,17 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .mtg-notes-section { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 220px;
   display: flex; flex-direction: column; overflow: hidden; }
 .mtg-notes-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
-  color: var(--text2); padding: 8px 16px 0; flex-shrink: 0; }
+  color: var(--text2); padding: 8px 16px 0; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; }
+.mtg-notes-expand { background: none; border: none; color: var(--accent);
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 2px 4px;
+  text-transform: none; letter-spacing: 0; }
+.mtg-notes-expand:hover { text-decoration: underline; }
+
+/* Focus mode: Notes editor takes over the whole modal body */
+.mtg-notes-focus .mtg-cols { display: none; }
+.mtg-notes-focus .mtg-mobile-tabs { display: none; }
+.mtg-notes-focus .mtg-notes-section { max-height: none; flex: 1; border-top: none; }
 
 /* Footer */
 .mtg-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -719,28 +729,17 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .share-plain-preview { font-size: 12px; color: var(--text); white-space: pre-wrap; word-break: break-word;
   font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; line-height: 1.6; }
 
-/* ── Mobile / iPhone ─────────────────────────────────────────────────────────── */
-/* Mobile tab bar: hide on desktop */
+/* ── Tablet & Mobile ─────────────────────────────────────────────────────────── */
+/* Mobile tab bar: hide on desktop / wide screens */
 .mtg-mobile-tabs { display: none; }
 
-@media (max-width: 680px) {
+/* Tablet + phone (iPad portrait, narrow windows): full-screen modal with the
+   Agenda / Actions / Notes tab layout so the Notes editor can use the full height. */
+@media (max-width: 1024px) {
   /* Full-screen meeting overlay */
   .mtg-overlay { padding: 0; align-items: stretch; }
   .mtg-modal { border-radius: 0; max-height: 100dvh; height: 100dvh; }
   .mtg-modal-structured { max-width: none; }
-
-  /* Header: safe-area for Dynamic Island / notch, then wrap buttons in 2×2 grid */
-  .mtg-hdr {
-    flex-direction: column; gap: 8px;
-    padding: 10px 14px;
-    padding-top: calc(10px + env(safe-area-inset-top, 0px));
-  }
-  .mtg-hdr-left { width: 100%; }
-  .mtg-hdr-right {
-    width: 100%;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-  }
-  .mtg-hdr-right .btn { justify-content: center; font-size: 12px; padding: 7px 6px; }
 
   /* Show mobile tab bar */
   .mtg-mobile-tabs {
@@ -761,15 +760,33 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   /* Notes tab: take the remaining height */
   .mtg-notes-tab-active { max-height: none; flex: 1; border-top: none; }
 
-  /* Footer: safe-area for home indicator */
-  .mtg-footer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
-
   /* Full-screen share panel */
   .share-overlay { padding: 0; align-items: stretch; }
   .share-modal { border-radius: 0; max-height: 100dvh; height: 100dvh; max-width: none; }
+  .share-preview { padding: 16px; }
+}
+
+/* Phone-only chrome (iPhone): stacked header, 2×2 button grid, safe-area insets. */
+@media (max-width: 680px) {
+  /* Header: safe-area for Dynamic Island / notch, then wrap buttons in 2×2 grid */
+  .mtg-hdr {
+    flex-direction: column; gap: 8px;
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .mtg-hdr-left { width: 100%; }
+  .mtg-hdr-right {
+    width: 100%;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .mtg-hdr-right .btn { justify-content: center; font-size: 12px; padding: 7px 6px; }
+
+  /* Footer: safe-area for home indicator */
+  .mtg-footer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Share panel safe-area insets */
   .share-hdr { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
   .share-actions { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
-  .share-preview { padding: 16px; }
 }
 
 /* ── People groups ── */

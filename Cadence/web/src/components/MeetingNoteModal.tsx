@@ -176,6 +176,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
   const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
+  const [notesExpanded, setNotesExpanded] = useState(false);
   const [meetingDate, setLocalMeetingDate] = useState(
     dates[note.id] || ''
   );
@@ -326,7 +327,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   return (
     <>
     <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className="mtg-modal mtg-modal-structured">
+      <div className={`mtg-modal mtg-modal-structured${notesExpanded ? ' mtg-notes-focus' : ''}`}>
 
         {/* Header */}
         <div className="mtg-hdr">
@@ -474,7 +475,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
         {/* Free notes */}
         <div className={`mtg-notes-section${mobileTab !== 'notes' ? ' mtg-hidden-mobile' : ' mtg-notes-tab-active'}`}>
-          <div className="mtg-notes-label">📝 Meeting Notes</div>
+          <div className="mtg-notes-label">
+            <span>📝 Meeting Notes</span>
+            <button className="mtg-notes-expand" onClick={() => setNotesExpanded((v) => !v)}>
+              {notesExpanded ? '⤡ Collapse' : '⤢ Expand'}
+            </button>
+          </div>
           <RichEditor key={note.id} content={notes} onBlur={setN}
             placeholder="Key context, decisions, things to remember…" />
         </div>
