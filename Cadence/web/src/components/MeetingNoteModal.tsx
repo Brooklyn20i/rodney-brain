@@ -15,9 +15,10 @@ export interface AgendaItem {
 export interface ActionItem {
   id: string; title: string;
   owner: 'me' | 'them';
-  owner_label?: string;   // free-text name override when owner='them' in group meetings
+  owner_label?: string;      // display name for 'them' owner
+  owner_person_id?: string;  // links to a person in the people table
   due: string; done: boolean; pushed: boolean;
-  pushed_to?: string;     // display label after send (e.g. "Sarah Chen" or "Project X")
+  pushed_to?: string;        // display label after send (e.g. "Sarah Chen" or "Project X")
 }
 export interface MeetingData {
   agenda: AgendaItem[];
@@ -114,6 +115,16 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
   const set = (patch: Partial<ActionItem>) => onChange({ ...item, ...patch });
   const isLate = !!item.due && !item.done && item.due < todayStr();
   const [showSend, setShowSend] = useState(false);
+  const [showOwnerPicker, setShowOwnerPicker] = useState(false);
+
+  const ownerPerson = (isGroupMeeting && item.owner_person_id && people)
+    ? people.find((p) => p.id === item.owner_person_id) ?? null
+    : null;
+
+  const selectOwner = (p: Person) => {
+    set({ owner_label: p.name, owner_person_id: p.id });
+    setShowOwnerPicker(false);
+  };
 
   return (
     <div className={`action-item${item.done ? ' done' : ''}${isLate ? ' late' : ''}`}>
@@ -122,14 +133,33 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
       <div className="action-main">
         <input className="action-title-input" value={item.title} placeholder="Action item…"
           onChange={(e) => set({ title: e.target.value })} />
-        <div className="action-meta">
+        <div className="action-meta" style={{ position: 'relative' }}>
+          {/* Owner chip — person picker for group meetings */}
           {isGroupMeeting && item.owner === 'them' ? (
-            <input
-              className="owner-name-input"
-              value={item.owner_label || ''}
-              placeholder="Who owns this?"
-              onChange={(e) => set({ owner_label: e.target.value })}
-            />
+            <>
+              <button
+                className={`owner-chip ${ownerPerson ? 'owner-them' : 'owner-neutral'}`}
+                onClick={() => setShowOwnerPicker((s) => !s)}
+                title="Select who owns this action">
+                {ownerPerson ? ownerPerson.name.split(' ')[0] : 'Select person…'}
+              </button>
+              {showOwnerPicker && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowOwnerPicker(false)} />
+                  <div className="action-send-picker" style={{ left: 0, right: 'auto' }}>
+                    <div className="send-picker-section">Assign to</div>
+                    {(people || []).filter((p) => !p.type || p.type === 'person').map((p) => (
+                      <button key={p.id} className="send-picker-option" onClick={() => selectOwner(p)}>
+                        <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                          {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                        </span>
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <button className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}
               onClick={() => set({ owner: item.owner === 'me' ? 'them' : 'me' })}
@@ -137,14 +167,24 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
               {item.owner === 'me' ? 'Me' : personName.split(' ')[0]}
             </button>
           )}
+
           <input className="due-input" type="date" value={item.due}
             onChange={(e) => set({ due: e.target.value })} title="Due date" />
           {isLate && <span className="due-late-label">Overdue</span>}
+
+          {/* Send / pushed state */}
           {item.pushed_to ? (
             <span className="pushed-label">→ {item.pushed_to}</span>
           ) : item.pushed ? (
             <span className="pushed-label">→ In Tasks</span>
-          ) : onSend && (
+          ) : ownerPerson && onSend ? (
+            // Direct send to the assigned person
+            <button className="action-send-btn" title={`Send to ${ownerPerson.name}'s task list`}
+              onClick={() => onSend(ownerPerson.id, 'person', ownerPerson.name)}>
+              → {ownerPerson.name.split(' ')[0]}
+            </button>
+          ) : onSend ? (
+            // Generic picker (for 1:1 meetings or unassigned group actions)
             <div style={{ position: 'relative' }}>
               <button className="action-send-btn" onClick={() => setShowSend((s) => !s)}>→ Send</button>
               {showSend && (
@@ -155,7 +195,11 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
                       <>
                         <div className="send-picker-section">People</div>
                         {people.filter((p) => !p.type || p.type === 'person').map((p) => (
-                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
+                          <button key={p.id} className="send-picker-option"
+                            onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
+                            <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                              {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                            </span>
                             {p.name}
                           </button>
                         ))}
@@ -165,7 +209,9 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
                       <>
                         <div className="send-picker-section">Projects</div>
                         {projects.map((p) => (
-                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
+                          <button key={p.id} className="send-picker-option"
+                            onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
+                            <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
                             {p.name}
                           </button>
                         ))}
@@ -175,7 +221,8 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
                 </>
               )}
             </div>
-          )}
+          ) : null}
+
           <button className="action-delete" onClick={onDelete} title="Remove">✕</button>
         </div>
       </div>

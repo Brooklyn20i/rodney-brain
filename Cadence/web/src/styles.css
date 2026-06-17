@@ -819,6 +819,10 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .action-send-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--text2); cursor: pointer; font-family: inherit; flex-shrink: 0; }
 .action-send-btn:hover { background: var(--blue-bg); color: var(--accent); border-color: var(--accent-lt); }
 
+/* owner-neutral: "Select person…" chip before a person is assigned */
+.owner-chip.owner-neutral { background: var(--surface2); color: var(--text2); border: 1px dashed var(--border); font-weight: 500; }
+.owner-chip.owner-neutral:hover { border-color: var(--accent); color: var(--accent); }
+
 /* action-send-picker: dropdown with people/project options */
 .action-send-picker { position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); min-width: 210px; max-height: 300px; overflow-y: auto; }
 .send-picker-section { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); padding: 8px 12px 4px; }

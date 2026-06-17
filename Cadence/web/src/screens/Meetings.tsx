@@ -75,11 +75,12 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend }: {
 }) {
   const [showSend, setShowSend] = useState(false);
   const isLate = !!action.due && action.due < todayStr();
-  const ownerLabel = action.owner === 'me' ? 'Me' : (action.owner_label || 'Them');
+  const ownerPerson = action.owner_person_id ? people.find((p) => p.id === action.owner_person_id) ?? null : null;
+  const ownerLabel = action.owner === 'me' ? 'Me' : (ownerPerson?.name || action.owner_label || 'Them');
 
   return (
     <div className="group-action-row">
-      <div className="group-action-main">
+      <div className="group-action-main" style={{ position: 'relative' }}>
         <div className="group-action-title">{action.title}</div>
         <div className="group-action-meta">
           <span className={`owner-chip ${action.owner === 'me' ? 'owner-me' : 'owner-them'}`}>{ownerLabel}</span>
@@ -91,6 +92,12 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend }: {
           )}
           {action.pushed_to ? (
             <span className="pushed-label">→ {action.pushed_to}</span>
+          ) : ownerPerson ? (
+            // Direct send to the assigned person — no picker needed
+            <button className="action-send-btn" title={`Send to ${ownerPerson.name}'s task list`}
+              onClick={() => onSend(ownerPerson.id, 'person', ownerPerson.name)}>
+              → {ownerPerson.name.split(' ')[0]}
+            </button>
           ) : (
             <div style={{ position: 'relative' }}>
               <button className="action-send-btn" onClick={() => setShowSend((s) => !s)}>→ Send</button>
@@ -103,6 +110,9 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend }: {
                         <div className="send-picker-section">People</div>
                         {people.map((p) => (
                           <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
+                            <span className="avatar" style={{ background: colorOf(p), width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                              {initials(p.name)}
+                            </span>
                             {p.name}
                           </button>
                         ))}
@@ -113,6 +123,7 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend }: {
                         <div className="send-picker-section">Projects</div>
                         {projects.map((p) => (
                           <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
+                            <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
                             {p.name}
                           </button>
                         ))}
