@@ -368,7 +368,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
   const [editing, setEditing] = useState<Person | null>(null);
 
   const sorted = useMemo(() =>
-    [...data.people].sort((a, b) => {
+    [...data.people].filter((p) => !p.type || p.type === 'person').sort((a, b) => {
       const gA = GROUPS.indexOf(a.group_name || 'Direct Reports');
       const gB = GROUPS.indexOf(b.group_name || 'Direct Reports');
       if (gA !== gB) return (gA < 0 ? 99 : gA) - (gB < 0 ? 99 : gB);

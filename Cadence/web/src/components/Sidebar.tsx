@@ -10,6 +10,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Work', items: [
     { id: 'projects', label: 'Projects', icon: '▤' },
     { id: 'people', label: 'People', icon: '✦' },
+    { id: 'meetings', label: 'Meetings', icon: '🗓' },
     { id: 'decisions', label: 'Decisions', icon: '⚖' },
     { id: 'outbox', label: 'Outbox', icon: '✉' },
   ]},

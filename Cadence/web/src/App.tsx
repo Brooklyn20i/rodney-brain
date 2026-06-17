@@ -8,6 +8,7 @@ import { Today } from './screens/Today';
 import { Inbox } from './screens/Inbox';
 import { Projects } from './screens/Projects';
 import { People } from './screens/People';
+import { Meetings } from './screens/Meetings';
 import { Decisions } from './screens/Decisions';
 import { Notes } from './screens/Notes';
 import { Outbox } from './screens/Outbox';
@@ -41,6 +42,7 @@ export function App() {
       case 'inbox': return <Inbox onMenu={onMenu} />;
       case 'projects': return <Projects onMenu={onMenu} />;
       case 'people': return <People onMenu={onMenu} />;
+      case 'meetings': return <Meetings onMenu={onMenu} />;
       case 'decisions': return <Decisions onMenu={onMenu} />;
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'outbox': return <Outbox onMenu={onMenu} />;

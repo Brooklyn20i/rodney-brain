@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { todayStr, fmtDM, fmtWeekDMY, fmtDMY } from '../lib/util';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
+import type { Project } from '../lib/types';
 import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
 import { useMeetingDates } from '../lib/meetings';
@@ -14,7 +15,9 @@ export interface AgendaItem {
 export interface ActionItem {
   id: string; title: string;
   owner: 'me' | 'them';
+  owner_label?: string;   // free-text name override when owner='them' in group meetings
   due: string; done: boolean; pushed: boolean;
+  pushed_to?: string;     // display label after send (e.g. "Sarah Chen" or "Project X")
 }
 export interface MeetingData {
   agenda: AgendaItem[];
@@ -99,13 +102,18 @@ function AgendaItemRow({ item, onChange, onDelete }: {
 }
 
 // ── Action item row ───────────────────────────────────────────────────────────
-function ActionItemRow({ item, personName, onChange, onDelete }: {
+function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, people, projects, onSend }: {
   item: ActionItem; personName: string;
   onChange: (updated: ActionItem) => void;
   onDelete: () => void;
+  isGroupMeeting?: boolean;
+  people?: Person[];
+  projects?: Project[];
+  onSend?: (targetId: string, targetType: 'person' | 'project', targetName: string) => void;
 }) {
   const set = (patch: Partial<ActionItem>) => onChange({ ...item, ...patch });
   const isLate = !!item.due && !item.done && item.due < todayStr();
+  const [showSend, setShowSend] = useState(false);
 
   return (
     <div className={`action-item${item.done ? ' done' : ''}${isLate ? ' late' : ''}`}>
@@ -115,15 +123,59 @@ function ActionItemRow({ item, personName, onChange, onDelete }: {
         <input className="action-title-input" value={item.title} placeholder="Action item…"
           onChange={(e) => set({ title: e.target.value })} />
         <div className="action-meta">
-          <button className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}
-            onClick={() => set({ owner: item.owner === 'me' ? 'them' : 'me' })}
-            title="Click to toggle owner">
-            {item.owner === 'me' ? 'Me' : personName.split(' ')[0]}
-          </button>
+          {isGroupMeeting && item.owner === 'them' ? (
+            <input
+              className="owner-name-input"
+              value={item.owner_label || ''}
+              placeholder="Who owns this?"
+              onChange={(e) => set({ owner_label: e.target.value })}
+            />
+          ) : (
+            <button className={`owner-chip ${item.owner === 'me' ? 'owner-me' : 'owner-them'}`}
+              onClick={() => set({ owner: item.owner === 'me' ? 'them' : 'me' })}
+              title="Click to toggle owner">
+              {item.owner === 'me' ? 'Me' : personName.split(' ')[0]}
+            </button>
+          )}
           <input className="due-input" type="date" value={item.due}
             onChange={(e) => set({ due: e.target.value })} title="Due date" />
           {isLate && <span className="due-late-label">Overdue</span>}
-          {item.pushed && <span className="pushed-label">→ In Tasks</span>}
+          {item.pushed_to ? (
+            <span className="pushed-label">→ {item.pushed_to}</span>
+          ) : item.pushed ? (
+            <span className="pushed-label">→ In Tasks</span>
+          ) : onSend && (
+            <div style={{ position: 'relative' }}>
+              <button className="action-send-btn" onClick={() => setShowSend((s) => !s)}>→ Send</button>
+              {showSend && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSend(false)} />
+                  <div className="action-send-picker">
+                    {people && people.length > 0 && (
+                      <>
+                        <div className="send-picker-section">People</div>
+                        {people.filter((p) => !p.type || p.type === 'person').map((p) => (
+                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
+                            {p.name}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {projects && projects.length > 0 && (
+                      <>
+                        <div className="send-picker-section">Projects</div>
+                        {projects.map((p) => (
+                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
+                            {p.name}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <button className="action-delete" onClick={onDelete} title="Remove">✕</button>
         </div>
       </div>
@@ -179,6 +231,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const { data, update, insert, remove, logActivity } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
 
+  const isGroupMeeting = person.type === 'meeting_group';
+
   const { data: parsed, isLegacy } = useMemo(() => parseMeeting(note.body), [note.id, note.body]);
   const [agenda, setAgenda] = useState<AgendaItem[]>(parsed.agenda);
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
@@ -201,8 +255,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setLocalMeetingDate(date);
     setDateErr('');
 
-    // Auto-update the note title when it follows the "1:1 · Name · DD/MM/YYYY" pattern
-    const prefix = `1:1 · ${person.name} · `;
+    // Auto-update the note title when it follows the expected pattern
+    const prefix = isGroupMeeting ? `${person.name} · ` : `1:1 · ${person.name} · `;
     if (date && title.startsWith(prefix)) {
       const newTitle = `${prefix}${fmtDMY(date)}`;
       setTitle(newTitle);
@@ -299,7 +353,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     for (const a of toPush) {
       await insert('work_items', {
         title: a.title, type: 'task', priority: 'medium',
-        person_id: person.id,
+        person_id: isGroupMeeting ? null : person.id,
         notes: `Action from: ${title}`,
         inboxed: false, source: 'you',
       } as Partial<WorkItem>);
@@ -307,6 +361,18 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     const updated = actions.map((a) => ({ ...a, pushed: a.pushed || !!a.title.trim() }));
     setAc(updated);
     logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
+  };
+
+  const onSendAction = async (action: ActionItem, targetId: string, targetType: 'person' | 'project', targetName: string) => {
+    await insert('work_items', {
+      title: action.title, type: 'task', priority: 'medium',
+      person_id: targetType === 'person' ? targetId : null,
+      project_id: targetType === 'project' ? targetId : null,
+      notes: `Action from: ${title}`,
+      inboxed: false, source: 'you',
+    } as Partial<WorkItem>);
+    const updated = actions.map((a) => a.id === action.id ? { ...a, pushed: true, pushed_to: targetName } : a);
+    setAc(updated);
   };
 
   const markCarryForwardDone = (cfAction: ActionItem, done: boolean) => {
@@ -335,6 +401,10 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const toCover = agenda.filter((a) => a.status === 'discuss').length;
   const covered = agenda.filter((a) => a.status === 'covered').length;
   const newActions = actions.filter((a) => !a.done).length;
+
+  // Filtered people and projects for the send picker
+  const pickerPeople = data.people.filter((p) => !p.type || p.type === 'person');
+  const pickerProjects = data.projects.filter((p) => !p.deleted_at);
 
   return (
     <>
@@ -402,12 +472,14 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           <div className={`mtg-col mtg-col-agenda${mobileTab === 'actions' ? ' mtg-hidden-mobile' : ''}`}>
             <div className="mtg-col-hdr">
               <span className="mtg-col-title">📋 Agenda</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
-                Import Action Items ↓
-              </button>
+              {!isGroupMeeting && (
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
+                  Import Action Items ↓
+                </button>
+              )}
             </div>
 
-            {showImport && (
+            {!isGroupMeeting && showImport && (
               <div className="mtg-import-panel">
                 {openTopics.length === 0
                   ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open action items for {person.name.split(' ')[0]}.</p>
@@ -462,12 +534,18 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               )}
               {actions.map((item, i) => (
                 <ActionItemRow key={item.id} item={item} personName={person.name}
+                  isGroupMeeting={isGroupMeeting}
+                  people={pickerPeople}
+                  projects={pickerProjects}
+                  onSend={(tId, tType, tName) => onSendAction(item, tId, tType, tName)}
                   onChange={(updated) => setAc(actions.map((a, j) => j === i ? updated : a))}
                   onDelete={() => setAc(actions.filter((_, j) => j !== i))} />
               ))}
               <div className="mtg-action-add-row">
                 <button className="mtg-add-row" onClick={() => addAction('me')}>+ For me</button>
-                <button className="mtg-add-row" onClick={() => addAction('them')}>+ For {person.name.split(' ')[0]}</button>
+                <button className="mtg-add-row" onClick={() => addAction('them')}>
+                  {isGroupMeeting ? '+ For others' : `+ For ${person.name.split(' ')[0]}`}
+                </button>
               </div>
 
               {carryForward.length > 0 && (

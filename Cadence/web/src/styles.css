@@ -813,3 +813,27 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   background: var(--surface2); color: var(--text2); font-size: 12px; font-weight: 500;
   cursor: pointer; font-family: inherit; transition: all 0.12s; }
 .person-group-opt.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Meetings screen ── */
+/* action-send-btn: small grey "→ Send" button that appears on each action */
+.action-send-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--text2); cursor: pointer; font-family: inherit; flex-shrink: 0; }
+.action-send-btn:hover { background: var(--blue-bg); color: var(--accent); border-color: var(--accent-lt); }
+
+/* action-send-picker: dropdown with people/project options */
+.action-send-picker { position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); min-width: 210px; max-height: 300px; overflow-y: auto; }
+.send-picker-section { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); padding: 8px 12px 4px; }
+.send-picker-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; background: none; border: none; text-align: left; font-size: 13px; cursor: pointer; font-family: inherit; color: var(--text); }
+.send-picker-option:hover { background: var(--surface2); }
+
+/* owner-name-input: free-text owner field in group meetings */
+.owner-name-input { border: none; border-bottom: 1px solid var(--border); background: transparent; font-size: 12px; font-family: inherit; color: var(--text); padding: 1px 4px; width: 90px; outline: none; }
+.owner-name-input::placeholder { color: var(--text3); }
+.owner-name-input:focus { border-color: var(--accent); }
+
+/* group-action-row: open action item in Meetings > Open Actions tab */
+.group-action-row { padding: 9px 12px; background: var(--surface2); border-radius: 8px; margin-bottom: 6px; }
+.group-action-main { display: flex; flex-direction: column; gap: 4px; position: relative; }
+.group-action-title { font-size: 14px; font-weight: 500; color: var(--text); }
+.group-action-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.group-action-note { font-size: 11px; color: var(--text3); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.due-normal-label { font-size: 11px; color: var(--text2); }
