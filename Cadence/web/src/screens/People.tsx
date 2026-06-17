@@ -241,6 +241,7 @@ function InlineNotes({ person }: { person: Person }) {
 
 // ── Recently completed log ─────────────────────────────────────────────────────
 function RecentlyDone({ items }: { items: WorkItem[] }) {
+  const { update } = useCadence();
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
   const fmt = (ts: string | null) => ts ? fmtDM(ts) : '';
@@ -257,6 +258,10 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
           <span style={{ color: 'var(--green)', fontSize: 13 }}>✓</span>
           <span className="wi-title done" style={{ flex: 1 }}>{w.title}</span>
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{fmt(w.completed_at)}</span>
+          <button className="btn btn-ghost btn-sm" title="Reopen"
+            onClick={(e) => { e.stopPropagation(); update('work_items', w.id, { done: false, completed_at: null } as Partial<WorkItem>); }}>
+            ↩
+          </button>
         </div>
       ))}
     </div>

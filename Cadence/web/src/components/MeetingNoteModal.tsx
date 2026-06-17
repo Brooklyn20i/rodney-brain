@@ -47,10 +47,20 @@ function AgendaItemRow({ item, onChange, onDelete }: {
   onDelete: () => void;
 }) {
   const [editingNotes, setEditingNotes] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const set = (patch: Partial<AgendaItem>) => onChange({ ...item, ...patch });
 
+  const autoGrow = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useEffect(() => autoGrow(taRef.current), [item.notes]);
+
+  const statusClass = item.status === 'covered' ? ' covered' : item.status === 'deferred' ? ' deferred' : '';
+
   return (
-    <div className={`agenda-item${item.status === 'covered' ? ' covered' : ''}`}>
+    <div className={`agenda-item${statusClass}`}>
       <span className="agenda-handle" title="Drag to reorder">⠿</span>
       <div className="agenda-main">
         <div className="agenda-topic">
@@ -64,12 +74,13 @@ function AgendaItemRow({ item, onChange, onDelete }: {
         </div>
         {(editingNotes || item.notes) ? (
           <textarea
+            ref={taRef}
             className="agenda-notes-input"
             value={item.notes}
             placeholder="Notes on this topic…"
-            onChange={(e) => set({ notes: e.target.value })}
+            onChange={(e) => { set({ notes: e.target.value }); autoGrow(e.target); }}
+            onInput={(e) => autoGrow(e.currentTarget)}
             onBlur={() => { if (!item.notes) setEditingNotes(false); }}
-            rows={2}
           />
         ) : (
           <button className="agenda-notes-add" onClick={() => setEditingNotes(true)}>+ Add notes</button>
@@ -77,7 +88,7 @@ function AgendaItemRow({ item, onChange, onDelete }: {
         <div className="agenda-status-btns">
           {(['discuss', 'covered', 'deferred'] as const).map((s) => (
             <button key={s} className={`stn-btn${item.status === s ? ` active-${s}` : ''}`}
-              onClick={() => set({ status: s })}>
+              onClick={() => set({ status: item.status === s ? 'discuss' : s })}>
               {s === 'discuss' ? '💬 Discuss' : s === 'covered' ? '✅ Covered' : '⏭ Defer'}
             </button>
           ))}
@@ -120,16 +131,17 @@ function ActionItemRow({ item, personName, onChange, onDelete }: {
   );
 }
 
-// ── Carry-forward row (read-only, local checked state) ────────────────────────
+// ── Carry-forward row ─────────────────────────────────────────────────────────
 function CarryForwardRow({ item, personName, onMarkDone }: {
-  item: ActionItem; personName: string; onMarkDone: () => void;
+  item: ActionItem; personName: string; onMarkDone: (done: boolean) => void;
 }) {
   const [checked, setChecked] = useState(false);
   const isLate = !!item.due && !checked && item.due < todayStr();
 
   const handleCheck = () => {
-    setChecked(true);
-    onMarkDone();
+    const next = !checked;
+    setChecked(next);
+    onMarkDone(next);
   };
 
   return (
@@ -297,10 +309,10 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
   };
 
-  const markCarryForwardDone = (cfAction: ActionItem) => {
+  const markCarryForwardDone = (cfAction: ActionItem, done: boolean) => {
     if (!prevMeeting) return;
     const { data: prev } = parseMeeting(prevMeeting.body);
-    const updated = prev.actions.map((a) => a.id === cfAction.id ? { ...a, done: true } : a);
+    const updated = prev.actions.map((a) => a.id === cfAction.id ? { ...a, done } : a);
     update('notes', prevMeeting.id, {
       body: JSON.stringify({ ...prev, actions: updated }),
     } as Partial<Note>);
@@ -465,7 +477,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                   </div>
                   {carryForward.map((cf) => (
                     <CarryForwardRow key={cf.id} item={cf} personName={person.name}
-                      onMarkDone={() => markCarryForwardDone(cf)} />
+                      onMarkDone={(done) => markCarryForwardDone(cf, done)} />
                   ))}
                 </>
               )}

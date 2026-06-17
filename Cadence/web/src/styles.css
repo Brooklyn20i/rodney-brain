@@ -609,7 +609,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 /* Agenda items */
 .agenda-item { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px;
   border: 1px solid var(--border); background: var(--surface); margin-bottom: 8px; }
-.agenda-item.covered { opacity: 0.5; }
+.agenda-item.covered .agenda-topic,
+.agenda-item.covered .agenda-notes-input,
+.agenda-item.covered .agenda-notes-add { opacity: 0.45; }
+.agenda-item.deferred .agenda-topic,
+.agenda-item.deferred .agenda-notes-input,
+.agenda-item.deferred .agenda-notes-add { opacity: 0.45; }
 .agenda-handle { color: var(--text3); font-size: 13px; cursor: grab; padding-top: 4px; flex-shrink: 0; user-select: none; }
 .agenda-main { flex: 1; min-width: 0; }
 .agenda-topic { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -620,8 +625,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   padding: 0 4px; margin-left: auto; opacity: 0; transition: opacity 0.1s; }
 .agenda-item:hover .agenda-delete { opacity: 1; }
 .agenda-notes-input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
-  font-size: 12px; font-family: inherit; resize: vertical; background: var(--surface2);
-  color: var(--text); outline: none; margin-bottom: 6px; }
+  font-size: 12px; font-family: inherit; resize: none; background: var(--surface2);
+  color: var(--text); outline: none; margin-bottom: 6px;
+  min-height: 3.5em; overflow: hidden; box-sizing: border-box; }
 .agenda-notes-input:focus { border-color: var(--accent); }
 .agenda-notes-add { background: none; border: none; color: var(--text3); font-size: 12px; cursor: pointer;
   padding: 2px 0; margin-bottom: 6px; font-family: inherit; }
