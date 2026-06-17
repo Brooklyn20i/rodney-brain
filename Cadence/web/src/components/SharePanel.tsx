@@ -131,8 +131,14 @@ function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: strin
       const sub = a.notes ? `<ul style="padding-left:14px;margin:2px 0;"><li style="color:#555;font-style:italic;">${a.notes}</li></ul>` : '';
       parts.push(`<li>✅ <b>${a.title}</b>${sub}</li>`);
     });
-    discuss.forEach((a) => parts.push(`<li>💬 <b>${a.title}</b> — not reached</li>`));
-    deferred.forEach((a) => parts.push(`<li>⏭ <b>${a.title}</b> — deferred</li>`));
+    discuss.forEach((a) => {
+      const sub = a.notes ? `<ul style="padding-left:14px;margin:2px 0;"><li style="color:#555;font-style:italic;">${a.notes}</li></ul>` : '';
+      parts.push(`<li>💬 <b>${a.title}</b>${sub}</li>`);
+    });
+    deferred.forEach((a) => {
+      const sub = a.notes ? `<ul style="padding-left:14px;margin:2px 0;"><li style="color:#555;font-style:italic;">${a.notes}</li></ul>` : '';
+      parts.push(`<li>⏭ <b>${a.title}</b> — deferred${sub}</li>`);
+    });
     parts.push('</ul>');
   }
 
@@ -147,6 +153,12 @@ function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: strin
     parts.push('</ul>');
   }
 
+  const meetingNotes = (data.notes || '').trim();
+  if (meetingNotes && meetingNotes !== '<p></p>') {
+    parts.push(`<p style="${f}font-size:13px;font-weight:700;margin:8px 0 4px;"><b>Notes</b></p>`);
+    parts.push(`<div style="${f}font-size:13px;line-height:1.6;color:#333;">${meetingNotes}</div>`);
+  }
+
   return parts.join('\n');
 }
 
@@ -159,8 +171,14 @@ function generateOneNotePlain(data: MeetingData, person: Person, createdAt: stri
     lines.push(`✅ ${a.title}`);
     if (a.notes) lines.push(`   ${a.notes}`);
   });
-  data.agenda.filter((a) => a.status === 'discuss').forEach((a) => lines.push(`💬 ${a.title} — not reached`));
-  data.agenda.filter((a) => a.status === 'deferred').forEach((a) => lines.push(`⏭ ${a.title} — deferred`));
+  data.agenda.filter((a) => a.status === 'discuss').forEach((a) => {
+    lines.push(`💬 ${a.title}`);
+    if (a.notes) lines.push(`   ${a.notes}`);
+  });
+  data.agenda.filter((a) => a.status === 'deferred').forEach((a) => {
+    lines.push(`⏭ ${a.title} — deferred`);
+    if (a.notes) lines.push(`   ${a.notes}`);
+  });
 
   if (data.actions.length) {
     lines.push('', 'Actions');
@@ -169,6 +187,11 @@ function generateOneNotePlain(data: MeetingData, person: Person, createdAt: stri
       const due = a.due ? ` (Due ${fmtDM(a.due)})` : '';
       lines.push(`${a.done ? '✓' : '☐'} ${owner} — ${a.title}${due}`);
     });
+  }
+
+  const meetingNotes = (data.notes || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (meetingNotes) {
+    lines.push('', 'Notes', meetingNotes);
   }
 
   return lines.join('\n');
