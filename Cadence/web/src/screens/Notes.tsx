@@ -19,6 +19,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   // Hide system notes (title or folder starting with __) — includes WIN state and meeting notes
   const data = useMemo(() => ({ ...rawData, notes: rawData.notes.filter((n) => !n.title.startsWith('__') && !(n.folder || '').startsWith('__')) }), [rawData]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showList, setShowList] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
   const [title, setTitle] = useState('');
@@ -79,7 +80,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
     else await moveNote(v);
   };
 
-  const selectNote = (n: Note) => { setSelected(n.id); setTitle(n.title || ''); };
+  const selectNote = (n: Note) => { setSelected(n.id); setTitle(n.title || ''); setShowList(false); };
 
   const NoteRow = (n: Note) => (
     <button className={`note-list-item ${selected === n.id ? 'selected' : ''}`} key={n.id} onClick={() => selectNote(n)}>
@@ -109,7 +110,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   return (
     <>
       <ScreenHeader title="Notes" onMenu={onMenu} />
-      <div className="split-view">
+      <div className={`split-view${note && !showList ? ' notes-focus' : ''}`}>
         <div className="split-left">
           <div className="split-panel-header"><h3>Notebooks</h3>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -148,6 +149,9 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
         {note ? (
           <div className="split-right">
             <div className="split-panel-header">
+              <button className="notes-list-toggle" onClick={() => setShowList((v) => !v)} title="Toggle note list">
+                {showList ? '◂' : '▸'}
+              </button>
               <input
                 id="note-title-input"
                 value={title}
@@ -160,7 +164,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                 {folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}
                 <option value={NEW_FOLDER}>＋ New folder…</option>
               </select>
-              <button className="btn btn-danger btn-sm" onClick={() => { remove('notes', note.id); setSelected(null); }}>Delete</button>
+              <button className="btn btn-danger btn-sm" onClick={() => { remove('notes', note.id); setSelected(null); setShowList(true); }}>Delete</button>
             </div>
             <div className="split-panel-body" style={{ padding: 0, overflow: 'hidden' }}>
               <RichEditor
