@@ -401,8 +401,10 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
       await insert('work_items', {
         title: a.title, type: 'task', priority: 'medium',
         person_id: isGroupMeeting ? null : person.id,
+        // Group meeting actions have no person; send to Inbox so they're visible.
+        inboxed: isGroupMeeting ? true : false,
         notes: `Action from: ${title}`,
-        inboxed: false, source: 'you',
+        source: 'you',
       } as Partial<WorkItem>);
     }
     const updated = actions.map((a) => ({ ...a, pushed: a.pushed || !!a.title.trim() }));
