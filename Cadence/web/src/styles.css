@@ -774,20 +774,29 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .share-preview { padding: 16px; }
 }
 
-/* Phone-only chrome (iPhone): stacked header, 2×2 button grid, safe-area insets. */
-@media (max-width: 680px) {
-  /* Header: safe-area for Dynamic Island / notch, then wrap buttons in 2×2 grid */
+/* Tablet + phone chrome (iPad portrait ≤1024px): stacked header, 2×2 button grid. */
+@media (max-width: 1024px) {
+  /* Header: wrap buttons in 2×2 grid so "Save & Close" is always reachable */
   .mtg-hdr {
     flex-direction: column; gap: 8px;
-    padding: 10px 14px;
-    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding: 10px 16px;
   }
   .mtg-hdr-left { width: 100%; }
   .mtg-hdr-right {
     width: 100%;
     display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   }
-  .mtg-hdr-right .btn { justify-content: center; font-size: 12px; padding: 7px 6px; }
+  .mtg-hdr-right .btn { justify-content: center; font-size: 13px; padding: 8px 8px; }
+}
+
+/* Phone-only chrome (iPhone): safe-area insets + tighter sizing. */
+@media (max-width: 680px) {
+  /* Header: safe-area for Dynamic Island / notch */
+  .mtg-hdr {
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .mtg-hdr-right .btn { font-size: 12px; padding: 7px 6px; }
 
   /* Footer: safe-area for home indicator */
   .mtg-footer { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
