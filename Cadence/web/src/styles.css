@@ -593,9 +593,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 /* ── Structured 1:1 Meeting Modal ── */
 .mtg-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
-  padding: 16px 22px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  padding: 16px 22px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+  position: relative; z-index: 60; /* above picker backdrops (z-index 49) so header buttons always tappable */ }
 .mtg-hdr-left { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; }
 .mtg-hdr-right { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+/* Save & Close button in footer — only shown on tablet/phone as a fallback */
+.mtg-footer-close { display: none; }
 
 .mtg-cols { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .mtg-col { display: flex; flex-direction: column; overflow: hidden; }
@@ -787,6 +790,14 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
     display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   }
   .mtg-hdr-right .btn { justify-content: center; font-size: 13px; padding: 8px 8px; }
+
+  /* Footer close button: visible on tablet/phone as an extra fallback */
+  .mtg-footer-close {
+    display: block;
+    width: 100%; margin-top: 8px;
+    padding: 12px; font-size: 15px; font-weight: 700;
+    border-radius: 10px;
+  }
 }
 
 /* Phone-only chrome (iPhone): safe-area insets + tighter sizing. */

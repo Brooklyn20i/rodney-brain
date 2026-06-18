@@ -644,6 +644,9 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               </button>
             )}
           </div>
+          <button className="btn btn-primary mtg-footer-close" onClick={handleClose}>
+            Save &amp; Close
+          </button>
         </div>
 
       </div>
