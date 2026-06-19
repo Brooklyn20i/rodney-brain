@@ -289,83 +289,94 @@ DROP POLICY IF EXISTS activity_insert ON activity; CREATE POLICY activity_insert
 DROP POLICY IF EXISTS activity_update ON activity; CREATE POLICY activity_update ON activity FOR UPDATE USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
 DROP POLICY IF EXISTS activity_delete ON activity; CREATE POLICY activity_delete ON activity FOR DELETE USING (owner_id = auth.uid());
 
--- ════════════════════════════════════════════════════════════════════════════
--- Later migrations folded in (0004 colour+realtime, 0006 projects depth,
--- 0007 people groups). Idempotent. Keep setup.sql complete so fresh installs
--- get the full current schema in one run.
--- ════════════════════════════════════════════════════════════════════════════
+-- ── Delegated agent access ───────────────────────────────────────────────────────
+-- Cadence — delegated agent access without sharing Rodney's password
+--
+-- Purpose:
+--   Let a dedicated agent auth user operate on an owner's Cadence rows through
+--   normal Supabase auth + anon key, without exposing the owner's password and
+--   without putting a service_role key in local agent tooling.
+--
+-- Activation:
+--   1. Create the agent as a normal Supabase Auth user.
+--   2. Insert one row into cadence_agent_access(owner_id, agent_user_id, can_write).
+--   3. Revoke by setting revoked_at, or delete the grant.
 
--- People: avatar colour + grouping
-ALTER TABLE people ADD COLUMN IF NOT EXISTS color      text    NOT NULL DEFAULT '#1B5E9E';
-ALTER TABLE people ADD COLUMN IF NOT EXISTS group_name text    NOT NULL DEFAULT 'Direct Reports';
-ALTER TABLE people ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
-
--- Projects: strategy linkage (priority + KPIs)
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS pillar_id text  NOT NULL DEFAULT '';
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS kpi_ids   jsonb NOT NULL DEFAULT '[]'::jsonb;
-
--- Phases / workstreams
-CREATE TABLE IF NOT EXISTS project_phases (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  name text NOT NULL DEFAULT '', start_date date, end_date date, sort int NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz
-);
-ALTER TABLE milestones ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
-ALTER TABLE work_items ADD COLUMN IF NOT EXISTS phase_id uuid REFERENCES project_phases(id) ON DELETE SET NULL;
-
--- RAID (Risks, Assumptions, Issues, Dependencies)
-CREATE TABLE IF NOT EXISTS raid_items (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  kind text NOT NULL DEFAULT 'risk', text text NOT NULL DEFAULT '', owner text NOT NULL DEFAULT '',
-  severity text NOT NULL DEFAULT 'medium', status text NOT NULL DEFAULT 'open',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz
+create table if not exists cadence_agent_access (
+  id            uuid primary key default gen_random_uuid(),
+  owner_id      uuid not null references auth.users(id) on delete cascade,
+  agent_user_id uuid not null references auth.users(id) on delete cascade,
+  can_write     boolean not null default true,
+  note          text not null default '',
+  created_at    timestamptz not null default now(),
+  revoked_at    timestamptz,
+  unique(owner_id, agent_user_id)
 );
 
--- Stakeholders / RACI
-CREATE TABLE IF NOT EXISTS stakeholders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
-  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  person_id uuid REFERENCES people(id) ON DELETE SET NULL,
-  name text NOT NULL DEFAULT '', raci text NOT NULL DEFAULT 'I',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz
-);
+create index if not exists idx_cadence_agent_access_agent
+  on cadence_agent_access(agent_user_id, owner_id)
+  where revoked_at is null;
 
--- Triggers + RLS for the new tables
-DO $rls$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['project_phases','raid_items','stakeholders'] LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS trg_%1$s_updated ON %1$s;', t);
-    EXECUTE format('CREATE TRIGGER trg_%1$s_updated BEFORE UPDATE ON %1$s FOR EACH ROW EXECUTE FUNCTION set_updated_at();', t);
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
-    EXECUTE format('DROP POLICY IF EXISTS %1$s_all ON %1$s;', t);
-    EXECUTE format('CREATE POLICY %1$s_all ON %1$s USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());', t);
-  END LOOP;
-END $rls$;
+alter table cadence_agent_access enable row level security;
 
--- Realtime cross-device sync for every table (base + new)
-DO $rt$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'projects','milestones','project_updates','people','talking_points',
-    'work_items','comments','decisions','notes','outbox','links','activity',
-    'project_phases','raid_items','stakeholders'
-  ] LOOP
-    EXECUTE format('ALTER TABLE %I REPLICA IDENTITY FULL;', t);
-    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename=t) THEN
-      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I;', t);
-    END IF;
-  END LOOP;
-END $rt$;
+drop policy if exists cadence_agent_access_select on cadence_agent_access;
+create policy cadence_agent_access_select on cadence_agent_access
+  for select using (owner_id = auth.uid() or agent_user_id = auth.uid());
+
+drop policy if exists cadence_agent_access_insert on cadence_agent_access;
+create policy cadence_agent_access_insert on cadence_agent_access
+  for insert with check (owner_id = auth.uid());
+
+drop policy if exists cadence_agent_access_update on cadence_agent_access;
+create policy cadence_agent_access_update on cadence_agent_access
+  for update using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+drop policy if exists cadence_agent_access_delete on cadence_agent_access;
+create policy cadence_agent_access_delete on cadence_agent_access
+  for delete using (owner_id = auth.uid());
+
+create or replace function cadence_can_access(row_owner uuid, require_write boolean default false)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $fn$
+  select auth.uid() is not null
+    and (
+      row_owner = auth.uid()
+      or exists (
+        select 1
+        from public.cadence_agent_access a
+        where a.owner_id = row_owner
+          and a.agent_user_id = auth.uid()
+          and a.revoked_at is null
+          and (not require_write or a.can_write)
+      )
+    );
+$fn$;
+
+grant execute on function cadence_can_access(uuid, boolean) to authenticated;
+
+do $policies$
+declare t text;
+begin
+  foreach t in array array['projects','milestones','project_updates','people',
+    'talking_points','work_items','comments','decisions','notes','outbox',
+    'links','activity']
+  loop
+    execute format('alter table %I enable row level security;', t);
+
+    execute format('drop policy if exists %1$I_select on %1$I;', t);
+    execute format('create policy %1$I_select on %1$I for select using (cadence_can_access(owner_id, false));', t);
+
+    execute format('drop policy if exists %1$I_insert on %1$I;', t);
+    execute format('create policy %1$I_insert on %1$I for insert with check (cadence_can_access(owner_id, true));', t);
+
+    execute format('drop policy if exists %1$I_update on %1$I;', t);
+    execute format('create policy %1$I_update on %1$I for update using (cadence_can_access(owner_id, true)) with check (cadence_can_access(owner_id, true));', t);
+
+    execute format('drop policy if exists %1$I_delete on %1$I;', t);
+    execute format('create policy %1$I_delete on %1$I for delete using (cadence_can_access(owner_id, true));', t);
+  end loop;
+end $policies$;
