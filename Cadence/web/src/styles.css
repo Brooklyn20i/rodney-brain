@@ -882,8 +882,10 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .owner-name-input:focus { border-color: var(--accent); }
 
 /* group-action-row: open action item in Meetings > Open Actions tab */
-.group-action-row { padding: 9px 12px; background: var(--surface2); border-radius: 8px; margin-bottom: 6px; }
-.group-action-main { display: flex; flex-direction: column; gap: 4px; position: relative; }
+.group-action-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; background: var(--surface2); border-radius: 8px; margin-bottom: 6px; }
+.group-action-row.done { opacity: 0.45; pointer-events: none; }
+.group-action-row.done .group-action-title { text-decoration: line-through; }
+.group-action-main { flex: 1; display: flex; flex-direction: column; gap: 4px; position: relative; }
 .group-action-title { font-size: 14px; font-weight: 500; color: var(--text); }
 .group-action-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .group-action-note { font-size: 11px; color: var(--text3); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
