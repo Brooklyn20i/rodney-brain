@@ -6,6 +6,7 @@ import { MeetingNoteModal, parseMeeting } from '../components/MeetingNoteModal';
 import type { ActionItem } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
+import { buildTaskFromAction } from '../lib/tasks';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
@@ -177,13 +178,7 @@ function GroupOpenActions({ group }: { group: Person }) {
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
   const handleSend = async (action: OpenAction, targetId: string, targetType: 'person' | 'project', targetName: string) => {
-    await insert('work_items', {
-      title: action.title, type: 'task', priority: 'medium',
-      person_id: targetType === 'person' ? targetId : null,
-      project_id: targetType === 'project' ? targetId : null,
-      notes: `Action from: ${action.noteTitle}`,
-      inboxed: false, source: 'you',
-    } as Partial<WorkItem>);
+    await insert('work_items', buildTaskFromAction(action, action.noteTitle, { id: targetId, type: targetType, name: targetName }) as Partial<WorkItem>);
 
     // Update the note body to mark action as pushed
     const note = data.notes.find((n) => n.id === action.noteId);

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { WorkItem } from '../lib/types';
-import { TypeTag, PriTag, Due, EmptyState, ScreenHeader } from '../components/bits';
+import { TaskRow, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore } from '../lib/util';
+import { isFiled } from '../lib/tasks';
 
 type BucketKey = 'overdue' | 'today' | 'week' | 'later' | 'none';
 const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
@@ -24,77 +25,54 @@ function bucketOf(due: string | null): BucketKey {
   return 'later';
 }
 
-function Row({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
-  const { data, update } = useCadence();
-  const proj = data.projects.find((p) => p.id === w.project_id);
-  const person = data.people.find((p) => p.id === w.person_id);
-  const toggle = () => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
-  return (
-    <div className="card card-compact">
-      <div className="card-row">
-        <input type="checkbox" checked={w.done} onChange={toggle} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-        <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onEdit(w)}>
-          <div className={`card-title ${w.done ? 'checkbox-done' : ''}`}>{w.title}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TypeTag type={w.type} /><PriTag priority={w.priority} />
-            {proj && <span className="tag tag-info">{proj.name}</span>}
-            {person && <span className="tag tag-action">{person.name}</span>}
-            <Due date={w.due_date} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function Inbox({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, update } = useCadence();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
-  const [showDone, setShowDone] = useState(false);
 
-  const { grouped, doneItems } = useMemo(() => {
-    const open = data.work_items.filter((w) => !w.done);
+  // The Inbox is the triage queue: only unprocessed captures (inboxed) that
+  // haven't been given a person, project or date yet. Filing happens by adding
+  // any of those (here, or in the editor) — which clears the inboxed flag.
+  const grouped = useMemo(() => {
+    // Triage queue = inboxed AND still without context (person/project/date).
+    // The `!isFiled` guard keeps legacy items (older captures that were flagged
+    // inboxed but already have a person or date) out of the triage pile.
+    const open = data.work_items.filter((w) => !w.done && w.inboxed && !isFiled(w));
     const grouped: Record<BucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
     open.forEach((w) => grouped[bucketOf(w.due_date)].push(w));
-    // sort: dated buckets by date asc; no-date by priority score
     (['overdue', 'today', 'week', 'later'] as BucketKey[]).forEach((k) =>
       grouped[k].sort((a, b) => (a.due_date || '').localeCompare(b.due_date || '')));
     grouped.none.sort((a, b) => priorityScore(b) - priorityScore(a));
-    const doneItems = data.work_items.filter((w) => w.done)
-      .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
-    return { grouped, doneItems };
+    return grouped;
   }, [data]);
 
   const totalOpen = BUCKETS.reduce((n, b) => n + grouped[b.key].length, 0);
+  const file = (w: WorkItem) => update('work_items', w.id, { inboxed: false } as Partial<WorkItem>);
 
   return (
     <>
-      <ScreenHeader title="Inbox" subtitle="All tasks, by date" onMenu={onMenu}>
+      <ScreenHeader title="Inbox" subtitle="Unprocessed captures — file each to Tasks" onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Add Task</button>
       </ScreenHeader>
       <div className="screen-content">
         {totalOpen === 0 ? (
-          <EmptyState icon="✓" title="No open tasks" sub="Add a task or enjoy the clear deck" />
+          <EmptyState icon="✓" title="Inbox zero" sub="Nothing to triage. New quick captures land here." />
         ) : BUCKETS.map(({ key, label, color }) => {
           const items = grouped[key];
           if (!items.length) return null;
           return (
             <React.Fragment key={key}>
               <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{items.length}</span></div>
-              {items.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}
+              {items.map((w) => (
+                <div key={w.id} className="inbox-triage-row">
+                  <div style={{ flex: 1, minWidth: 0 }}><TaskRow w={w} onEdit={setEditing} /></div>
+                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Inbox"
+                    onClick={() => file(w)}>Done triaging</button>
+                </div>
+              ))}
             </React.Fragment>
           );
         })}
-
-        {doneItems.length > 0 && (
-          <>
-            <button className="btn btn-ghost btn-sm" style={{ marginTop: 16 }} onClick={() => setShowDone((s) => !s)}>
-              {showDone ? '▴ Hide' : '▾ Show'} completed ({doneItems.length})
-            </button>
-            {showDone && doneItems.map((w) => <Row key={w.id} w={w} onEdit={setEditing} />)}
-          </>
-        )}
       </div>
 
       {adding && <QuickAdd onClose={() => setAdding(false)} />}

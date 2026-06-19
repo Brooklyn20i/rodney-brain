@@ -4,8 +4,9 @@ export interface NavItem { id: string; label: string; icon: string; }
 export const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Day', items: [
     { id: 'today', label: 'Today', icon: '☀' },
-    { id: 'notes', label: 'Notes', icon: '✎' },
+    { id: 'tasks', label: 'Tasks', icon: '◎' },
     { id: 'inbox', label: 'Inbox', icon: '↓' },
+    { id: 'notes', label: 'Notes', icon: '✎' },
   ]},
   { section: 'Work', items: [
     { id: 'projects', label: 'Projects', icon: '▤' },

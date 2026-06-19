@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { priorityScore, isOverdue, isDueToday, autoColor, todayStr, addDaysStr, fmtWeekDM, fmtHeaderDate } from '../lib/util';
 import type { WorkItem } from '../lib/types';
-import { TypeTag, PriTag, Due, ScreenHeader } from '../components/bits';
+import { TypeTag, PriTag, Due, ScreenHeader, TaskRow } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
@@ -23,27 +23,6 @@ function Section({ title, count, color, children }: { title: string; count: numb
       </div>
       {children}
     </>
-  );
-}
-
-function RowCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
-  const { data, update } = useCadence();
-  const proj = data.projects.find((p) => p.id === w.project_id);
-  const toggle = () => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
-  return (
-    <div className="card card-compact">
-      <div className="card-row">
-        <input type="checkbox" checked={w.done} onChange={toggle} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-        <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => onEdit(w)}>
-          <div className={`card-title ${w.done ? 'checkbox-done' : ''}`}>{w.title}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TypeTag type={w.type} /><PriTag priority={w.priority} />
-            {proj && <span className="tag tag-info">{proj.name}</span>}
-            <Due date={w.due_date} />
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -141,12 +120,12 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         )}
 
         <Section title="Overdue" count={view.overdue.length} color="var(--red)">
-          {view.overdue.length ? view.overdue.map((w) => <RowCard key={w.id} w={w} onEdit={setEditing} />)
+          {view.overdue.length ? view.overdue.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
             : <small style={{ color: 'var(--text3)' }}>None — great!</small>}
         </Section>
 
         <Section title="Waiting on Others" count={view.waiting.length} color="var(--purple)">
-          {view.waiting.length ? view.waiting.map((w) => <RowCard key={w.id} w={w} onEdit={setEditing} />)
+          {view.waiting.length ? view.waiting.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
             : <small style={{ color: 'var(--text3)' }}>Nothing waiting</small>}
         </Section>
 
@@ -160,7 +139,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         </Section>
 
         <Section title="Due Today" count={view.dueToday.length} color="var(--orange)">
-          {view.dueToday.length ? view.dueToday.map((w) => <RowCard key={w.id} w={w} onEdit={setEditing} />)
+          {view.dueToday.length ? view.dueToday.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
             : <small style={{ color: 'var(--text3)' }}>Nothing else due today</small>}
         </Section>
       </div>

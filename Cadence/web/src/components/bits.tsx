@@ -1,6 +1,7 @@
 import React from 'react';
 import type { WorkItem } from '../lib/types';
 import { fmtDate, isOverdue, isDueToday, TYPE_LABEL, priLabel } from '../lib/util';
+import { useCadence } from '../lib/store';
 
 export const TypeTag = ({ type }: { type: WorkItem['type'] }) => (
   <span className={`tag tag-${type}`}>{TYPE_LABEL[type] || 'Task'}</span>
@@ -13,6 +14,38 @@ export const Due = ({ date }: { date: string | null }) => {
   const cls = isOverdue(date) ? 'due-overdue' : isDueToday(date) ? 'due-today' : 'due-normal';
   return <span className={cls} style={{ fontSize: 12 }}>{fmtDate(date)}</span>;
 };
+
+// Shared compact task row — one consistent task card across Inbox, Today and
+// the Tasks hub. Checkbox completes inline; clicking the body opens the editor.
+// Set `showPerson` to surface who a task belongs to (the Tasks hub wants this;
+// the People screen, already scoped to a person, does not).
+export function TaskRow({ w, onEdit, showPerson = true }: {
+  w: WorkItem; onEdit: (w: WorkItem) => void; showPerson?: boolean;
+}) {
+  const { data, update } = useCadence();
+  const proj = data.projects.find((p) => p.id === w.project_id);
+  const person = data.people.find((p) => p.id === w.person_id);
+  const toggle = () => update('work_items', w.id, {
+    done: !w.done, completed_at: !w.done ? new Date().toISOString() : null,
+  } as Partial<WorkItem>);
+  return (
+    <div className="card card-compact">
+      <div className="card-row">
+        <input type="checkbox" checked={w.done} onChange={toggle}
+          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+        <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onEdit(w)}>
+          <div className={`card-title ${w.done ? 'checkbox-done' : ''}`}>{w.title}</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TypeTag type={w.type} /><PriTag priority={w.priority} />
+            {proj && <span className="tag tag-info">{proj.name}</span>}
+            {showPerson && person && <span className="tag tag-action">{person.name}</span>}
+            <Due date={w.due_date} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function EmptyState({ icon, title, sub }: { icon: string; title: string; sub?: string }) {
   return (

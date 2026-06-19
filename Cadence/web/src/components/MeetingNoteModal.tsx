@@ -6,42 +6,15 @@ import type { Project } from '../lib/types';
 import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
 import { useMeetingDates } from '../lib/meetings';
+import { parseMeeting, uid } from '../lib/meetingData';
+import type { AgendaItem, ActionItem, MeetingData } from '../lib/meetingData';
+import { buildTaskFromAction } from '../lib/tasks';
+import type { PushTarget } from '../lib/tasks';
 
-// ── Data model stored as JSON in note.body ────────────────────────────────────
-export interface AgendaItem {
-  id: string; title: string; notes: string;
-  status: 'discuss' | 'covered' | 'deferred';
-}
-export interface ActionItem {
-  id: string; title: string;
-  owner: 'me' | 'them';
-  owner_label?: string;      // display name for 'them' owner
-  owner_person_id?: string;  // links to a person in the people table
-  due: string; done: boolean; pushed: boolean;
-  pushed_to?: string;        // display label after send (e.g. "Sarah Chen" or "Project X")
-}
-export interface MeetingData {
-  agenda: AgendaItem[];
-  actions: ActionItem[];
-  notes: string;
-}
-
-const emptyMeeting = (): MeetingData => ({ agenda: [], actions: [], notes: '' });
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-export function parseMeeting(body: string): { data: MeetingData; isLegacy: boolean } {
-  if (!body.trim()) return { data: emptyMeeting(), isLegacy: false };
-  try {
-    const p = JSON.parse(body);
-    if (p && typeof p === 'object' && ('agenda' in p || 'actions' in p)) {
-      return {
-        data: { agenda: p.agenda || [], actions: p.actions || [], notes: p.notes || '' },
-        isLegacy: false,
-      };
-    }
-  } catch {}
-  return { data: { agenda: [], actions: [], notes: body }, isLegacy: true };
-}
+// Data model + parser now live in lib/meetingData (React-free). Re-export here
+// so existing import sites (Meetings.tsx, SharePanel.tsx) keep working.
+export { parseMeeting } from '../lib/meetingData';
+export type { AgendaItem, ActionItem, MeetingData } from '../lib/meetingData';
 
 
 // ── Agenda item row ───────────────────────────────────────────────────────────
@@ -397,15 +370,14 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const pushAllToTasks = async () => {
     const toPush = actions.filter((a) => !a.pushed && a.title.trim());
+    // For a 1:1, the meeting person owns the action unless it names someone
+    // else; for a group meeting there's no default owner. Either way the
+    // action's due date and explicit owner are preserved by buildTaskFromAction.
+    const defaultTarget: PushTarget | null = isGroupMeeting
+      ? null
+      : { id: person.id, type: 'person', name: person.name };
     for (const a of toPush) {
-      await insert('work_items', {
-        title: a.title, type: 'task', priority: 'medium',
-        person_id: isGroupMeeting ? null : person.id,
-        // Group meeting actions have no person; send to Inbox so they're visible.
-        inboxed: isGroupMeeting ? true : false,
-        notes: `Action from: ${title}`,
-        source: 'you',
-      } as Partial<WorkItem>);
+      await insert('work_items', buildTaskFromAction(a, title, defaultTarget) as Partial<WorkItem>);
     }
     const updated = actions.map((a) => ({ ...a, pushed: a.pushed || !!a.title.trim() }));
     setAc(updated);
@@ -413,13 +385,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   };
 
   const onSendAction = async (action: ActionItem, targetId: string, targetType: 'person' | 'project', targetName: string) => {
-    await insert('work_items', {
-      title: action.title, type: 'task', priority: 'medium',
-      person_id: targetType === 'person' ? targetId : null,
-      project_id: targetType === 'project' ? targetId : null,
-      notes: `Action from: ${title}`,
-      inboxed: false, source: 'you',
-    } as Partial<WorkItem>);
+    await insert('work_items', buildTaskFromAction(action, title, { id: targetId, type: targetType, name: targetName }) as Partial<WorkItem>);
     const updated = actions.map((a) => a.id === action.id ? { ...a, pushed: true, pushed_to: targetName } : a);
     setAc(updated);
   };

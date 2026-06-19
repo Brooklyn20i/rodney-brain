@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from './lib/store';
 import { isOverdue } from './lib/util';
+import { isFiled } from './lib/tasks';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar } from './components/Sidebar';
 import { Today } from './screens/Today';
+import { Tasks } from './screens/Tasks';
 import { Inbox } from './screens/Inbox';
 import { Projects } from './screens/Projects';
 import { People } from './screens/People';
@@ -22,7 +24,10 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const badges = useMemo(() => ({
-    inbox: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: '' },
+    // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
+    // triage backlog (unprocessed captures waiting to be filed).
+    tasks: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: 'red' },
+    inbox: { count: data.work_items.filter((w) => !w.done && w.inboxed && !isFiled(w)).length, cls: '' },
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
     decisions: { count: data.decisions.filter((d) => d.status === 'pending').length + data.work_items.filter((w) => w.type === 'decision' && !w.done).length, cls: 'purple' },
     outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
@@ -39,6 +44,7 @@ export function App() {
   const render = () => {
     switch (screen) {
       case 'today': return <Today onMenu={onMenu} />;
+      case 'tasks': return <Tasks onMenu={onMenu} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
       case 'projects': return <Projects onMenu={onMenu} />;
       case 'people': return <People onMenu={onMenu} />;

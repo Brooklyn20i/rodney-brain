@@ -28,15 +28,18 @@ export function ItemModal({ existing, defaults, onClose }: {
     if (!title.trim()) return;
     setBusy(true);
     try {
+      // "Filed" = has a person, project or due date — enough context to leave
+      // the triage Inbox. Editing an item to add any of these files it.
+      const filed = !!(personId || projectId || due);
       const patch = {
         title: title.trim(), type, priority, due_date: due || null,
         project_id: projectId || null, person_id: personId || null, notes,
       } as Partial<WorkItem>;
       if (existing) {
-        await update('work_items', existing.id, patch);
+        await update('work_items', existing.id, { ...patch, ...(filed ? { inboxed: false } : {}) } as Partial<WorkItem>);
         logActivity('edit_item', title.trim());
       } else {
-        await insert('work_items', { ...patch, inboxed: (base as any).inboxed ?? true, source: 'you' } as Partial<WorkItem>);
+        await insert('work_items', { ...patch, inboxed: filed ? false : ((base as any).inboxed ?? true), source: 'you' } as Partial<WorkItem>);
         logActivity('add_item', title.trim());
       }
       onClose();
