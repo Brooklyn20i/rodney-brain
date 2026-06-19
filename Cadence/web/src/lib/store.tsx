@@ -23,6 +23,23 @@ interface Ctx {
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
 }
 
+// If a write fails because a column doesn't exist in the database yet (the
+// schema predates a migration), pull the offending column name out of the
+// Postgres / PostgREST error and return a copy of the payload without it, so
+// the caller can retry. Returns null if the error isn't a missing-column error
+// or the column can't be identified / isn't present in the payload.
+function dropMissingColumn(payload: any, error: any): any | null {
+  const msg = String(error?.message || error || '') + ' ' + String(error?.details || '');
+  const m =
+    msg.match(/could not find the '([^']+)' column/i) ||  // PostgREST PGRST204
+    msg.match(/column "([^"]+)"/i) ||                       // Postgres 42703 (quoted)
+    msg.match(/column ([a-z0-9_]+) does not exist/i);       // Postgres 42703 (unquoted)
+  const col = m?.[1];
+  if (!col || !(col in payload)) return null;
+  const { [col]: _omit, ...rest } = payload;
+  return rest;
+}
+
 const CadenceCtx = createContext<Ctx | null>(null);
 
 export function useCadence(): Ctx {
@@ -100,17 +117,37 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => { await supabase.auth.signOut(); };
 
   const insert = async <K extends Table>(table: K, row: Partial<Row<K>>) => {
-    const { data: d, error } = await supabase.from(table as string).insert(row as any).select().single();
-    if (error) throw error;
-    setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
-    return d as Row<K>;
+    // Always include owner_id so tables that lack DEFAULT auth.uid() still work
+    const ownedRow = session?.user?.id ? { owner_id: session.user.id, ...row } : row;
+    let payload: any = ownedRow;
+    // Tolerate a database that predates a migration: if a column the app writes
+    // doesn't exist yet, drop it and retry rather than failing the whole save.
+    for (let i = 0; i < 8; i++) {
+      const { data: d, error } = await supabase.from(table as string).insert(payload).select().single();
+      if (!error) {
+        setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
+        return d as Row<K>;
+      }
+      const stripped = dropMissingColumn(payload, error);
+      if (!stripped) throw error;
+      payload = stripped;
+    }
+    throw new Error('insert failed after stripping unknown columns');
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => {
-    const { data: d, error } = await supabase.from(table as string).update(patch as any).eq('id', id).select().single();
-    if (error) throw error;
-    setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
-    return d as Row<K>;
+    let payload: any = patch;
+    for (let i = 0; i < 8; i++) {
+      const { data: d, error } = await supabase.from(table as string).update(payload).eq('id', id).select().single();
+      if (!error) {
+        setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+        return d as Row<K>;
+      }
+      const stripped = dropMissingColumn(payload, error);
+      if (!stripped) throw error;
+      payload = stripped;
+    }
+    throw new Error('update failed after stripping unknown columns');
   };
 
   const remove = async (table: Table, id: string) => {

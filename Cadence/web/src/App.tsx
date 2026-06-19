@@ -1,24 +1,22 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from './lib/store';
+import { isOverdue } from './lib/util';
+import { isFiled } from './lib/tasks';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
-import { Sidebar, NAV } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
 import { Today } from './screens/Today';
-import { Placeholder } from './screens/Placeholder';
+import { Tasks } from './screens/Tasks';
 import { Inbox } from './screens/Inbox';
 import { Projects } from './screens/Projects';
 import { People } from './screens/People';
+import { Meetings } from './screens/Meetings';
 import { Decisions } from './screens/Decisions';
-import { Outbox } from './screens/Outbox';
 import { Notes } from './screens/Notes';
-import { Capture } from './screens/Capture';
-import { WeeklyReview } from './screens/WeeklyReview';
-
-const LABELS: Record<string, string> = {
-  today: 'Today', notes: 'Notes', capture: 'Capture', inbox: 'Inbox',
-  projects: 'Projects', people: 'People', decisions: 'Decisions', outbox: 'Outbox',
-  review: 'Weekly Review', search: 'Search', settings: 'Settings',
-};
+import { Outbox } from './screens/Outbox';
+import { Review } from './screens/Review';
+import { Search } from './screens/Search';
+import { Settings } from './screens/Settings';
 
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, signOut } = useCadence();
@@ -26,9 +24,13 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const badges = useMemo(() => ({
-    inbox: data.work_items.filter((w) => w.inboxed && !w.done).length,
-    decisions: data.decisions.filter((d) => d.status === 'pending').length,
-    outbox: data.outbox.filter((m) => m.status === 'queued').length,
+    // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
+    // triage backlog (unprocessed captures waiting to be filed).
+    tasks: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: 'red' },
+    inbox: { count: data.work_items.filter((w) => !w.done && w.inboxed && !isFiled(w)).length, cls: '' },
+    people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
+    decisions: { count: data.decisions.filter((d) => d.status === 'pending').length + data.work_items.filter((w) => w.type === 'decision' && !w.done).length, cls: 'purple' },
+    outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
@@ -36,30 +38,32 @@ export function App() {
   if (needsPasswordSet) return <SetPassword />;
 
   const navigate = (id: string) => { setScreen(id); setMenuOpen(false); };
-  const known = NAV.some((g) => g.items.some((i) => i.id === screen)) || ['review', 'search', 'settings'].includes(screen);
+  const onMenu = () => setMenuOpen(true);
+  const email = session.user.email ?? undefined;
 
-  const activeScreen = () => {
+  const render = () => {
     switch (screen) {
-      case 'today': return <Today />;
-      case 'capture': return <Capture />;
-      case 'inbox': return <Inbox />;
-      case 'projects': return <Projects />;
-      case 'people': return <People />;
-      case 'decisions': return <Decisions />;
-      case 'outbox': return <Outbox />;
-      case 'notes': return <Notes />;
-      case 'review': return <WeeklyReview />;
-      default: return <Placeholder title={LABELS[known ? screen : 'today'] || 'Cadence'} />;
+      case 'today': return <Today onMenu={onMenu} />;
+      case 'tasks': return <Tasks onMenu={onMenu} />;
+      case 'inbox': return <Inbox onMenu={onMenu} />;
+      case 'projects': return <Projects onMenu={onMenu} />;
+      case 'people': return <People onMenu={onMenu} />;
+      case 'meetings': return <Meetings onMenu={onMenu} />;
+      case 'decisions': return <Decisions onMenu={onMenu} />;
+      case 'notes': return <Notes onMenu={onMenu} />;
+      case 'outbox': return <Outbox onMenu={onMenu} />;
+      case 'review': return <Review onMenu={onMenu} />;
+      case 'search': return <Search onMenu={onMenu} />;
+      case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
+      default: return <Today onMenu={onMenu} />;
     }
   };
 
   return (
     <div id="app">
-      <Sidebar current={screen} onNavigate={navigate} badges={badges}
-        email={session.user.email ?? undefined} onSignOut={signOut} open={menuOpen} />
-      <div id="main">
-        {activeScreen()}
-      </div>
+      <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} />
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
+      <div id="main">{render()}</div>
     </div>
   );
 }

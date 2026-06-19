@@ -1,22 +1,59 @@
 import type { WorkItem, Priority, Health } from './types';
 
-export const todayStr = () => new Date().toISOString().slice(0, 10);
-export const isOverdue = (d: string | null) => !!d && d < todayStr();
+// ── Local-timezone date helpers ───────────────────────────────────────────────
+// new Date().toISOString() returns UTC. In Germany (UTC+2 CEST) that gives the
+// wrong calendar date for the first 2 hours after midnight. All "today" logic
+// must use local date components instead.
+
+export function localDateStr(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export const todayStr = () => localDateStr();
+
+export const addDaysStr = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + n); // setDate operates in local time
+  return localDateStr(d);
+};
+
+// ── en-AU numeric display formatters ─────────────────────────────────────────
+// Using 'en-AU' gives DD/MM — never month names ("Jun", "June").
+// Appending T12:00:00 to bare YYYY-MM-DD strings prevents a one-day shift
+// when the browser parses the date near UTC midnight.
+
+const auDate = (iso: string, opts: Intl.DateTimeFormatOptions): string =>
+  new Date(iso.length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('en-AU', opts);
+
+export const fmtDM       = (iso: string) => auDate(iso, { day: '2-digit', month: '2-digit' });                                     // 16/06
+export const fmtDMY      = (iso: string) => auDate(iso, { day: '2-digit', month: '2-digit', year: 'numeric' });                    // 16/06/2026
+export const fmtWeekDM   = (iso: string) => auDate(iso, { weekday: 'short', day: '2-digit', month: '2-digit' });                   // Tue 16/06
+export const fmtWeekDMY  = (iso: string) => auDate(iso, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });  // Tue 16/06/2026
+export const fmtHeaderDate = (iso: string) => auDate(iso, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }); // Tuesday, 16/06/2026
+
+// ── Derived helpers ───────────────────────────────────────────────────────────
+export const isOverdue  = (d: string | null) => !!d && d < todayStr();
 export const isDueToday = (d: string | null) => d === todayStr();
 
+// Relative "Today / Tomorrow / 3d / 16/06" label used on work item cards.
 export function fmtDate(d: string | null): string {
   if (!d) return '';
-  const t = new Date(d + 'T00:00:00');
-  const now = new Date(); now.setHours(0, 0, 0, 0);
+  // Use noon so parsing never crosses a day boundary in any timezone.
+  const t = new Date(d + 'T12:00:00');
+  const now = new Date(); now.setHours(12, 0, 0, 0);
   const diff = Math.round((t.getTime() - now.getTime()) / 86400000);
   if (diff < 0) return `Overdue ${Math.abs(diff)}d`;
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff < 7) return `${diff}d`;
-  return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const sameYear = t.getFullYear() === new Date().getFullYear();
+  return t.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', ...(sameYear ? {} : { year: 'numeric' }) });
 }
 
-// Same prioritisation the agent uses (cadence_core.priority_score).
+// ── Priority scoring ──────────────────────────────────────────────────────────
 export function priorityScore(w: WorkItem): number {
   let s = 0;
   if (isOverdue(w.due_date)) s += 100;
@@ -34,3 +71,14 @@ export const TYPE_LABEL: Record<string, string> = {
 };
 
 export const priLabel = (p: Priority) => p[0].toUpperCase() + p.slice(1);
+
+export const AVATAR_COLORS = [
+  '#1B5E9E', '#1A7F37', '#6B3FA0', '#C0392B',
+  '#B9770E', '#0E7490', '#BE2D6E', '#2C3E50',
+];
+
+export function autoColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}

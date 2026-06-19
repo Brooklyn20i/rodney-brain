@@ -2,12 +2,16 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { CadenceProvider } from './lib/store';
 import { App } from './App';
+import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <CadenceProvider>
-      <App />
-    </CadenceProvider>
+    <ErrorBoundary>
+      <SaveErrorBanner />
+      <CadenceProvider>
+        <App />
+      </CadenceProvider>
+    </ErrorBoundary>
   </React.StrictMode>,
 );
