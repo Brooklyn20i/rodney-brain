@@ -75,20 +75,29 @@ function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person;
 }
 
 // ── Group action row (open action with send picker) ───────────────────────────
-function GroupActionRow({ action, noteTitle, people, projects, onSend }: {
+function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDone }: {
   action: ActionItem;
   noteTitle: string;
   people: Person[];
   projects: import('../lib/types').Project[];
   onSend: (targetId: string, targetType: 'person' | 'project', targetName: string) => void;
+  onMarkDone: () => void;
 }) {
   const [showSend, setShowSend] = useState(false);
-  const isLate = !!action.due && action.due < todayStr();
+  const [done, setDone] = useState(false);
+  const isLate = !!action.due && !done && action.due < todayStr();
   const ownerPerson = action.owner_person_id ? people.find((p) => p.id === action.owner_person_id) ?? null : null;
   const ownerLabel = action.owner === 'me' ? 'Me' : (ownerPerson?.name || action.owner_label || 'Them');
 
+  const handleDone = () => {
+    setDone(true);
+    onMarkDone();
+  };
+
   return (
-    <div className="group-action-row">
+    <div className={`group-action-row${done ? ' done' : ''}`}>
+      <input type="checkbox" className="action-check" checked={done} onChange={handleDone}
+        style={{ flexShrink: 0, marginTop: 2 }} />
       <div className="group-action-main" style={{ position: 'relative' }}>
         <div className="group-action-title">{action.title}</div>
         <div className="group-action-meta">
@@ -177,6 +186,18 @@ function GroupOpenActions({ group }: { group: Person }) {
   const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
+  const handleMarkDone = async (action: OpenAction) => {
+    const note = data.notes.find((n) => n.id === action.noteId);
+    if (!note) return;
+    const { data: parsed } = parseMeeting(note.body);
+    const updatedActions = parsed.actions.map((a) =>
+      a.id === action.id ? { ...a, done: true } : a
+    );
+    await update('notes', action.noteId, {
+      body: JSON.stringify({ ...parsed, actions: updatedActions }),
+    } as Partial<Note>);
+  };
+
   const handleSend = async (action: OpenAction, targetId: string, targetType: 'person' | 'project', targetName: string) => {
     await insert('work_items', buildTaskFromAction(action, action.noteTitle, { id: targetId, type: targetType, name: targetName }) as Partial<WorkItem>);
 
@@ -213,6 +234,7 @@ function GroupOpenActions({ group }: { group: Person }) {
           people={people}
           projects={projects}
           onSend={(tId, tType, tName) => handleSend(action, tId, tType, tName)}
+          onMarkDone={() => handleMarkDone(action)}
         />
       ))}
     </div>
