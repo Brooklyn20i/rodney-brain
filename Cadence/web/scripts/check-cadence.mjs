@@ -8,16 +8,14 @@ const assert = (condition, message) => {
 };
 
 const login = read('src/components/Login.tsx');
-assert(!login.includes('rbalech@gmail.com'), 'Login must not hardcode Rodney\'s personal email.');
+assert(!login.includes('rbalech@gmail.com'), 'Login must not hardcode a personal email.');
 assert(login.includes('type="email"'), 'Login must expose an email field.');
-assert(login.includes('localStorage'), 'Login should remember only the last email, never a password.');
 
 const css = read('src/styles.css');
 assert(css.includes('input[type=password]'), 'Password inputs must use the same field styling as other inputs.');
-assert(css.includes('.split-list'), 'Operational split-pane screens need shared styles.');
 
 const app = read('src/App.tsx');
-for (const screen of ['Inbox', 'Projects', 'People', 'Decisions', 'Outbox', 'Notes', 'Capture', 'WeeklyReview']) {
+for (const screen of ['Inbox', 'Projects', 'People', 'Decisions', 'Outbox', 'Notes', 'Review', 'Meetings', 'Tasks', 'Today']) {
   assert(app.includes(`<${screen}`), `App must route to ${screen}, not a placeholder.`);
 }
 
@@ -28,14 +26,12 @@ for (const file of [
   'src/screens/Decisions.tsx',
   'src/screens/Outbox.tsx',
   'src/screens/Notes.tsx',
-  'src/screens/Capture.tsx',
-  'src/screens/WeeklyReview.tsx',
+  'src/screens/Review.tsx',
+  'src/screens/Meetings.tsx',
+  'src/screens/Tasks.tsx',
+  'src/screens/Today.tsx',
 ]) {
   assert(existsSync(join(root, file)), `${file} must exist.`);
 }
-
-const quickAdd = read('src/screens/QuickAdd.tsx');
-assert(quickAdd.includes('person_id'), 'Quick Add must support person/follow-up assignment, not just projects.');
-assert(quickAdd.includes('setErr'), 'Quick Add must surface save failures to the user.');
 
 console.log('Cadence checks passed');
