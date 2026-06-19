@@ -204,6 +204,19 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
   );
 }
 
+// ── Deferred agenda carry-forward row ─────────────────────────────────────────
+function DeferredAgendaRow({ item, onAdd }: { item: AgendaItem; onAdd: () => void }) {
+  return (
+    <div className="deferred-agenda-row">
+      <div className="deferred-agenda-title">⏭ {item.title}</div>
+      {item.notes && <div className="deferred-agenda-notes">{item.notes}</div>}
+      <button className="btn btn-secondary btn-sm deferred-agenda-btn" onClick={onAdd}>
+        + Add to this agenda
+      </button>
+    </div>
+  );
+}
+
 // ── Carry-forward row ─────────────────────────────────────────────────────────
 function CarryForwardRow({ item, personName, onMarkDone }: {
   item: ActionItem; personName: string; onMarkDone: (done: boolean) => void;
@@ -346,6 +359,19 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     const { data: prev } = parseMeeting(prevMeeting.body);
     return prev.actions.filter((a) => !a.done);
   }, [prevMeeting?.id, prevMeeting?.body]);
+
+  // Deferred agenda items from the previous meeting — shown as carry-forward prompts
+  const deferredAgenda = useMemo(() => {
+    if (!prevMeeting) return [];
+    const { data: prev } = parseMeeting(prevMeeting.body);
+    return prev.agenda.filter((a) => a.status === 'deferred');
+  }, [prevMeeting?.id, prevMeeting?.body]);
+
+  // Add a deferred item from the previous meeting into this meeting's agenda
+  const addDeferredToAgenda = (item: AgendaItem) => {
+    if (agenda.some((a) => a.title.toLowerCase() === item.title.toLowerCase())) return;
+    setA([...agenda, { ...item, id: uid(), status: 'discuss' }]);
+  };
 
   // Navigation
   const idx = allMeetings.findIndex((m) => m.id === note.id);
@@ -527,7 +553,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             )}
 
             <div className="mtg-col-body">
-              {agenda.length === 0 && !showImport && (
+              {agenda.length === 0 && deferredAgenda.length === 0 && !showImport && (
                 <p className="mtg-empty-hint">Add agenda items below, or import from Action Items ↑</p>
               )}
               {agenda.map((item, i) => (
@@ -535,6 +561,22 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                   onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
                   onDelete={() => setA(agenda.filter((_, j) => j !== i))} />
               ))}
+
+              {deferredAgenda.length > 0 && (
+                <>
+                  <div className="mtg-section-sep">
+                    ⏭ Deferred from {prevMeeting ? fmtDM(dates[prevMeeting.id] || prevMeeting.created_at) : 'last meeting'}
+                  </div>
+                  {deferredAgenda.map((item) => (
+                    <DeferredAgendaRow
+                      key={item.id}
+                      item={item}
+                      onAdd={() => addDeferredToAgenda(item)}
+                    />
+                  ))}
+                </>
+              )}
+
               <button className="mtg-add-row" onClick={addAgendaItem}>+ Add agenda item</button>
             </div>
           </div>
