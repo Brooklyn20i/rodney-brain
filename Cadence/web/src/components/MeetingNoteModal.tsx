@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { todayStr, fmtDM, fmtWeekDMY, fmtDMY } from '../lib/util';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
@@ -421,7 +422,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const pickerPeople = data.people.filter((p) => !p.type || p.type === 'person');
   const pickerProjects = data.projects.filter((p) => !p.deleted_at);
 
-  return (
+  return createPortal(
     <>
     <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className={`mtg-modal mtg-modal-structured${notesExpanded ? ' mtg-notes-focus' : ''}`}>
@@ -626,6 +627,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
         onClose={() => setShowShare(false)}
       />
     )}
-    </>
+    </>,
+    document.body
   );
 }
