@@ -205,14 +205,18 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
 }
 
 // ── Deferred agenda carry-forward row ─────────────────────────────────────────
-function DeferredAgendaRow({ item, onAdd }: { item: AgendaItem; onAdd: () => void }) {
+function DeferredAgendaRow({ item, onAdd, alreadyAdded }: { item: AgendaItem; onAdd: () => void; alreadyAdded: boolean }) {
   return (
-    <div className="deferred-agenda-row">
+    <div className={`deferred-agenda-row${alreadyAdded ? ' deferred-added' : ''}`}>
       <div className="deferred-agenda-title">⏭ {item.title}</div>
       {item.notes && <div className="deferred-agenda-notes">{item.notes}</div>}
-      <button className="btn btn-secondary btn-sm deferred-agenda-btn" onClick={onAdd}>
-        + Add to this agenda
-      </button>
+      {alreadyAdded ? (
+        <span className="deferred-agenda-added-label">✓ Added to agenda</span>
+      ) : (
+        <button className="btn btn-secondary btn-sm deferred-agenda-btn" onClick={onAdd}>
+          + Add to this agenda
+        </button>
+      )}
     </div>
   );
 }
@@ -571,6 +575,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                     <DeferredAgendaRow
                       key={item.id}
                       item={item}
+                      alreadyAdded={agenda.some((a) => a.title.toLowerCase() === item.title.toLowerCase())}
                       onAdd={() => addDeferredToAgenda(item)}
                     />
                   ))}
