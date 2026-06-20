@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note } from '../lib/types';
 import { ScreenHeader } from '../components/bits';
@@ -23,8 +23,15 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
   const [title, setTitle] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const note = data.notes.find((n) => n.id === selected) || null;
+
+  useEffect(() => {
+    setSaveStatus('idle');
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+  }, [note?.id]);
 
   const folders = useMemo(() => {
     const fromNotes = data.notes.map(folderOf).filter(Boolean);
@@ -34,7 +41,22 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const notesIn = (f: string) => data.notes.filter((n) => folderOf(n) === f).sort(byUpdated);
   const uncategorized = notesIn('');
 
-  const save = (patch: Partial<Note>) => { if (note) update('notes', note.id, patch); };
+  const doSave = async (patch: Partial<Note>) => {
+    if (!note) return;
+    setSaveStatus('saving');
+    try {
+      await update('notes', note.id, patch);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus((s) => s === 'saved' ? 'idle' : s), 2000);
+    } catch {
+      setSaveStatus('error');
+    }
+  };
+
+  const scheduleBodySave = (html: string) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => doSave({ body: html }), 800);
+  };
 
   const newNote = async (folder = '') => {
     let n: Note;
@@ -157,8 +179,13 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                 value={title}
                 placeholder="Untitled note"
                 onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => save({ title: title.trim() || 'Untitled note' })}
+                onBlur={() => doSave({ title: title.trim() || 'Untitled note' })}
               />
+              {saveStatus !== 'idle' && (
+                <span className="notes-save-status" data-status={saveStatus}>
+                  {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : '⚠ Save failed'}
+                </span>
+              )}
               <select className="note-folder-select" value={folderOf(note)} onChange={(e) => onFolderSelect(e.target.value)}>
                 <option value="">📁 No folder</option>
                 {folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}
@@ -170,7 +197,11 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
               <RichEditor
                 key={note.id}
                 content={note.body || ''}
-                onBlur={(html) => save({ body: html })}
+                onChange={scheduleBodySave}
+                onBlur={(html) => {
+                  if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+                  doSave({ body: html });
+                }}
               />
             </div>
           </div>

@@ -36,6 +36,13 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 
 /* ── App Shell ── */
 #app { display: flex; height: 100vh; height: 100dvh; padding-top: var(--safe-top); }
+.sync-error-banner { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--red, #ef4444); color: #fff; padding: 10px 16px; border-radius: 10px;
+  font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 10px;
+  z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 480px; }
+.sync-error-dismiss { background: none; border: none; color: #fff; cursor: pointer;
+  font-size: 14px; padding: 0 2px; line-height: 1; opacity: 0.8; }
+.sync-error-dismiss:hover { opacity: 1; }
 
 /* ── Sidebar ── */
 #sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 20px 12px 20px; overflow-y: auto; z-index: 10; }
@@ -481,6 +488,10 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .tree-sep { height: 1px; background: var(--border); margin: 8px 6px; }
 .note-folder-select { width: auto; font-size: 12px; font-weight: 600; padding: 5px 26px 5px 10px; border-radius: 14px; border: 1px solid #C8DEF5; background-color: var(--blue-bg); color: var(--accent); }
 .note-preview { padding: 4px; font-size: 15px; line-height: 1.7; }
+.notes-save-status { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.notes-save-status[data-status="saved"] { color: var(--green); }
+.notes-save-status[data-status="error"] { color: var(--red); }
+.notes-save-status[data-status="saving"] { color: var(--text2); }
 
 /* ── Outbox ── */
 .email-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; }

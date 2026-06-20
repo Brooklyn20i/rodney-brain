@@ -21,6 +21,8 @@ interface Ctx {
   remove: (table: Table, id: string) => Promise<void>;
   reload: (table?: Table) => Promise<void>;
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
+  syncError: string | null;
+  clearSyncError: () => void;
 }
 
 // If a write fails because a column doesn't exist in the database yet (the
@@ -53,6 +55,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [needsPasswordSet, setNeedsPasswordSet] = useState(false);
   const [data, setData] = useState<CadenceData>(emptyData());
   const [ready, setReady] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
@@ -129,9 +132,10 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         return d as Row<K>;
       }
       const stripped = dropMissingColumn(payload, error);
-      if (!stripped) throw error;
+      if (!stripped) { setSyncError(error?.message || 'Save failed'); throw error; }
       payload = stripped;
     }
+    setSyncError('Save failed — too many column errors');
     throw new Error('insert failed after stripping unknown columns');
   };
 
@@ -144,15 +148,16 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         return d as Row<K>;
       }
       const stripped = dropMissingColumn(payload, error);
-      if (!stripped) throw error;
+      if (!stripped) { setSyncError(error?.message || 'Save failed'); throw error; }
       payload = stripped;
     }
+    setSyncError('Save failed — too many column errors');
     throw new Error('update failed after stripping unknown columns');
   };
 
   const remove = async (table: Table, id: string) => {
     const { error } = await supabase.from(table as string).update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    if (error) throw error;
+    if (error) { setSyncError(error?.message || 'Delete failed'); throw error; }
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
   };
 
@@ -160,8 +165,10 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     try { await insert('activity', { actor, action, detail } as any); } catch { /* non-critical */ }
   };
 
+  const clearSyncError = useCallback(() => setSyncError(null), []);
+
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError }}>
       {children}
     </CadenceCtx.Provider>
   );
