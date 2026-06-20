@@ -27,9 +27,10 @@ interface Props {
   onNavigate: (id: string) => void;
   badges: Record<string, { count: number; cls: string }>;
   open: boolean;
+  workspaceName: string | null;
 }
 
-export function Sidebar({ current, onNavigate, badges, open }: Props) {
+export function Sidebar({ current, onNavigate, badges, open, workspaceName }: Props) {
   const item = (it: NavItem) => {
     const b = badges[it.id];
     return (
@@ -53,7 +54,7 @@ export function Sidebar({ current, onNavigate, badges, open }: Props) {
       <div id="sidebar-footer">
         {FOOTER.map(item)}
         <div id="sync-status"><span className="status-dot" /> Live sync on</div>
-        <div id="sidebar-signature">Rodney's workspace · Cadence</div>
+        <div id="sidebar-signature">{workspaceName ?? 'My workspace'} · Cadence</div>
       </div>
     </nav>
   );

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isConfigured } from './supabase';
-import { CadenceData, TABLES, emptyData } from './types';
+import { CadenceData, TABLES, emptyData, Workspace } from './types';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
@@ -12,6 +12,7 @@ interface Ctx {
   session: Session | null;
   needsPasswordSet: boolean;
   data: CadenceData;
+  workspace: Workspace | null;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
@@ -56,6 +57,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<CadenceData>(emptyData());
   const [ready, setReady] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
 
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
@@ -72,10 +74,12 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const reload = useCallback(async (table?: Table) => {
+  const reload = useCallback(async (table?: Table, workspaceId?: string | null) => {
     const tables = table ? [table] : TABLES;
     const results = await Promise.all(tables.map(async (t) => {
-      const q = supabase.from(t as string).select('*');
+      const base = supabase.from(t as string).select('*');
+      // Scope to workspace when available (migration 0012+ applied).
+      const q = workspaceId ? (base as any).eq('workspace_id', workspaceId) : base;
       const r = t === 'activity'
         ? await q.order('created_at', { ascending: false }).limit(200)
         : await q.is('deleted_at', null).order('created_at', { ascending: true });
@@ -88,16 +92,33 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Resolve workspace membership after login.
+  useEffect(() => {
+    if (!session || needsPasswordSet) { setWorkspace(null); return; }
+    supabase
+      .from('workspace_members')
+      .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
+      .eq('user_id', session.user.id)
+      .limit(1)
+      .single()
+      .then(({ data: wm }) => {
+        if (wm) setWorkspace((wm as any).workspaces as Workspace ?? null);
+      });
+      // If the table doesn't exist yet (pre-migration), the error is silently
+      // ignored and workspace stays null — RLS still protects via owner_id.
+  }, [session, needsPasswordSet]);
+
   useEffect(() => {
     if (!session || needsPasswordSet) { setData(emptyData()); return; }
-    reload();
+    const wid = workspace?.id ?? null;
+    reload(undefined, wid);
     const ch = supabase.channel('cadence-rt');
     TABLES.forEach((t) =>
-      ch.on('postgres_changes', { event: '*', schema: 'public', table: t as string }, () => reload(t)),
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: t as string }, () => reload(t, wid)),
     );
     ch.subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [session, needsPasswordSet, reload]);
+  }, [session, needsPasswordSet, workspace, reload]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -120,8 +141,11 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => { await supabase.auth.signOut(); };
 
   const insert = async <K extends Table>(table: K, row: Partial<Row<K>>) => {
-    // Always include owner_id so tables that lack DEFAULT auth.uid() still work
-    const ownedRow = session?.user?.id ? { owner_id: session.user.id, ...row } : row;
+    // Always include owner_id + workspace_id so rows are correctly scoped.
+    // workspace_id is omitted pre-migration and dropMissingColumn handles it gracefully.
+    const ownedRow = session?.user?.id
+      ? { owner_id: session.user.id, ...(workspace?.id ? { workspace_id: workspace.id } : {}), ...row }
+      : row;
     let payload: any = ownedRow;
     // Tolerate a database that predates a migration: if a column the app writes
     // doesn't exist yet, drop it and retry rather than failing the whole save.
@@ -168,7 +192,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError }}>
       {children}
     </CadenceCtx.Provider>
   );
