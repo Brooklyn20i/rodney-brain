@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from './lib/store';
 import { isOverdue } from './lib/util';
 import { isFiled } from './lib/tasks';
@@ -19,9 +19,17 @@ import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 
 export function App() {
-  const { ready, configured, session, needsPasswordSet, data, signOut } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, signOut, syncError, clearSyncError } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!syncError) return;
+    if (errorTimer.current) clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => clearSyncError(), 5000);
+    return () => { if (errorTimer.current) clearTimeout(errorTimer.current); };
+  }, [syncError]);
 
   const badges = useMemo(() => ({
     // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
@@ -61,6 +69,12 @@ export function App() {
 
   return (
     <div id="app">
+      {syncError && (
+        <div className="sync-error-banner">
+          ⚠ {syncError}
+          <button className="sync-error-dismiss" onClick={clearSyncError}>✕</button>
+        </div>
+      )}
       <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} />
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <div id="main">{render()}</div>
