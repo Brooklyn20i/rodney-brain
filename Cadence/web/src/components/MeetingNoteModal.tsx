@@ -17,6 +17,55 @@ import type { PushTarget } from '../lib/tasks';
 export { parseMeeting } from '../lib/meetingData';
 export type { AgendaItem, ActionItem, MeetingData } from '../lib/meetingData';
 
+// Agenda notes can hold either quick plain text (typed inline) or rich HTML
+// (typed in the expanded editor). These helpers let both coexist on one field.
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// True if a notes string is HTML produced by the rich editor (vs. plain text).
+const isRichHtml = (s: string) => /<(p|ul|ol|li|h[1-3]|strong|em|u|blockquote|table|br|mark|s)[\s>]/i.test(s);
+
+// True if the notes have no visible content (covers empty rich `<p></p>` too).
+const notesAreEmpty = (s: string) =>
+  !s || s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() === '';
+
+// Convert plain text (with line breaks) to HTML so the rich editor can open it
+// without losing the user's existing quick notes. Already-HTML is passed through.
+const toEditorHtml = (s: string) => {
+  if (!s) return '';
+  if (isRichHtml(s)) return s;
+  return s.split(/\n{2,}/).map((para) =>
+    `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`
+  ).join('');
+};
+
+// ── Expanded agenda-note editor (focused sheet) ───────────────────────────────
+// Reuses the full RichEditor (bold, bullets, headings, …) in a roomy overlay so
+// notes that outgrow the inline box have proper space and formatting.
+function AgendaNoteSheet({ title, initialHtml, onChange, onClose }: {
+  title: string; initialHtml: string;
+  onChange: (html: string) => void; onClose: () => void;
+}) {
+  return createPortal(
+    <div className="agenda-note-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="agenda-note-sheet">
+        <div className="agenda-note-sheet-hdr">
+          <span className="agenda-note-sheet-title">📝 {title.trim() || 'Agenda note'}</span>
+          <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+        </div>
+        <div className="agenda-note-sheet-body">
+          <RichEditor
+            content={initialHtml}
+            onChange={(html) => onChange(notesAreEmpty(html) ? '' : html)}
+            placeholder="Type freely — use the toolbar for bold, bullets and headings."
+          />
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 
 // ── Agenda item row ───────────────────────────────────────────────────────────
 function AgendaItemRow({ item, onChange, onDelete }: {
@@ -25,6 +74,7 @@ function AgendaItemRow({ item, onChange, onDelete }: {
   onDelete: () => void;
 }) {
   const [editingNotes, setEditingNotes] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const set = (patch: Partial<AgendaItem>) => onChange({ ...item, ...patch });
 
@@ -33,7 +83,10 @@ function AgendaItemRow({ item, onChange, onDelete }: {
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   };
-  useEffect(() => autoGrow(taRef.current), [item.notes]);
+
+  const rich = isRichHtml(item.notes) && !notesAreEmpty(item.notes);
+  // Only the plain textarea needs auto-grow; rich notes render as a preview.
+  useEffect(() => { if (!rich) autoGrow(taRef.current); }, [item.notes, rich]);
 
   const statusClass = item.status === 'covered' ? ' covered' : item.status === 'deferred' ? ' deferred' : '';
 
@@ -50,18 +103,40 @@ function AgendaItemRow({ item, onChange, onDelete }: {
           />
           <button className="agenda-delete" onClick={onDelete} title="Remove">✕</button>
         </div>
-        {(editingNotes || item.notes) ? (
-          <textarea
-            ref={taRef}
-            className="agenda-notes-input"
-            value={item.notes}
-            placeholder="Notes on this topic…"
-            onChange={(e) => { set({ notes: e.target.value }); autoGrow(e.target); }}
-            onInput={(e) => autoGrow(e.currentTarget)}
-            onBlur={() => { if (!item.notes) setEditingNotes(false); }}
-          />
+        {rich ? (
+          // Rich notes: clean read-only preview that opens the full editor on tap.
+          <div className="agenda-notes-preview" onClick={() => setSheetOpen(true)} title="Tap to edit">
+            <div className="re-content" dangerouslySetInnerHTML={{ __html: item.notes }} />
+            <span className="agenda-notes-edit-hint">✏️ Edit</span>
+          </div>
+        ) : (editingNotes || item.notes) ? (
+          <div className="agenda-notes-wrap">
+            <textarea
+              ref={taRef}
+              className="agenda-notes-input"
+              value={item.notes}
+              placeholder="Notes on this topic…"
+              onChange={(e) => { set({ notes: e.target.value }); autoGrow(e.target); }}
+              onInput={(e) => autoGrow(e.currentTarget)}
+              onBlur={() => { if (!item.notes) setEditingNotes(false); }}
+            />
+            <button className="agenda-notes-expand" onClick={() => setSheetOpen(true)}
+              title="Open the full editor for more space and formatting">⤢ Bigger</button>
+          </div>
         ) : (
-          <button className="agenda-notes-add" onClick={() => setEditingNotes(true)}>+ Add notes</button>
+          <div className="agenda-notes-add-row">
+            <button className="agenda-notes-add" onClick={() => setEditingNotes(true)}>+ Add notes</button>
+            <button className="agenda-notes-add agenda-notes-add-rich" onClick={() => setSheetOpen(true)}
+              title="Open the full editor with bullets, bold and headings">⤢ Bigger editor</button>
+          </div>
+        )}
+        {sheetOpen && (
+          <AgendaNoteSheet
+            title={item.title}
+            initialHtml={toEditorHtml(item.notes)}
+            onChange={(html) => set({ notes: html })}
+            onClose={() => setSheetOpen(false)}
+          />
         )}
         <div className="agenda-status-btns">
           {(['discuss', 'covered', 'deferred'] as const).map((s) => (
@@ -209,7 +284,11 @@ function DeferredAgendaRow({ item, onAdd, alreadyAdded }: { item: AgendaItem; on
   return (
     <div className={`deferred-agenda-row${alreadyAdded ? ' deferred-added' : ''}`}>
       <div className="deferred-agenda-title">⏭ {item.title}</div>
-      {item.notes && <div className="deferred-agenda-notes">{item.notes}</div>}
+      {!notesAreEmpty(item.notes) && (
+        <div className="deferred-agenda-notes">
+          {item.notes.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()}
+        </div>
+      )}
       {alreadyAdded ? (
         <span className="deferred-agenda-added-label">✓ Added to agenda</span>
       ) : (

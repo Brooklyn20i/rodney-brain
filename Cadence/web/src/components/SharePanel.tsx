@@ -6,6 +6,17 @@ import type { MeetingData } from './MeetingNoteModal';
 
 type Tab = 'full' | 'actions' | 'agenda' | 'onenote';
 
+// Agenda notes may be rich HTML (from the expanded editor). Flatten to readable
+// plain text for the plain-text / clipboard outputs. Block tags become line breaks.
+const notesToPlain = (s: string) =>
+  (s || '')
+    .replace(/<\/(p|div|li|h[1-3]|blockquote)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
+
 // ── Plain text generator (for native share + fallback clipboard) ──────────────
 function generatePlainText(data: MeetingData, title: string, person: Person, createdAt: string, tab: Tab): string {
   const dateStr = fmtHeaderDate(createdAt);
@@ -18,8 +29,8 @@ function generatePlainText(data: MeetingData, title: string, person: Person, cre
     const deferred = data.agenda.filter((a) => a.status === 'deferred');
     if (covered.length || toDiscuss.length || deferred.length) {
       lines.push('AGENDA', '');
-      covered.forEach((a) => { lines.push(`✅ ${a.title}`); if (a.notes) lines.push(`   ${a.notes}`); });
-      toDiscuss.forEach((a) => { lines.push(`💬 ${a.title}`); if (a.notes) lines.push(`   ${a.notes}`); });
+      covered.forEach((a) => { lines.push(`✅ ${a.title}`); if (a.notes) lines.push(`   ${notesToPlain(a.notes)}`); });
+      toDiscuss.forEach((a) => { lines.push(`💬 ${a.title}`); if (a.notes) lines.push(`   ${notesToPlain(a.notes)}`); });
       deferred.forEach((a) => lines.push(`⏭ ${a.title} — deferred`));
       lines.push('');
     }
@@ -169,15 +180,15 @@ function generateOneNotePlain(data: MeetingData, person: Person, createdAt: stri
 
   data.agenda.filter((a) => a.status === 'covered').forEach((a) => {
     lines.push(`✅ ${a.title}`);
-    if (a.notes) lines.push(`   ${a.notes}`);
+    if (a.notes) lines.push(`   ${notesToPlain(a.notes)}`);
   });
   data.agenda.filter((a) => a.status === 'discuss').forEach((a) => {
     lines.push(`💬 ${a.title}`);
-    if (a.notes) lines.push(`   ${a.notes}`);
+    if (a.notes) lines.push(`   ${notesToPlain(a.notes)}`);
   });
   data.agenda.filter((a) => a.status === 'deferred').forEach((a) => {
     lines.push(`⏭ ${a.title} — deferred`);
-    if (a.notes) lines.push(`   ${a.notes}`);
+    if (a.notes) lines.push(`   ${notesToPlain(a.notes)}`);
   });
 
   if (data.actions.length) {
