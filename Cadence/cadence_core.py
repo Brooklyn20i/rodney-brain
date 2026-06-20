@@ -1,4 +1,8 @@
 """
+⚠️  LEGACY — LOCAL JSON PROTOTYPE — DO NOT USE FOR LIVE OPERATIONS
+    The live Cadence system is Supabase-backed. Use Cadence/agent/ for agent
+    access and Cadence/web/ for the UI. This file is archived for reference only.
+
 Cadence core — the single source of truth shared by humans and agents.
 
 Both the Streamlit cockpit (app.py) and the MCP server (cadence_mcp.py)

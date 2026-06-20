@@ -4,7 +4,12 @@ import { ScreenHeader } from '../components/bits';
 
 interface Hit { id: string; tag: string; tagCls: string; title: string; meta?: string; }
 
-export function Search({ onMenu }: { onMenu?: () => void }) {
+const SCREEN_FOR: Record<string, string> = {
+  Item: 'tasks', Decision: 'decisions', Project: 'projects',
+  Person: 'people', Meeting: 'meetings',
+};
+
+export function Search({ onMenu, onNavigate }: { onMenu?: () => void; onNavigate?: (screen: string) => void }) {
   const { data } = useCadence();
   const [q, setQ] = useState('');
 
@@ -33,15 +38,18 @@ export function Search({ onMenu }: { onMenu?: () => void }) {
         ) : hits.length === 0 ? (
           <div className="empty-state"><p>No results for "{q.trim()}"</p></div>
         ) : hits.map((h) => (
-          <div className="search-result-item" key={h.tag + h.id}>
+          <button className="search-result-item" key={h.tag + h.id}
+            onClick={() => onNavigate?.(SCREEN_FOR[h.tag])}
+            style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className={`tag ${h.tagCls}`}>{h.tag}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="sr-title">{h.title}</div>
                 {h.meta && <div className="sr-meta">{h.meta}</div>}
               </div>
+              {onNavigate && <span style={{ color: 'var(--text3)', fontSize: 14 }}>→</span>}
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </>

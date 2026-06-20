@@ -59,7 +59,7 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
           <div className="split-panel-body">
             {queue.length ? queue.map((q) => (
               <button className={`capture-queue-item ${selected === q.id ? 'selected' : ''}`} key={q.id} onClick={() => setSelected(q.id)}>
-                <span className="cq-thumb">📷</span>
+                <span className="cq-thumb">📋</span>
                 <div className="cq-info"><div className="cq-name">{q.name}</div><div className="cq-status">{q.results.length ? `${q.results.length} items extracted` : 'Not yet processed'}</div></div>
                 <span className={`status-dot ${q.results.length ? 'done' : 'pending'}`} />
               </button>
@@ -96,9 +96,9 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
           <div className="split-right">
             <div className="split-panel-header"><h3>Select a screenshot</h3></div>
             <div className="split-panel-body">
-              <div className="capture-drop-zone"><div className="drop-icon">📷</div>
-                <p>Drop screenshots here or tap "Add"</p>
-                <small>Text is extracted locally — nothing leaves your device</small>
+              <div className="capture-drop-zone"><div className="drop-icon">📋</div>
+                <p>Paste text or notes, then extract work items</p>
+                <small>Tap "+ Add" to create a new capture session</small>
               </div>
             </div>
           </div>

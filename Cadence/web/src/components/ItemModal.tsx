@@ -4,7 +4,7 @@ import type { ItemType, Priority, WorkItem } from '../lib/types';
 import { Modal } from './bits';
 
 const TYPES: { v: ItemType; label: string }[] = [
-  { v: 'task', label: 'Task' }, { v: 'decision', label: 'Decision' },
+  { v: 'task', label: 'Task' },
   { v: 'followUp', label: 'Follow Up' }, { v: 'waitingFor', label: 'Waiting For' },
   { v: 'risk', label: 'Risk' }, { v: 'action', label: 'Meeting Action' },
 ];
