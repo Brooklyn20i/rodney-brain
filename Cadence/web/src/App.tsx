@@ -19,7 +19,7 @@ import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 
 export function App() {
-  const { ready, configured, session, needsPasswordSet, data, signOut, syncError, clearSyncError } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -77,7 +77,7 @@ export function App() {
           <button className="sync-error-dismiss" onClick={clearSyncError}>✕</button>
         </div>
       )}
-      <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} />
+      <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} workspaceName={workspace?.name ?? null} />
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <div id="main">{render()}</div>
     </div>
