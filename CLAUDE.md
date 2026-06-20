@@ -8,7 +8,7 @@
 `main`, which is the live app on iPhone, iPad, and PC. A change is not done
 until it is on `main`.
 
-Shipping workflow:
+Shipping workflow (current — GitHub Pages):
 1. `cd Cadence/web && npm run build`
 2. `rm -f ../../docs/assets/* && cp -r dist/assets/* ../../docs/assets/ && cp dist/index.html ../../docs/`
 3. `git add -A && git commit && git push -u origin <branch>`
@@ -17,6 +17,25 @@ Shipping workflow:
 
 Never leave work on a feature branch and report it as "done."  
 Never ask the user if they want to deploy — just do it.
+
+## Phase 0.5 — Vercel setup (pending Rodney's action)
+
+`Cadence/web/vercel.json` is already committed with the correct config.
+Once Rodney creates a Vercel account and links the repo, the deploy workflow
+changes to:
+
+**Shipping workflow (Vercel — after Phase 0.5):**
+1. Push branch → Vercel auto-deploys a preview URL (no manual build step)
+2. Merge PR to `main` → Vercel deploys production automatically
+3. The `docs/` copy step and the manual build are retired
+
+Steps Rodney must take (one-time):
+1. Go to vercel.com → Add New Project → import `brooklyn20i/rodney-brain`
+2. Set **Root Directory** = `Cadence/web`
+3. Framework will auto-detect as Vite
+4. Add env vars: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+5. Deploy. Once the production URL is confirmed live, delete `docs/` and update
+   this section's shipping workflow to the Vercel variant.
 
 ## Active development branch
 
@@ -37,5 +56,6 @@ Supabase is the backend. No separate deploy step beyond merging to `main`.
 | `Cadence/web/src/App.tsx` | Router, sidebar, auth |
 | `Cadence/agent/cadence_supabase_mcp.py` | Live MCP server |
 | `Cadence/backend/migrations/` | Postgres schema migrations |
-| `docs/` | Built PWA — what GitHub Pages serves |
+| `Cadence/web/vercel.json` | Vercel deploy config (ready to use) |
+| `docs/` | Built PWA — what GitHub Pages serves (retired once Vercel is live) |
 | `Cadence/AGENTS.md` | Agent/operator guide |

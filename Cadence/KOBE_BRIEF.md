@@ -45,14 +45,14 @@ Rodney wants to move from solo MVP to **team use now, SaaS potential later**. Se
 ### Phase 0 — Safety net ✅ DONE
 Tests, lint, CI, code-splitting, Sentry. Ships first so refactoring is safe.
 
-### Phase 0.5 — Infrastructure (in parallel)
-Move frontend from GitHub Pages → **Vercel**.
-- Auto-deploys from git (no more manual `docs/` copy)
-- Per-PR preview URLs
-- Staging + production environments
-- Retire the `docs/` directory once Vercel is live
+### Phase 0.5 — Infrastructure ✅ CONFIG DONE (account setup pending Rodney)
+`Cadence/web/vercel.json` committed. `CLAUDE.md` has step-by-step Vercel setup
+instructions. `Cadence/backend/RECOVERY.md` disaster-recovery runbook written.
 
-Requires Rodney to: create a Vercel account, link the repo, add env vars.
+Rodney's one-time action: create Vercel account → import `brooklyn20i/rodney-brain`
+→ Root Directory = `Cadence/web` → add `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`
+env vars → deploy. After that, push-to-branch auto-deploys previews; merge to `main`
+deploys production.
 
 ### Phase 1 — Multi-tenant workspace layer ✅ CODE DONE (migrations pending Supabase)
 `workspaces` + `workspace_members` tables written. `workspace_id` on all 15 data tables. Workspace-aware RLS (0014) alongside existing owner/agent access. Frontend scopes to workspace on login. Migrations 0011–0014 are in `Cadence/backend/migrations/` and need to be applied to Supabase (staging first, then production).
