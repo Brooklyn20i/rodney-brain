@@ -653,6 +653,49 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .agenda-notes-add { background: none; border: none; color: var(--text3); font-size: 12px; cursor: pointer;
   padding: 2px 0; margin-bottom: 6px; font-family: inherit; }
 .agenda-notes-add:hover { color: var(--accent); }
+.agenda-notes-add-row { display: flex; gap: 14px; align-items: center; }
+.agenda-notes-add-rich { color: var(--accent); }
+
+/* Inline expand affordance on the quick textarea */
+.agenda-notes-wrap { position: relative; }
+.agenda-notes-expand { position: absolute; right: 6px; bottom: 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--accent); font-size: 11px;
+  font-weight: 600; cursor: pointer; font-family: inherit; padding: 2px 7px; line-height: 1.4; }
+.agenda-notes-expand:hover { background: var(--blue-bg); border-color: var(--accent-lt); }
+
+/* Rich-note read-only preview (tap to open the full editor) */
+.agenda-notes-preview { position: relative; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface2); padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+.agenda-notes-preview:hover { border-color: var(--accent-lt); }
+.agenda-notes-preview .re-content { font-size: 12.5px; color: var(--text2); }
+.agenda-notes-preview .re-content > *:first-child { margin-top: 0; }
+.agenda-notes-preview .re-content > *:last-child { margin-bottom: 0; }
+.agenda-notes-preview .re-content p { margin: 0 0 6px; }
+.agenda-notes-preview .re-content ul, .agenda-notes-preview .re-content ol { padding-left: 18px; margin: 4px 0; }
+.agenda-notes-preview .re-content h1 { font-size: 16px; margin: 4px 0; }
+.agenda-notes-preview .re-content h2 { font-size: 14px; margin: 4px 0; }
+.agenda-notes-preview .re-content h3 { font-size: 13px; margin: 4px 0; }
+.agenda-notes-edit-hint { position: absolute; right: 8px; top: 6px; font-size: 10px; font-weight: 600;
+  color: var(--accent); opacity: 0; transition: opacity 0.12s; }
+.agenda-notes-preview:hover .agenda-notes-edit-hint { opacity: 1; }
+.agenda-item.covered .agenda-notes-preview,
+.agenda-item.deferred .agenda-notes-preview { opacity: 0.45; }
+
+/* Expanded agenda-note editor sheet */
+.agenda-note-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 240;
+  display: flex; align-items: center; justify-content: center; padding: 24px; }
+.agenda-note-sheet { background: var(--surface); border-radius: var(--radius); width: 100%;
+  max-width: 720px; height: 78dvh; max-height: 760px; display: flex; flex-direction: column;
+  overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.4); }
+.agenda-note-sheet-hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.agenda-note-sheet-title { font-size: 15px; font-weight: 700; color: var(--text); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-note-sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+@media (max-width: 640px) {
+  .agenda-note-overlay { padding: 0; }
+  .agenda-note-sheet { max-width: none; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+}
 .agenda-status-btns { display: flex; gap: 4px; flex-wrap: wrap; }
 .stn-btn { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; font-family: inherit; color: var(--text2); font-weight: 500; }
