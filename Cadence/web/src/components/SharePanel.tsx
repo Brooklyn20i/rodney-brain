@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fmtHeaderDate, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useCadence } from '../lib/store';
 import type { Note, OutboxEmail, Person } from '../lib/types';
@@ -228,6 +228,9 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
   const [copied, setCopied] = useState(false);
   const [emailDone, setEmailDone] = useState(false);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
+  // person.name used (not the full person object) so an avatar-colour change
+  // doesn't invalidate and re-run the expensive HTML generation.
   const html = useMemo(
     () => generateHtml(meetingData, note.title, person, note.created_at, tab),
     [meetingData, note.title, person.name, note.created_at, tab],
@@ -244,6 +247,7 @@ export function SharePanel({ note, person, meetingData, onClose }: Props) {
     () => generateOneNotePlain(meetingData, person, note.created_at),
     [meetingData, person.name, note.created_at],
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const isOneNote = tab === 'onenote';
 

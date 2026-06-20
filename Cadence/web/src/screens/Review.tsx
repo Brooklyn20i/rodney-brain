@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { isOverdue, fmtHeaderDate, todayStr } from '../lib/util';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { ItemType, Priority, WorkItem } from '../lib/types';
 import { Modal } from './bits';

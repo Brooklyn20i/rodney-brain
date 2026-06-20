@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import type { ItemType, Priority, WorkItem } from '../lib/types';
 import { localDateStr, fmtDM } from '../lib/util';

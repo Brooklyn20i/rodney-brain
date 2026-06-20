@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { WorkItem, ItemType, Priority } from '../lib/types';
 import { TypeTag, PriTag, ScreenHeader } from '../components/bits';

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 

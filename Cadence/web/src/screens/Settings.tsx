@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { localDateStr } from '../lib/util';

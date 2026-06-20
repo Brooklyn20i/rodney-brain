@@ -124,7 +124,9 @@ export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typ
   });
 
   // Sync when content prop changes due to external updates (e.g. navigation).
-  // Guard: skip if the editor already has equivalent content to avoid cursor jumps.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  // `editor` intentionally omitted — stable after mount; including it causes
+  // an extra run on first render that corrupts the cursor position.
   useEffect(() => {
     if (!editor) return;
     const current = editor.getHTML();
@@ -134,6 +136,7 @@ export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typ
       editor.commands.setContent(content || '');
     }
   }, [content]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   if (!editor) return null;
 
