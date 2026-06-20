@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { todayStr, fmtDM, fmtWeekDMY, fmtDMY } from '../lib/util';
 import { useCadence } from '../lib/store';
@@ -8,7 +8,7 @@ import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
 import { useMeetingDates } from '../lib/meetings';
 import { parseMeeting, uid } from '../lib/meetingData';
-import type { AgendaItem, ActionItem, MeetingData } from '../lib/meetingData';
+import type { AgendaItem, ActionItem } from '../lib/meetingData';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 
@@ -350,7 +350,11 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const isGroupMeeting = person.type === 'meeting_group';
 
-  const { data: parsed, isLegacy } = useMemo(() => parseMeeting(note.body), [note.id, note.body]);
+  // note.id intentionally included so the parse resets when navigating between
+  // meetings; body-only changes (realtime sync) do NOT reset to avoid clobbering
+  // in-progress edits.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { data: parsed } = useMemo(() => parseMeeting(note.body), [note.id]);
   const [agenda, setAgenda] = useState<AgendaItem[]>(parsed.agenda);
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
   const [notes, setNotes] = useState<string>(parsed.notes);
@@ -412,7 +416,11 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     saveTimer.current = setTimeout(flushSave, 600);
   }, [flushSave]);
 
-  // Flush on unmount so "Save & Close" never loses pending changes
+  // Flush on unmount so "Save & Close" never loses pending changes.
+  // flushSave is intentionally excluded: it reads from refs, so a stale
+  // closure is fine and re-registering the effect on every change would cause
+  // the cleanup to fire prematurely on re-renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => { flushSave(); }, []);
 
   // Reset state when navigating between meetings (note.id change only — body changes
@@ -437,18 +445,21 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     return idx < allMeetings.length - 1 ? allMeetings[idx + 1] : null;
   }, [allMeetings, note.id]);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
+  // Optional-chaining deps: only the meeting's id/body triggers a re-parse,
+  // not reference identity changes on the parent prevMeeting object.
   const carryForward = useMemo(() => {
     if (!prevMeeting) return [];
     const { data: prev } = parseMeeting(prevMeeting.body);
     return prev.actions.filter((a) => !a.done);
   }, [prevMeeting?.id, prevMeeting?.body]);
 
-  // Deferred agenda items from the previous meeting — shown as carry-forward prompts
   const deferredAgenda = useMemo(() => {
     if (!prevMeeting) return [];
     const { data: prev } = parseMeeting(prevMeeting.body);
     return prev.agenda.filter((a) => a.status === 'deferred');
   }, [prevMeeting?.id, prevMeeting?.body]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // Add a deferred item from the previous meeting into this meeting's agenda
   const addDeferredToAgenda = (item: AgendaItem) => {
@@ -616,7 +627,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                             disabled={alreadyInAgenda.has(w.title.toLowerCase())}
                             onChange={() => setImportSel((s) => {
                               const n = new Set(s);
-                              n.has(w.id) ? n.delete(w.id) : n.add(w.id);
+                              if (n.has(w.id)) { n.delete(w.id); } else { n.add(w.id); }
                               return n;
                             })} />
                           <span style={{ fontSize: 13, opacity: alreadyInAgenda.has(w.title.toLowerCase()) ? 0.4 : 1 }}>

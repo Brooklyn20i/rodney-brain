@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useCadence } from '../lib/store';
 import { isOverdue } from '../lib/util';
 

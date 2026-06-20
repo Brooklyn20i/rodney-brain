@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from './lib/store';
 import { isOverdue } from './lib/util';
 import { isFiled } from './lib/tasks';
@@ -29,6 +29,8 @@ export function App() {
     if (errorTimer.current) clearTimeout(errorTimer.current);
     errorTimer.current = setTimeout(() => clearSyncError(), 5000);
     return () => { if (errorTimer.current) clearTimeout(errorTimer.current); };
+  // clearSyncError is stable (useCallback); omitting avoids double-timer bug.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncError]);
 
   const badges = useMemo(() => ({

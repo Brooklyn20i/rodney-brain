@@ -118,11 +118,10 @@ function StrategyModal({ strategy, save, onClose }: { strategy: StrategyContent;
 }
 
 // ── Scoreboard (full-width view) ───────────────────────────────────────────
-function KpiScorecard({ kpi, readings, projects, strategy, onAdd }: {
+function KpiScorecard({ kpi, readings, projects, onAdd }: {
   kpi: { id: string; name: string; targetLabel: string; target: number | null; unit?: string };
   readings: { date: string; value: number }[];
   projects: Project[];
-  strategy: StrategyContent;
   onAdd: (r: { date: string; value: number }) => void;
 }) {
   const [date, setDate] = useState(todayStr());
@@ -189,7 +188,6 @@ function ScoreboardView({ strategy, winState, saveWinState }: { strategy: Strate
         <KpiScorecard key={k.id} kpi={k}
           readings={winState.readings[k.id] || []}
           projects={data.projects}
-          strategy={strategy}
           onAdd={(r) => saveWinState((s) => ({ ...s, readings: { ...s.readings, [k.id]: [...(s.readings[k.id] || []), r].sort((a, b) => a.date.localeCompare(b.date)) } }))} />
       ))}
     </div>

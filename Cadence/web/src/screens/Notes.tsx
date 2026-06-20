@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note } from '../lib/types';
 import { ScreenHeader } from '../components/bits';
