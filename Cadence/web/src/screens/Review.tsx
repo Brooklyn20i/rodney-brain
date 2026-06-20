@@ -1,12 +1,43 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { isOverdue, fmtHeaderDate, todayStr } from '../lib/util';
 
 export function Review({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, insert, update } = useCadence();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const toggle = (k: string) => setChecked((c) => ({ ...c, [k]: !c[k] }));
+  const reviewNoteRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const reviewNote = data.notes.find((n) => n.title === '__review__');
+    if (reviewNote) {
+      reviewNoteRef.current = reviewNote.id;
+      try {
+        const saved = JSON.parse(reviewNote.body || '{}');
+        if (saved && typeof saved === 'object') setChecked(saved);
+      } catch { /* ignore */ }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (k: string) => {
+    setChecked((c) => {
+      const next = { ...c, [k]: !c[k] };
+      // Debounce-save to the __review__ system note
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(async () => {
+        try {
+          if (reviewNoteRef.current) {
+            await update('notes', reviewNoteRef.current, { body: JSON.stringify(next) } as any);
+          } else {
+            const n = await insert('notes', { title: '__review__', body: JSON.stringify(next), folder: '' } as any);
+            reviewNoteRef.current = n.id;
+          }
+        } catch { /* non-critical */ }
+      }, 1000);
+      return next;
+    });
+  };
 
   const counts = useMemo(() => {
     const open = data.work_items.filter((w) => !w.done);

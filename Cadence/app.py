@@ -1,4 +1,8 @@
 """
+⚠️  LEGACY — LOCAL JSON PROTOTYPE — DO NOT USE FOR LIVE OPERATIONS
+    The live Cadence UI is the React PWA at Cadence/web/. This Streamlit
+    app operates on a local JSON file and is archived for reference only.
+
 Cadence — Executive Operating System
 A Streamlit app for managing tasks, projects, decisions and daily priorities.
 All data is stored locally in a JSON file (cadence_data.json).

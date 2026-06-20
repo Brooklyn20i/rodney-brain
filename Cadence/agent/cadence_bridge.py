@@ -49,7 +49,12 @@ TABLES = [
 ]
 
 
+class CadenceBridgeError(Exception):
+    """Raised by bridge library functions on recoverable errors."""
+
+
 def fail(msg: str, code: int = 2) -> None:
+    """CLI entry point: print error and exit. Library code raises CadenceBridgeError instead."""
     print(f"ERROR: {msg}", file=sys.stderr)
     raise SystemExit(code)
 
@@ -80,7 +85,7 @@ def agent_password(email: str) -> str:
     pw = os.environ.get("CADENCE_AGENT_PASSWORD")
     if pw:
         return pw
-    fail(
+    raise CadenceBridgeError(
         "No Cadence agent password found. Add it to macOS Keychain with service "
         "cadence-agent-password and account equal to CADENCE_AGENT_EMAIL."
     )
@@ -98,7 +103,11 @@ def request_json(method: str, url: str, headers: dict[str, str], body: Any = Non
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:1000]
-        fail(f"HTTP {e.code} from {url}: {detail}", code=1)
+        raise CadenceBridgeError(f"HTTP {e.code} from {url}: {detail}")
+    except urllib.error.URLError as e:
+        raise CadenceBridgeError(f"Network error contacting {url}: {e.reason}")
+    except json.JSONDecodeError as e:
+        raise CadenceBridgeError(f"Invalid JSON response from {url}: {e}")
 
 
 def get_session() -> tuple[str, str, str]:
@@ -115,7 +124,7 @@ def get_session() -> tuple[str, str, str]:
     )
     token = res.get("access_token") if isinstance(res, dict) else None
     if not token:
-        fail("Supabase login did not return an access token")
+        raise CadenceBridgeError("Supabase login did not return an access token")
     return base, anon, token
 
 
@@ -130,7 +139,7 @@ def rest_headers(anon: str, token: str) -> dict[str, str]:
 
 def select(table: str, query: str = "", limit: int | None = None) -> Any:
     if table not in TABLES:
-        fail(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
+        raise CadenceBridgeError(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
     base, anon, token = get_session()
     params = query.lstrip("?")
     if limit is not None:
@@ -149,21 +158,21 @@ def discover_owner_id() -> str:
         limit=2,
     )
     if not isinstance(grants, list) or not grants:
-        fail(
+        raise CadenceBridgeError(
             "No active writable Cadence agent grant visible. Run the 0003_kobe_agent.sql "
             "migration and insert the Rodney -> Kobe grant, or set CADENCE_OWNER_ID."
         )
     if len(grants) > 1:
-        fail("Multiple writable Cadence owner grants visible. Set CADENCE_OWNER_ID explicitly.")
+        raise CadenceBridgeError("Multiple writable Cadence owner grants visible. Set CADENCE_OWNER_ID explicitly.")
     owner_id = grants[0].get("owner_user_id")
     if not owner_id:
-        fail("Active Cadence grant did not include owner_user_id")
+        raise CadenceBridgeError("Active Cadence grant did not include owner_user_id")
     return str(owner_id)
 
 
 def insert(table: str, row: dict[str, Any]) -> Any:
     if table not in TABLES:
-        fail(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
+        raise CadenceBridgeError(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
     base, anon, token = get_session()
     headers = {**rest_headers(anon, token), "Prefer": "return=representation"}
     url = f"{base}/rest/v1/{table}"
@@ -172,7 +181,7 @@ def insert(table: str, row: dict[str, Any]) -> Any:
 
 def patch_row(table: str, row_id: str, patch: dict[str, Any]) -> Any:
     if table not in TABLES:
-        fail(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
+        raise CadenceBridgeError(f"Unknown table {table!r}. Allowed: {', '.join(TABLES)}")
     base, anon, token = get_session()
     headers = {**rest_headers(anon, token), "Prefer": "return=representation"}
     row_filter = urllib.parse.quote(f"eq.{row_id}", safe=".=:-_")
@@ -191,49 +200,61 @@ def cmd_status(_: argparse.Namespace) -> None:
 
 def cmd_probe(_: argparse.Namespace) -> None:
     # Read only. Confirms auth and RLS visibility without dumping sensitive row data.
-    counts: dict[str, int | str] = {}
-    grants = select(
-        "cadence_agent_access",
-        "select=owner_user_id,can_read,can_write,revoked_at&revoked_at=is.null",
-        limit=10,
-    )
-    writable_grants = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
-    for t in ["work_items", "projects", "people", "decisions", "outbox"]:
-        rows = select(t, "select=id", limit=1000)
-        counts[t] = len(rows) if isinstance(rows, list) else "?"
-    print(json.dumps({
-        "ok": True,
-        "active_grants": len(grants) if isinstance(grants, list) else "?",
-        "writable_grants": len(writable_grants),
-        "visible_counts": counts,
-    }, indent=2))
+    try:
+        counts: dict[str, int | str] = {}
+        grants = select(
+            "cadence_agent_access",
+            "select=owner_user_id,can_read,can_write,revoked_at&revoked_at=is.null",
+            limit=10,
+        )
+        writable_grants = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
+        for t in ["work_items", "projects", "people", "decisions", "outbox"]:
+            rows = select(t, "select=id", limit=1000)
+            counts[t] = len(rows) if isinstance(rows, list) else "?"
+        print(json.dumps({
+            "ok": True,
+            "active_grants": len(grants) if isinstance(grants, list) else "?",
+            "writable_grants": len(writable_grants),
+            "visible_counts": counts,
+        }, indent=2))
+    except CadenceBridgeError as e:
+        fail(str(e))
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    rows = select(args.table, args.query or "", limit=args.limit)
-    print(json.dumps(rows, indent=2, ensure_ascii=False))
+    try:
+        rows = select(args.table, args.query or "", limit=args.limit)
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+    except CadenceBridgeError as e:
+        fail(str(e))
 
 
 def cmd_add_inbox(args: argparse.Namespace) -> None:
-    row = {
-        "owner_id": discover_owner_id(),
-        "title": args.title,
-        "type": args.type,
-        "priority": args.priority,
-        "due_date": args.due_date,
-        "notes": args.notes or "",
-        "inboxed": True,
-        "source": "agent:kobe",
-        "done": False,
-    }
-    row = {k: v for k, v in row.items() if v is not None}
-    res = insert("work_items", row)
-    print(json.dumps(res, indent=2, ensure_ascii=False))
+    try:
+        row = {
+            "owner_id": discover_owner_id(),
+            "title": args.title,
+            "type": args.type,
+            "priority": args.priority,
+            "due_date": args.due_date,
+            "notes": args.notes or "",
+            "inboxed": True,
+            "source": "agent:kobe",
+            "done": False,
+        }
+        row = {k: v for k, v in row.items() if v is not None}
+        res = insert("work_items", row)
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+    except CadenceBridgeError as e:
+        fail(str(e))
 
 
 def cmd_complete(args: argparse.Namespace) -> None:
-    res = patch_row("work_items", args.id, {"done": True, "completed_at": dt.datetime.now(dt.UTC).isoformat()})
-    print(json.dumps(res, indent=2, ensure_ascii=False))
+    try:
+        res = patch_row("work_items", args.id, {"done": True, "completed_at": dt.datetime.now(dt.UTC).isoformat()})
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+    except CadenceBridgeError as e:
+        fail(str(e))
 
 
 def main() -> None:

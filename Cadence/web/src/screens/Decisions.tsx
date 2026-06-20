@@ -54,10 +54,22 @@ const GROUPS: { status: DecisionStatus; label: string; color: string }[] = [
 ];
 
 export function Decisions({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, insert, update, logActivity } = useCadence();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Decision | null>(null);
   const [editingWorkItem, setEditingWorkItem] = useState<WorkItem | null>(null);
+
+  const convertDecision = async (w: WorkItem) => {
+    await insert('decisions', {
+      title: w.title,
+      status: 'pending' as const,
+      context: w.notes || '',
+      outcome: '',
+      due_date: w.due_date || null,
+    } as Partial<Decision>);
+    await update('work_items', w.id, { done: true } as Partial<WorkItem>);
+    logActivity('convert_decision', w.title);
+  };
 
   // work_items typed as 'decision' always land in the Pending group
   const workItemDecisions = data.work_items.filter((w) => w.type === 'decision' && !w.done);
@@ -92,15 +104,23 @@ export function Decisions({ onMenu }: { onMenu?: () => void }) {
               {extras.map((w) => {
                 const person = data.people.find((p) => p.id === w.person_id);
                 return (
-                  <button className="decision-item" key={w.id} onClick={() => setEditingWorkItem(w)}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-                      <span className={`tag ${STATUS_TAG['pending']}`}>Pending</span>
-                      {person && <span className="tag tag-info">{person.name}</span>}
-                      {w.due_date && <Due date={w.due_date} />}
+                  <div className="decision-item" key={w.id} style={{ cursor: 'default' }}>
+                    <div onClick={() => setEditingWorkItem(w)} style={{ cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                        <span className={`tag ${STATUS_TAG['pending']}`}>Pending</span>
+                        {person && <span className="tag tag-info">{person.name}</span>}
+                        {w.due_date && <Due date={w.due_date} />}
+                      </div>
+                      <div className="card-title">{w.title}</div>
+                      {w.notes && <p className="card-meta">{w.notes.slice(0, 100)}{w.notes.length > 100 ? '…' : ''}</p>}
                     </div>
-                    <div className="card-title">{w.title}</div>
-                    {w.notes && <p className="card-meta">{w.notes.slice(0, 100)}{w.notes.length > 100 ? '…' : ''}</p>}
-                  </button>
+                    <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => convertDecision(w)}
+                        title="Move to the canonical Decisions log">
+                        → Move to Decisions log
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </React.Fragment>

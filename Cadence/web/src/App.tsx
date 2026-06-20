@@ -61,7 +61,7 @@ export function App() {
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'outbox': return <Outbox onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;
-      case 'search': return <Search onMenu={onMenu} />;
+      case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
       default: return <Today onMenu={onMenu} />;
     }

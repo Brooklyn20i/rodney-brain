@@ -1,3 +1,22 @@
+// ── CANONICAL TYPE CONTRACT ────────────────────────────────────────────────────
+// This file is the single source of truth for the Cadence data model.
+// Swift and Python types MUST match these definitions exactly.
+//
+// Enum values map directly to Postgres enums (0001_init.sql):
+//   ItemType       → item_type enum
+//   Priority       → priority_level enum
+//   ProjectStatus  → project_status enum
+//   DecisionStatus → decision_status enum
+//   Health         → health_status enum
+//   EmailStatus    → email_status enum
+//
+// When adding or changing fields, update:
+//   1. This file (source of truth)
+//   2. The Postgres migration (Cadence/backend/migrations/)
+//   3. Swift models (Cadence/Cadence/Models/)
+//   4. Python bridge TABLES list (Cadence/agent/cadence_bridge.py)
+// ──────────────────────────────────────────────────────────────────────────────
+
 // Types mirror the Postgres schema (snake_case columns) so what the client
 // holds is exactly what the database returns — no mapping layer to drift.
 
