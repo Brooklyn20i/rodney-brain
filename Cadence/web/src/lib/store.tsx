@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isConfigured } from './supabase';
-import { CadenceData, TABLES, emptyData, Workspace } from './types';
+import { CadenceData, TABLES, emptyData, Workspace, WorkspaceMember } from './types';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
@@ -13,6 +13,7 @@ interface Ctx {
   needsPasswordSet: boolean;
   data: CadenceData;
   workspace: Workspace | null;
+  workspaceMembers: WorkspaceMember[];
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
@@ -24,6 +25,9 @@ interface Ctx {
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
   syncError: string | null;
   clearSyncError: () => void;
+  createInvite: (role: 'admin' | 'editor' | 'viewer') => Promise<string>;
+  removeWorkspaceMember: (userId: string) => Promise<void>;
+  acceptInvite: (token: string) => Promise<{ ok?: boolean; error?: string }>;
 }
 
 // If a write fails because a column doesn't exist in the database yet (the
@@ -58,6 +62,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
 
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
@@ -94,7 +99,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
 
   // Resolve workspace membership after login.
   useEffect(() => {
-    if (!session || needsPasswordSet) { setWorkspace(null); return; }
+    if (!session || needsPasswordSet) { setWorkspace(null); setWorkspaceMembers([]); return; }
     supabase
       .from('workspace_members')
       .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
@@ -107,6 +112,18 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       // If the table doesn't exist yet (pre-migration), the error is silently
       // ignored and workspace stays null — RLS still protects via owner_id.
   }, [session, needsPasswordSet]);
+
+  // Fetch all workspace members whenever the workspace is resolved.
+  useEffect(() => {
+    if (!workspace) { setWorkspaceMembers([]); return; }
+    supabase
+      .from('workspace_members')
+      .select('*')
+      .eq('workspace_id', workspace.id)
+      .then(({ data: members }) => {
+        if (members) setWorkspaceMembers(members as WorkspaceMember[]);
+      });
+  }, [workspace]);
 
   useEffect(() => {
     if (!session || needsPasswordSet) { setData(emptyData()); return; }
@@ -189,10 +206,47 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     try { await insert('activity', { actor, action, detail } as any); } catch { /* non-critical */ }
   };
 
+  const createInvite = async (role: 'admin' | 'editor' | 'viewer'): Promise<string> => {
+    if (!workspace?.id) throw new Error('No workspace');
+    const { data: row, error } = await supabase
+      .from('workspace_invites')
+      .insert({ workspace_id: workspace.id, invited_by: session!.user.id, role })
+      .select('id')
+      .single();
+    if (error || !row) { setSyncError(error?.message || 'Could not create invite'); throw error; }
+    return window.location.origin + window.location.pathname + '?invite=' + row.id;
+  };
+
+  const removeWorkspaceMember = async (userId: string): Promise<void> => {
+    if (!workspace?.id) return;
+    const { error } = await supabase
+      .from('workspace_members')
+      .delete()
+      .eq('workspace_id', workspace.id)
+      .eq('user_id', userId);
+    if (error) { setSyncError(error?.message || 'Could not remove member'); throw error; }
+    setWorkspaceMembers((prev) => prev.filter((m) => m.user_id !== userId));
+  };
+
+  const acceptInvite = async (token: string): Promise<{ ok?: boolean; error?: string }> => {
+    const { data, error } = await supabase.rpc('accept_workspace_invite', { token });
+    if (error) return { error: error.message };
+    if ((data as any)?.error) return { error: (data as any).error };
+    // Refresh workspace after acceptance.
+    const { data: wm } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
+      .eq('user_id', session!.user.id)
+      .limit(1)
+      .single();
+    if (wm) setWorkspace((wm as any).workspaces as Workspace ?? null);
+    return { ok: true };
+  };
+
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createInvite, removeWorkspaceMember, acceptInvite }}>
       {children}
     </CadenceCtx.Provider>
   );

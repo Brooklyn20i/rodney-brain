@@ -19,9 +19,10 @@ import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 
 export function App() {
-  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [inviteBanner, setInviteBanner] = useState<string | null>(null);
 
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -32,6 +33,28 @@ export function App() {
   // clearSyncError is stable (useCallback); omitting avoids double-timer bug.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncError]);
+
+  // Handle ?invite=<token> on load. Stash token for post-login processing.
+  const inviteToken = new URLSearchParams(window.location.search).get('invite');
+  useEffect(() => {
+    if (!inviteToken) return;
+    if (!session) {
+      // Not logged in — preserve token across login via sessionStorage.
+      sessionStorage.setItem('cadence_invite', inviteToken);
+      return;
+    }
+    // Logged in — accept now (handles both direct link and post-login redirect).
+    const token = inviteToken || sessionStorage.getItem('cadence_invite');
+    if (!token) return;
+    sessionStorage.removeItem('cadence_invite');
+    history.replaceState(null, '', window.location.pathname);
+    acceptInvite(token).then((result) => {
+      setInviteBanner(result.error ? `Could not join workspace: ${result.error}` : '✓ You have joined the workspace');
+      setTimeout(() => setInviteBanner(null), 6000);
+    });
+  // acceptInvite is stable; inviteToken and session drive the key behaviour.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, inviteToken]);
 
   const badges = useMemo(() => ({
     // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
@@ -44,7 +67,7 @@ export function App() {
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
-  if (!configured || !session) return <Login />;
+  if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} />;
   if (needsPasswordSet) return <SetPassword />;
 
   const navigate = (id: string) => { setScreen(id); setMenuOpen(false); };
@@ -75,6 +98,11 @@ export function App() {
         <div className="sync-error-banner">
           ⚠ {syncError}
           <button className="sync-error-dismiss" onClick={clearSyncError}>✕</button>
+        </div>
+      )}
+      {inviteBanner && (
+        <div className={`sync-error-banner${inviteBanner.startsWith('✓') ? ' sync-success-banner' : ''}`}>
+          {inviteBanner}
         </div>
       )}
       <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} workspaceName={workspace?.name ?? null} />
