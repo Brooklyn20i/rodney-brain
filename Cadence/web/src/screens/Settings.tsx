@@ -71,29 +71,30 @@ function CreateWorkspaceSection() {
       <div className="settings-group">
         <div className="settings-row">
           <div>
-            <div className="settings-row-label">Create a workspace</div>
-            <div className="settings-row-sub">Invite your team once it's set up</div>
+            <div className="settings-row-label">Set up your workspace</div>
+            <div className="settings-row-sub">Give it a name — you can invite your team once it's created</div>
           </div>
         </div>
-        <div className="settings-row" style={{ borderTop: '1px solid var(--border)', gap: 8 }}>
+        <div className="form-group" style={{ padding: '0 16px 12px' }}>
           <input
-            className="input"
-            style={{ flex: 1 }}
-            placeholder="Workspace name"
+            type="text"
+            placeholder="e.g. Acme Leadership"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
             disabled={loading}
+            autoFocus
           />
-          <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={loading || !name.trim()}>
-            {loading ? 'Creating…' : 'Create'}
+          {error && <p style={{ color: 'var(--red)', fontSize: 12, marginTop: 6, marginBottom: 0 }}>{error}</p>}
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+            onClick={handleCreate}
+            disabled={loading || !name.trim()}
+          >
+            {loading ? 'Creating…' : 'Create workspace'}
           </button>
         </div>
-        {error && (
-          <div className="settings-row" style={{ borderTop: '1px solid var(--border)', color: 'var(--red)' }}>
-            {error}
-          </div>
-        )}
       </div>
     </>
   );
