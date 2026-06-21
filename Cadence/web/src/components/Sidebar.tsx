@@ -19,6 +19,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
 const FOOTER: NavItem[] = [
   { id: 'review', label: 'Review', icon: '✓' },
   { id: 'search', label: 'Search', icon: '⌕' },
+  { id: 'chat', label: 'Chat', icon: '✦' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
