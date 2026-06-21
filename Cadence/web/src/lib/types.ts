@@ -134,6 +134,18 @@ export interface WorkspaceMember {
   role: 'admin' | 'editor' | 'viewer';
   invited_by: string | null;
   joined_at: string;
+  email: string;
+}
+
+export interface WorkspaceInvite {
+  id: string;
+  workspace_id: string;
+  invited_by: string;
+  role: 'admin' | 'editor' | 'viewer';
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  created_at: string;
 }
 
 export interface CadenceData {

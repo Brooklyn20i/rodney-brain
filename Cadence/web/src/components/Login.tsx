@@ -4,7 +4,7 @@ import { useCadence } from '../lib/store';
 type Step = 'login' | 'reset_sent';
 const LAST_EMAIL_KEY = 'cadence:last-email';
 
-export function Login() {
+export function Login({ inviteHint }: { inviteHint?: boolean }) {
   const { configured, signIn, resetPassword } = useCadence();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +64,10 @@ export function Login() {
     <div className="login-wrap">
       <div className="login-card">
         <h1>Cadence</h1>
-        <p>Sign in to your executive cockpit.</p>
+        {inviteHint
+          ? <p>Sign in (or create an account) to accept your team invite.</p>
+          : <p>Sign in to your executive cockpit.</p>
+        }
         <form onSubmit={submit}>
           <div className="form-group">
             <label className="field">Email</label>

@@ -131,8 +131,98 @@ function exportBackup(data: ReturnType<typeof useCadence>['data']) {
   }
 }
 
+function WorkspaceSection({ myUserId }: { myUserId: string }) {
+  const { workspace, workspaceMembers, createInvite, removeWorkspaceMember } = useCadence();
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor');
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  if (!workspace) return null;
+
+  const myRole = workspaceMembers.find((m) => m.user_id === myUserId)?.role;
+  const isAdmin = myRole === 'admin';
+
+  const handleGenerateInvite = async () => {
+    if (inviteUrl) {
+      await navigator.clipboard.writeText(inviteUrl).catch(() => {});
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 3000);
+      return;
+    }
+    const url = await createInvite(inviteRole);
+    setInviteUrl(url);
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 3000);
+  };
+
+  const handleRoleChange = (r: 'editor' | 'viewer') => {
+    setInviteRole(r);
+    setInviteUrl(''); // new role = new invite token needed
+    setInviteCopied(false);
+  };
+
+  return (
+    <>
+      <div className="settings-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Workspace</span>
+        {isAdmin && (
+          <button className="btn btn-secondary btn-sm" onClick={() => { setInviteOpen((v) => !v); setInviteUrl(''); setInviteCopied(false); }}>
+            {inviteOpen ? 'Cancel' : '+ Invite member'}
+          </button>
+        )}
+      </div>
+      {inviteOpen && (
+        <div className="settings-group" style={{ marginBottom: 8 }}>
+          <div className="settings-row">
+            <div>
+              <div className="settings-row-label">Invite as</div>
+              <div className="settings-row-sub">Editor can read &amp; write · Viewer is read-only</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className={`btn btn-sm ${inviteRole === 'editor' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleRoleChange('editor')}>Editor</button>
+              <button className={`btn btn-sm ${inviteRole === 'viewer' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleRoleChange('viewer')}>Viewer</button>
+            </div>
+          </div>
+          <div className="settings-row" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="settings-row-sub" style={{ fontSize: 12, color: 'var(--text3)' }}>
+              Link expires in 7 days. Share via Slack, email, or text.
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={handleGenerateInvite}>
+              {inviteCopied ? '✓ Copied!' : inviteUrl ? '⎘ Copy again' : '⎘ Copy invite link'}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="settings-row-label" style={{ fontWeight: 600 }}>{workspace.name}</div>
+          <span className="tag tag-action">{workspace.plan}</span>
+        </div>
+        {workspaceMembers.map((m) => (
+          <div key={m.user_id} className="settings-row" style={{ borderTop: '1px solid var(--border)' }}>
+            <div>
+              <div className="settings-row-label" style={{ fontSize: 13 }}>{m.email || m.user_id.slice(0, 8) + '…'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span className={`tag ${m.role === 'admin' ? 'tag-decision' : 'tag-action'}`}>{m.role}</span>
+              {isAdmin && m.user_id !== myUserId && (
+                <button className="btn btn-danger btn-sm" title="Remove from workspace"
+                  onClick={() => { if (confirm(`Remove ${m.email || 'this member'}?`)) removeWorkspaceMember(m.user_id); }}>
+                  –
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; email?: string; onSignOut: () => void }) {
-  const { data } = useCadence();
+  const { data, session } = useCadence();
   const [exported, setExported] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -160,6 +250,7 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
     <>
       <ScreenHeader title="Settings" onMenu={onMenu} />
       <div className="screen-content">
+        {session?.user?.id && <WorkspaceSection myUserId={session.user.id} />}
         <div className="settings-section-title">Account</div>
         <div className="settings-group">
           <div className="settings-row">
