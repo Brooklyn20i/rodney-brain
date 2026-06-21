@@ -55,27 +55,6 @@ create trigger trg_workspaces_updated
 
 alter table public.workspaces enable row level security;
 
-drop policy if exists workspaces_select on public.workspaces;
-create policy workspaces_select on public.workspaces
-  for select using (
-    exists (
-      select 1 from public.workspace_members wm
-      where wm.workspace_id = id and wm.user_id = auth.uid()
-    )
-  );
-
-drop policy if exists workspaces_insert on public.workspaces;
-create policy workspaces_insert on public.workspaces
-  for insert with check (created_by = auth.uid());
-
-drop policy if exists workspaces_update on public.workspaces;
-create policy workspaces_update on public.workspaces
-  for update using (created_by = auth.uid()) with check (created_by = auth.uid());
-
-drop policy if exists workspaces_delete on public.workspaces;
-create policy workspaces_delete on public.workspaces
-  for delete using (false);
-
 create table if not exists public.workspace_members (
   workspace_id uuid        not null references public.workspaces(id) on delete cascade,
   user_id      uuid        not null references auth.users(id) on delete cascade,
@@ -128,6 +107,28 @@ create policy workspace_members_delete on public.workspace_members
     )
     or user_id = auth.uid()
   );
+
+-- workspaces policies (after workspace_members exists, since select policy references it)
+drop policy if exists workspaces_select on public.workspaces;
+create policy workspaces_select on public.workspaces
+  for select using (
+    exists (
+      select 1 from public.workspace_members wm
+      where wm.workspace_id = id and wm.user_id = auth.uid()
+    )
+  );
+
+drop policy if exists workspaces_insert on public.workspaces;
+create policy workspaces_insert on public.workspaces
+  for insert with check (created_by = auth.uid());
+
+drop policy if exists workspaces_update on public.workspaces;
+create policy workspaces_update on public.workspaces
+  for update using (created_by = auth.uid()) with check (created_by = auth.uid());
+
+drop policy if exists workspaces_delete on public.workspaces;
+create policy workspaces_delete on public.workspaces
+  for delete using (false);
 
 alter table public.workspaces        replica identity full;
 alter table public.workspace_members replica identity full;
