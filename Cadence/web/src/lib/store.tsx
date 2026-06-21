@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isConfigured } from './supabase';
 import { CadenceData, TABLES, emptyData, Workspace, WorkspaceMember } from './types';
+import { enqueue, dequeueAll, dropEntry, queueCount, isNetworkError } from './offlineQueue';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
@@ -28,6 +29,9 @@ interface Ctx {
   createInvite: (role: 'admin' | 'editor' | 'viewer') => Promise<string>;
   removeWorkspaceMember: (userId: string) => Promise<void>;
   acceptInvite: (token: string) => Promise<{ ok?: boolean; error?: string }>;
+  pendingCount: number;
+  isOffline: boolean;
+  isSyncing: boolean;
 }
 
 // If a write fails because a column doesn't exist in the database yet (the
@@ -63,6 +67,11 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+  const [pendingCount, setPendingCount] = useState(() => queueCount());
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const drainInFlight = useRef(false);
+  const drainQueueRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     if (!isConfigured) { setReady(true); return; }
@@ -96,6 +105,70 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  // Online/offline tracking + queue drain on reconnect.
+  useEffect(() => {
+    const onOnline = () => {
+      setIsOffline(false);
+      if (queueCount() > 0) drainQueueRef.current();
+    };
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  const drainQueue: () => Promise<void> = useCallback(async () => {
+    if (drainInFlight.current) return;
+    const entries = dequeueAll();
+    if (entries.length === 0) return;
+    drainInFlight.current = true;
+    setIsSyncing(true);
+    let _failed = 0;
+    for (const entry of entries) {
+      try {
+        const { op } = entry;
+        if (op.op === 'update') {
+          const { error } = await supabase
+            .from(op.table)
+            .update(op.patch)
+            .eq('id', op.id);
+          if (!error) dropEntry(entry.qid);
+          else if (!isNetworkError(error)) {
+            // Permanent error — drop it (don't retry forever).
+            dropEntry(entry.qid);
+          } else {
+            _failed++;
+          }
+        } else if (op.op === 'remove') {
+          const { error } = await supabase
+            .from(op.table)
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', op.id);
+          if (!error) dropEntry(entry.qid);
+          else if (!isNetworkError(error)) {
+            dropEntry(entry.qid);
+          } else {
+            _failed++;
+          }
+        }
+      } catch {
+        _failed++;
+      }
+    }
+    const remaining = queueCount();
+    setPendingCount(remaining);
+    setIsSyncing(false);
+    drainInFlight.current = false;
+    // Reload all tables to pick up any server-side changes.
+    if (remaining === 0) await reload(undefined, workspace?.id ?? null);
+  }, [reload, workspace]);
+
+  // Keep the ref up to date so the online handler always calls the latest drain.
+  useEffect(() => { drainQueueRef.current = drainQueue; }, [drainQueue]);
 
   // Resolve workspace membership after login.
   useEffect(() => {
@@ -181,15 +254,38 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => {
+    // Optimistic: apply patch to state immediately for instant UI feedback.
+    const prev = (data as any)[table].find((r: any) => r.id === id) as Row<K> | undefined;
+    setData((prev) => ({
+      ...prev,
+      [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
+    }));
+
+    if (!navigator.onLine) {
+      enqueue({ op: 'update', table: table as string, id, patch: patch as Record<string, unknown> });
+      setPendingCount((c) => c + 1);
+      return { ...prev, ...patch } as Row<K>;
+    }
+
     let payload: any = patch;
     for (let i = 0; i < 8; i++) {
       const { data: d, error } = await supabase.from(table as string).update(payload).eq('id', id).select().single();
       if (!error) {
-        setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+        setData((p) => ({ ...p, [table]: (p as any)[table].map((r: any) => (r.id === id ? d : r)) }));
         return d as Row<K>;
       }
+      if (isNetworkError(error)) {
+        enqueue({ op: 'update', table: table as string, id, patch: payload });
+        setPendingCount((c) => c + 1);
+        return { ...prev, ...payload } as Row<K>;
+      }
       const stripped = dropMissingColumn(payload, error);
-      if (!stripped) { setSyncError(error?.message || 'Save failed'); throw error; }
+      if (!stripped) {
+        // Rollback optimistic state on non-network errors.
+        if (prev) setData((p) => ({ ...p, [table]: (p as any)[table].map((r: any) => (r.id === id ? prev : r)) }));
+        setSyncError(error?.message || 'Save failed');
+        throw error;
+      }
       payload = stripped;
     }
     setSyncError('Save failed — too many column errors');
@@ -197,9 +293,27 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const remove = async (table: Table, id: string) => {
-    const { error } = await supabase.from(table as string).update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    if (error) { setSyncError(error?.message || 'Delete failed'); throw error; }
+    // Optimistic: remove from state immediately.
+    const removed = (data as any)[table].find((r: any) => r.id === id);
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
+
+    if (!navigator.onLine) {
+      enqueue({ op: 'remove', table: table as string, id });
+      setPendingCount((c) => c + 1);
+      return;
+    }
+
+    const { error } = await supabase.from(table as string).update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (!error) return;
+    if (isNetworkError(error)) {
+      enqueue({ op: 'remove', table: table as string, id });
+      setPendingCount((c) => c + 1);
+      return;
+    }
+    // Rollback on permanent error.
+    if (removed) setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], removed] }));
+    setSyncError(error?.message || 'Delete failed');
+    throw error;
   };
 
   const logActivity = async (action: string, detail = '', actor = 'you') => {
@@ -246,7 +360,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createInvite, removeWorkspaceMember, acceptInvite }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
       {children}
     </CadenceCtx.Provider>
   );

@@ -19,7 +19,7 @@ import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 
 export function App() {
-  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviteBanner, setInviteBanner] = useState<string | null>(null);
@@ -94,6 +94,17 @@ export function App() {
 
   return (
     <div id="app">
+      {isOffline && (
+        <div className="offline-banner">
+          Offline{pendingCount > 0 ? ` — ${pendingCount} change${pendingCount === 1 ? '' : 's'} pending sync` : ''}
+        </div>
+      )}
+      {!isOffline && isSyncing && (
+        <div className="syncing-banner">Syncing…</div>
+      )}
+      {!isOffline && !isSyncing && pendingCount > 0 && (
+        <div className="syncing-banner">{pendingCount} change{pendingCount === 1 ? '' : 's'} synced</div>
+      )}
       {syncError && (
         <div className="sync-error-banner">
           ⚠ {syncError}
