@@ -1,4 +1,4 @@
-import{r as u,j as e}from"./vendor-CfFkUIbN.js";import{u as y,S as _,q as N}from"./screen-today-TZM0sR9-.js";const k=`-- Cadence — update database (safe to re-run)
+import{r as u,j as e}from"./vendor-CfFkUIbN.js";import{u as y,S as _,q as N}from"./screen-today-B5-4qPLn.js";const k=`-- Cadence — update database (safe to re-run)
 -- Uses named dollar-quote tags ($fn$/$rls$/$rt$) so it survives iPad/Safari copy-paste.
 
 -- updated_at helper (used by triggers below)
