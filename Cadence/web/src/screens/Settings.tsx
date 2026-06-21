@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { localDateStr } from '../lib/util';
+import { supabase } from '../lib/supabase';
 
 
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -44,6 +45,103 @@ function exportBackup(data: ReturnType<typeof useCadence>['data']) {
     a.click();
     URL.revokeObjectURL(url);
   }
+}
+
+type WaitlistEntry = { id: string; email: string; name: string | null; created_at: string; status: 'pending' | 'approved' | 'rejected' };
+
+function WaitlistSection() {
+  const [entries, setEntries] = useState<WaitlistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('waitlist')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setEntries((data as WaitlistEntry[]) || []); setLoading(false); });
+  }, []);
+
+  const updateStatus = async (id: string, status: 'approved' | 'rejected') => {
+    await supabase.from('waitlist').update({ status }).eq('id', id);
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
+  };
+
+  const approveEntry = async (entry: WaitlistEntry) => {
+    await updateStatus(entry.id, 'approved');
+    await navigator.clipboard.writeText(entry.email).catch(() => {});
+    setCopied(entry.id);
+    setTimeout(() => setCopied(null), 4000);
+  };
+
+  const pending = entries.filter((e) => e.status === 'pending');
+  const rest = entries.filter((e) => e.status !== 'pending');
+  const sorted = [...pending, ...rest];
+
+  const statusTag = (s: string) => {
+    if (s === 'approved') return <span className="tag tag-action">Approved</span>;
+    if (s === 'rejected') return <span className="tag" style={{ background: 'var(--red-bg, #fee)', color: 'var(--red)' }}>Rejected</span>;
+    return <span className="tag tag-decision">Pending</span>;
+  };
+
+  return (
+    <>
+      <div className="settings-section-title">
+        Waitlist {pending.length > 0 && (
+          <span className="tag tag-decision" style={{ marginLeft: 8, fontSize: 11 }}>{pending.length} new</span>
+        )}
+      </div>
+      <div className="settings-group">
+        {loading && (
+          <div className="settings-row"><div className="settings-row-sub">Loading…</div></div>
+        )}
+        {!loading && sorted.length === 0 && (
+          <div className="settings-row"><div className="settings-row-sub">No one on the waitlist yet.</div></div>
+        )}
+        {!loading && sorted.map((entry, i) => (
+          <div key={entry.id} style={{ borderTop: i === 0 ? undefined : '1px solid var(--border)' }}>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label" style={{ fontSize: 13 }}>
+                  {entry.name || <span style={{ color: 'var(--text3)' }}>No name</span>}
+                </div>
+                <div className="settings-row-sub">{entry.email}</div>
+                <div className="settings-row-sub" style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  {new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                {statusTag(entry.status)}
+                {entry.status === 'pending' && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => approveEntry(entry)}>
+                      {copied === entry.id ? '✓ Email copied' : 'Approve'}
+                    </button>
+                    <button className="btn btn-danger btn-sm" onClick={() => updateStatus(entry.id, 'rejected')}>
+                      Reject
+                    </button>
+                  </div>
+                )}
+                {entry.status === 'approved' && (
+                  <button className="btn btn-ghost btn-sm"
+                    onClick={async () => { await navigator.clipboard.writeText(entry.email).catch(() => {}); setCopied(entry.id); setTimeout(() => setCopied(null), 2000); }}>
+                    {copied === entry.id ? '✓ Copied' : '⎘ Copy email'}
+                  </button>
+                )}
+              </div>
+            </div>
+            {copied === entry.id && entry.status === 'approved' && (
+              <div className="settings-row" style={{ paddingTop: 0, borderTop: 'none' }}>
+                <div className="settings-row-sub" style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Create their Supabase account, then send them a workspace invite from the section above.
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 function CreateWorkspaceSection() {
@@ -191,8 +289,11 @@ function WorkspaceSection({ myUserId }: { myUserId: string }) {
 }
 
 export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; email?: string; onSignOut: () => void }) {
-  const { data, session, workspace } = useCadence();
+  const { data, session, workspace, workspaceMembers } = useCadence();
   const [exported, setExported] = useState(false);
+
+  const myRole = workspaceMembers.find((m) => m.user_id === session?.user?.id)?.role;
+  const isAdmin = myRole === 'admin';
 
   const total = data.work_items.length;
   const completed = data.work_items.filter((w) => w.done).length;
@@ -211,6 +312,7 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
       <ScreenHeader title="Settings" onMenu={onMenu} />
       <div className="screen-content">
         {session?.user?.id && (workspace ? <WorkspaceSection myUserId={session.user.id} /> : <CreateWorkspaceSection />)}
+        {isAdmin && <WaitlistSection />}
         <div className="settings-section-title">Account</div>
         <div className="settings-group">
           <div className="settings-row">
