@@ -46,6 +46,59 @@ function exportBackup(data: ReturnType<typeof useCadence>['data']) {
   }
 }
 
+function CreateWorkspaceSection() {
+  const { createWorkspace } = useCadence();
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      await createWorkspace(name.trim());
+    } catch (e: any) {
+      setError(e?.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="settings-section-title">Workspace</div>
+      <div className="settings-group">
+        <div className="settings-row">
+          <div>
+            <div className="settings-row-label">Create a workspace</div>
+            <div className="settings-row-sub">Invite your team once it's set up</div>
+          </div>
+        </div>
+        <div className="settings-row" style={{ borderTop: '1px solid var(--border)', gap: 8 }}>
+          <input
+            className="input"
+            style={{ flex: 1 }}
+            placeholder="Workspace name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            disabled={loading}
+          />
+          <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={loading || !name.trim()}>
+            {loading ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+        {error && (
+          <div className="settings-row" style={{ borderTop: '1px solid var(--border)', color: 'var(--red)' }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function WorkspaceSection({ myUserId }: { myUserId: string }) {
   const { workspace, workspaceMembers, createInvite, removeWorkspaceMember } = useCadence();
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor');
@@ -137,7 +190,7 @@ function WorkspaceSection({ myUserId }: { myUserId: string }) {
 }
 
 export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; email?: string; onSignOut: () => void }) {
-  const { data, session } = useCadence();
+  const { data, session, workspace } = useCadence();
   const [exported, setExported] = useState(false);
 
   const total = data.work_items.length;
@@ -156,7 +209,7 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
     <>
       <ScreenHeader title="Settings" onMenu={onMenu} />
       <div className="screen-content">
-        {session?.user?.id && <WorkspaceSection myUserId={session.user.id} />}
+        {session?.user?.id && (workspace ? <WorkspaceSection myUserId={session.user.id} /> : <CreateWorkspaceSection />)}
         <div className="settings-section-title">Account</div>
         <div className="settings-group">
           <div className="settings-row">
