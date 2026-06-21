@@ -24,7 +24,7 @@ Never manually build or copy to `docs/` — Vercel handles everything.
 
 | Environment | URL |
 |-------------|-----|
-| Production | https://web-zeta-three-84.vercel.app |
+| Production | https://cadence-agent.com |
 | Vercel dashboard | https://vercel.com/cadenceagent/web |
 
 ## Architecture in one line
