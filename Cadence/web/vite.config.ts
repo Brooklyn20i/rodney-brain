@@ -38,7 +38,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: './',
+  base: '/',
   build: {
     // Route-based code splitting: each screen ships in its own chunk,
     // cutting the initial JS payload from ~970KB to ~200KB.

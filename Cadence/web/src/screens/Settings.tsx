@@ -1,93 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { localDateStr } from '../lib/util';
+import { supabase } from '../lib/supabase';
 
-// Brings any older Cadence database fully up to date (folds in migrations
-// 0004/0006/0007). Idempotent — safe to run as many times as you like.
-const MIGRATION_SQL = `-- Cadence — update database (safe to re-run)
--- Uses named dollar-quote tags ($fn$/$rls$/$rt$) so it survives iPad/Safari copy-paste.
-
--- updated_at helper (used by triggers below)
-create or replace function set_updated_at() returns trigger as $fn$
-begin new.updated_at = now(); return new; end;
-$fn$ language plpgsql;
-
--- People: avatar colour + grouping
-alter table people add column if not exists color      text    not null default '#1B5E9E';
-alter table people add column if not exists group_name text    not null default 'Direct Reports';
-alter table people add column if not exists sort_order integer not null default 0;
-
--- Projects: strategy linkage (priority + KPIs)
-alter table projects add column if not exists pillar_id text  not null default '';
-alter table projects add column if not exists kpi_ids   jsonb not null default '[]'::jsonb;
-
--- Phases / workstreams
-create table if not exists project_phases (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  project_id uuid not null references projects(id) on delete cascade,
-  name text not null default '', start_date date, end_date date, sort int not null default 0,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-alter table milestones add column if not exists phase_id uuid references project_phases(id) on delete set null;
-alter table work_items add column if not exists phase_id uuid references project_phases(id) on delete set null;
-
--- RAID (Risks, Assumptions, Issues, Dependencies)
-create table if not exists raid_items (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  project_id uuid not null references projects(id) on delete cascade,
-  kind text not null default 'risk', text text not null default '', owner text not null default '',
-  severity text not null default 'medium', status text not null default 'open',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-
--- Stakeholders / RACI
-create table if not exists stakeholders (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  project_id uuid not null references projects(id) on delete cascade,
-  person_id uuid references people(id) on delete set null,
-  name text not null default '', raci text not null default 'I',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-
--- Triggers + row-level security for the new tables
-do $rls$
-declare t text;
-begin
-  foreach t in array array['project_phases','raid_items','stakeholders'] loop
-    execute format('drop trigger if exists trg_%1$s_updated on %1$s;', t);
-    execute format('create trigger trg_%1$s_updated before update on %1$s for each row execute function set_updated_at();', t);
-    execute format('alter table %I enable row level security;', t);
-    execute format('drop policy if exists %1$s_all on %1$s;', t);
-    execute format('create policy %1$s_all on %1$s using (owner_id = auth.uid()) with check (owner_id = auth.uid());', t);
-  end loop;
-end $rls$;
-
--- Realtime cross-device sync for every table (base + new)
-do $rt$
-declare t text;
-begin
-  foreach t in array array[
-    'projects','milestones','project_updates','people','talking_points',
-    'work_items','comments','decisions','notes','outbox','links','activity',
-    'project_phases','raid_items','stakeholders'
-  ] loop
-    execute format('alter table %I replica identity full;', t);
-    if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename=t) then
-      execute format('alter publication supabase_realtime add table %I;', t);
-    end if;
-  end loop;
-end $rt$;
-`;
 
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
@@ -129,6 +45,157 @@ function exportBackup(data: ReturnType<typeof useCadence>['data']) {
     a.click();
     URL.revokeObjectURL(url);
   }
+}
+
+type WaitlistEntry = { id: string; email: string; name: string | null; created_at: string; status: 'pending' | 'approved' | 'rejected' };
+
+function WaitlistSection() {
+  const [entries, setEntries] = useState<WaitlistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('waitlist')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setEntries((data as WaitlistEntry[]) || []); setLoading(false); });
+  }, []);
+
+  const updateStatus = async (id: string, status: 'approved' | 'rejected') => {
+    await supabase.from('waitlist').update({ status }).eq('id', id);
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
+  };
+
+  const approveEntry = async (entry: WaitlistEntry) => {
+    await updateStatus(entry.id, 'approved');
+    await navigator.clipboard.writeText(entry.email).catch(() => {});
+    setCopied(entry.id);
+    setTimeout(() => setCopied(null), 4000);
+  };
+
+  const pending = entries.filter((e) => e.status === 'pending');
+  const rest = entries.filter((e) => e.status !== 'pending');
+  const sorted = [...pending, ...rest];
+
+  const statusTag = (s: string) => {
+    if (s === 'approved') return <span className="tag tag-action">Approved</span>;
+    if (s === 'rejected') return <span className="tag" style={{ background: 'var(--red-bg, #fee)', color: 'var(--red)' }}>Rejected</span>;
+    return <span className="tag tag-decision">Pending</span>;
+  };
+
+  return (
+    <>
+      <div className="settings-section-title">
+        Waitlist {pending.length > 0 && (
+          <span className="tag tag-decision" style={{ marginLeft: 8, fontSize: 11 }}>{pending.length} new</span>
+        )}
+      </div>
+      <div className="settings-group">
+        {loading && (
+          <div className="settings-row"><div className="settings-row-sub">Loading…</div></div>
+        )}
+        {!loading && sorted.length === 0 && (
+          <div className="settings-row"><div className="settings-row-sub">No one on the waitlist yet.</div></div>
+        )}
+        {!loading && sorted.map((entry, i) => (
+          <div key={entry.id} style={{ borderTop: i === 0 ? undefined : '1px solid var(--border)' }}>
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label" style={{ fontSize: 13 }}>
+                  {entry.name || <span style={{ color: 'var(--text3)' }}>No name</span>}
+                </div>
+                <div className="settings-row-sub">{entry.email}</div>
+                <div className="settings-row-sub" style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  {new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                {statusTag(entry.status)}
+                {entry.status === 'pending' && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => approveEntry(entry)}>
+                      {copied === entry.id ? '✓ Email copied' : 'Approve'}
+                    </button>
+                    <button className="btn btn-danger btn-sm" onClick={() => updateStatus(entry.id, 'rejected')}>
+                      Reject
+                    </button>
+                  </div>
+                )}
+                {entry.status === 'approved' && (
+                  <button className="btn btn-ghost btn-sm"
+                    onClick={async () => { await navigator.clipboard.writeText(entry.email).catch(() => {}); setCopied(entry.id); setTimeout(() => setCopied(null), 2000); }}>
+                    {copied === entry.id ? '✓ Copied' : '⎘ Copy email'}
+                  </button>
+                )}
+              </div>
+            </div>
+            {copied === entry.id && entry.status === 'approved' && (
+              <div className="settings-row" style={{ paddingTop: 0, borderTop: 'none' }}>
+                <div className="settings-row-sub" style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Create their Supabase account, then send them a workspace invite from the section above.
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function CreateWorkspaceSection() {
+  const { createWorkspace } = useCadence();
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      await createWorkspace(name.trim());
+    } catch (e: any) {
+      setError(e?.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="settings-section-title">Workspace</div>
+      <div className="settings-group">
+        <div className="settings-row">
+          <div>
+            <div className="settings-row-label">Set up your workspace</div>
+            <div className="settings-row-sub">Give it a name — you can invite your team once it's created</div>
+          </div>
+        </div>
+        <div className="form-group" style={{ padding: '0 16px 12px' }}>
+          <input
+            type="text"
+            placeholder="e.g. Acme Leadership"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            disabled={loading}
+            autoFocus
+          />
+          {error && <p style={{ color: 'var(--red)', fontSize: 12, marginTop: 6, marginBottom: 0 }}>{error}</p>}
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+            onClick={handleCreate}
+            disabled={loading || !name.trim()}
+          >
+            {loading ? 'Creating…' : 'Create workspace'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function WorkspaceSection({ myUserId }: { myUserId: string }) {
@@ -222,17 +289,11 @@ function WorkspaceSection({ myUserId }: { myUserId: string }) {
 }
 
 export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; email?: string; onSignOut: () => void }) {
-  const { data, session } = useCadence();
+  const { data, session, workspace, workspaceMembers } = useCadence();
   const [exported, setExported] = useState(false);
-  const [copied, setCopied] = useState(false);
 
-  const copyMigration = async () => {
-    try {
-      await navigator.clipboard.writeText(MIGRATION_SQL);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch { /* clipboard not available */ }
-  };
+  const myRole = workspaceMembers.find((m) => m.user_id === session?.user?.id)?.role;
+  const isAdmin = myRole === 'admin';
 
   const total = data.work_items.length;
   const completed = data.work_items.filter((w) => w.done).length;
@@ -250,7 +311,8 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
     <>
       <ScreenHeader title="Settings" onMenu={onMenu} />
       <div className="screen-content">
-        {session?.user?.id && <WorkspaceSection myUserId={session.user.id} />}
+        {session?.user?.id && (workspace ? <WorkspaceSection myUserId={session.user.id} /> : <CreateWorkspaceSection />)}
+        {isAdmin && <WaitlistSection />}
         <div className="settings-section-title">Account</div>
         <div className="settings-group">
           <div className="settings-row">
@@ -293,27 +355,6 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
           <div className="settings-row"><div className="settings-row-label">Screenshots stay on-device</div><span className="tag tag-action">✓ Local only</span></div>
           <div className="settings-row"><div className="settings-row-label">No analytics or third-party tracking</div><span className="tag tag-action">✓ Private</span></div>
           <div className="settings-row"><div className="settings-row-label">Row-level security</div><span className="tag tag-action">✓ Your data only</span></div>
-        </div>
-
-        <div className="settings-section-title">Database Setup</div>
-        <div className="settings-group">
-          <div className="settings-row">
-            <div>
-              <div className="settings-row-label">Update database</div>
-              <div className="settings-row-sub">Unlocks project Priority grouping, Phases, RAID &amp; Stakeholders. Run once.</div>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={copyMigration}>
-              {copied ? '✓ Copied — now paste in Supabase' : '⎘ Copy SQL'}
-            </button>
-          </div>
-          <div className="settings-row" style={{ borderTop: '1px solid var(--border)' }}>
-            <div className="settings-row-sub" style={{ color: 'var(--text3)', fontSize: 12, lineHeight: 1.6 }}>
-              1. Tap <strong>Copy SQL</strong> above.<br />
-              2. Open your Supabase project → <strong>SQL Editor</strong> → <strong>New query</strong>.<br />
-              3. Paste and tap <strong>Run</strong>. It's safe to run more than once.<br />
-              4. Come back here and pull to refresh. Done.
-            </div>
-          </div>
         </div>
 
         <div className="settings-section-title">Stats</div>

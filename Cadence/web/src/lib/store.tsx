@@ -26,6 +26,7 @@ interface Ctx {
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
   syncError: string | null;
   clearSyncError: () => void;
+  createWorkspace: (name: string) => Promise<void>;
   createInvite: (role: 'admin' | 'editor' | 'viewer') => Promise<string>;
   removeWorkspaceMember: (userId: string) => Promise<void>;
   acceptInvite: (token: string) => Promise<{ ok?: boolean; error?: string }>;
@@ -320,6 +321,22 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     try { await insert('activity', { actor, action, detail } as any); } catch { /* non-critical */ }
   };
 
+  const createWorkspace = async (name: string): Promise<void> => {
+    const { data: ws, error: wsErr } = await supabase
+      .from('workspaces')
+      .insert({ name: name.trim(), created_by: session!.user.id })
+      .select()
+      .single();
+    if (wsErr || !ws) { setSyncError(wsErr?.message || 'Could not create workspace'); throw wsErr; }
+
+    const { error: memErr } = await supabase
+      .from('workspace_members')
+      .insert({ workspace_id: ws.id, user_id: session!.user.id, role: 'admin', email: session!.user.email ?? '' });
+    if (memErr) { setSyncError(memErr.message || 'Could not join workspace'); throw memErr; }
+
+    setWorkspace(ws as Workspace);
+  };
+
   const createInvite = async (role: 'admin' | 'editor' | 'viewer'): Promise<string> => {
     if (!workspace?.id) throw new Error('No workspace');
     const { data: row, error } = await supabase
@@ -360,7 +377,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createWorkspace, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
       {children}
     </CadenceCtx.Provider>
   );
