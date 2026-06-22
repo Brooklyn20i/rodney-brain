@@ -159,12 +159,13 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
   isGroupMeeting?: boolean;
   people?: Person[];
   projects?: Project[];
-  onSend?: (targetId: string, targetType: 'person' | 'project', targetName: string) => void;
+  onSend?: (targets: PushTarget[]) => void;
 }) {
   const set = (patch: Partial<ActionItem>) => onChange({ ...item, ...patch });
   const isLate = !!item.due && !item.done && item.due < todayStr();
   const [showSend, setShowSend] = useState(false);
   const [showOwnerPicker, setShowOwnerPicker] = useState(false);
+  const [selectedTargets, setSelectedTargets] = useState<PushTarget[]>([]);
 
   const ownerPerson = (isGroupMeeting && item.owner_person_id && people)
     ? people.find((p) => p.id === item.owner_person_id) ?? null
@@ -173,6 +174,22 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
   const selectOwner = (p: Person) => {
     set({ owner_label: p.name, owner_person_id: p.id });
     setShowOwnerPicker(false);
+  };
+
+  const toggleTarget = (t: PushTarget) =>
+    setSelectedTargets(prev =>
+      prev.some(x => x.id === t.id) ? prev.filter(x => x.id !== t.id) : [...prev, t]
+    );
+  const openSendPicker = (preselect?: PushTarget) => {
+    setSelectedTargets(preselect ? [preselect] : []);
+    setShowSend(true);
+  };
+  const confirmSend = () => {
+    if (selectedTargets.length > 0 && onSend) {
+      onSend(selectedTargets);
+      setShowSend(false);
+      setSelectedTargets([]);
+    }
   };
 
   return (
@@ -226,45 +243,56 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
             <span className="pushed-label">→ {item.pushed_to}</span>
           ) : item.pushed ? (
             <span className="pushed-label">→ In Tasks</span>
-          ) : ownerPerson && onSend ? (
-            // Direct send to the assigned person
-            <button className="action-send-btn" title={`Send to ${ownerPerson.name}'s task list`}
-              onClick={() => onSend(ownerPerson.id, 'person', ownerPerson.name)}>
-              → {ownerPerson.name.split(' ')[0]}
-            </button>
           ) : onSend ? (
-            // Generic picker (for 1:1 meetings or unassigned group actions)
             <div style={{ position: 'relative' }}>
-              <button className="action-send-btn" onClick={() => setShowSend((s) => !s)}>→ Send</button>
+              <button className="action-send-btn"
+                onClick={() => openSendPicker(ownerPerson ? { id: ownerPerson.id, type: 'person', name: ownerPerson.name } : undefined)}>
+                {ownerPerson ? `→ ${ownerPerson.name.split(' ')[0]}` : '→ Send'}
+              </button>
               {showSend && (
                 <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSend(false)} />
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => { setShowSend(false); setSelectedTargets([]); }} />
                   <div className="action-send-picker">
                     {people && people.length > 0 && (
                       <>
                         <div className="send-picker-section">People</div>
-                        {people.filter((p) => !p.type || p.type === 'person').map((p) => (
-                          <button key={p.id} className="send-picker-option"
-                            onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
-                            <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                              {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
-                            </span>
-                            {p.name}
-                          </button>
-                        ))}
+                        {people.filter((p) => !p.type || p.type === 'person').map((p) => {
+                          const sel = selectedTargets.some(t => t.id === p.id);
+                          return (
+                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
+                              onClick={() => toggleTarget({ id: p.id, type: 'person', name: p.name })}>
+                              <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                                {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                              </span>
+                              {p.name}
+                              {sel && <span className="send-picker-check">✓</span>}
+                            </button>
+                          );
+                        })}
                       </>
                     )}
                     {projects && projects.length > 0 && (
                       <>
                         <div className="send-picker-section">Projects</div>
-                        {projects.map((p) => (
-                          <button key={p.id} className="send-picker-option"
-                            onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
-                            <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
-                            {p.name}
-                          </button>
-                        ))}
+                        {projects.map((p) => {
+                          const sel = selectedTargets.some(t => t.id === p.id);
+                          return (
+                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
+                              onClick={() => toggleTarget({ id: p.id, type: 'project', name: p.name })}>
+                              <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
+                              {p.name}
+                              {sel && <span className="send-picker-check">✓</span>}
+                            </button>
+                          );
+                        })}
                       </>
+                    )}
+                    {selectedTargets.length > 0 && (
+                      <div className="send-picker-footer">
+                        <button className="send-picker-confirm" onClick={confirmSend}>
+                          Send to {selectedTargets.map(t => t.name.split(' ')[0]).join(' + ')}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </>
@@ -505,9 +533,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
   };
 
-  const onSendAction = async (action: ActionItem, targetId: string, targetType: 'person' | 'project', targetName: string) => {
-    await insert('work_items', buildTaskFromAction(action, title, { id: targetId, type: targetType, name: targetName }) as Partial<WorkItem>);
-    const updated = actions.map((a) => a.id === action.id ? { ...a, pushed: true, pushed_to: targetName } : a);
+  const onSendAction = async (action: ActionItem, targets: PushTarget[]) => {
+    for (const t of targets) {
+      await insert('work_items', buildTaskFromAction(action, title, t) as Partial<WorkItem>);
+    }
+    const names = targets.map(t => t.name).join(', ');
+    const updated = actions.map((a) => a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a);
     setAc(updated);
   };
 
@@ -690,7 +721,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                   isGroupMeeting={isGroupMeeting}
                   people={pickerPeople}
                   projects={pickerProjects}
-                  onSend={(tId, tType, tName) => onSendAction(item, tId, tType, tName)}
+                  onSend={(targets) => onSendAction(item, targets)}
                   onChange={(updated) => setAc(actions.map((a, j) => j === i ? updated : a))}
                   onDelete={() => setAc(actions.filter((_, j) => j !== i))} />
               ))}
