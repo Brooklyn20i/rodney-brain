@@ -76,12 +76,23 @@ export interface TalkingPoint {
   text: string; done: boolean; author: string;
   created_at: string; updated_at: string; deleted_at: string | null;
 }
+// A link from a task to any related entity — person, project, or meeting note.
+// Stored as JSONB on work_items (migration 0019). Backward compat: person_id
+// and project_id remain the denormalized primary fields; related_entities holds
+// the full multi-link list.
+export interface RelatedEntity {
+  type: 'person' | 'project' | 'note';
+  id: string;
+  name: string;
+}
+
 export interface WorkItem {
   id: string; owner_id: string; workspace_id?: string;
   title: string; type: ItemType; priority: Priority; due_date: string | null;
   project_id: string | null; person_id: string | null; notes: string;
   done: boolean; inboxed: boolean; source: string; completed_at: string | null;
   phase_id?: string | null; // migration 0006
+  related_entities?: RelatedEntity[]; // migration 0019
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface Comment {

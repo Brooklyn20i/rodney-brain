@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useCadence } from '../lib/store';
-import type { ItemType, Priority, WorkItem } from '../lib/types';
+import type { ItemType, Priority, WorkItem, RelatedEntity } from '../lib/types';
 import { localDateStr, fmtDM } from '../lib/util';
 import { ItemModal } from './ItemModal';
 
@@ -113,7 +113,7 @@ const nextType = (t: ItemType): ItemType => TYPE_ORDER[(TYPE_ORDER.indexOf(t) + 
 // `undefined` on an override means "follow the parser"; an explicit value
 // (including null) means the user took manual control of that field.
 interface Overrides {
-  person?: string[];        // array = explicit selection (empty = cleared); undefined = follow parser
+  personIds?: string[];   // explicit multi-selection; undefined = follow parser
   project?: string | null;
   due?: string | null;
   priority?: Priority;
@@ -133,8 +133,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const parsed = parseInput(text, people, data.projects);
 
   // Effective values = manual override if set, otherwise the parser's guess.
-  const personIds: string[] = ov.person !== undefined
-    ? ov.person
+  const personIds: string[] = ov.personIds !== undefined
+    ? ov.personIds
     : (parsed.person_id ? [parsed.person_id] : []);
   const eff = {
     type: ov.type ?? parsed.type,
@@ -150,33 +150,56 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
     if (!title) return;
     setBusy(true);
     try {
-      // Create one task per selected person; fall back to a single unassigned task.
-      const targets = personIds.length > 0 ? personIds : [null];
-      for (const pid of targets) {
-        const taskFiled = !!(pid || eff.projectId || eff.due);
-        await insert('work_items', {
-          title, type: eff.type, priority: eff.priority,
-          due_date: eff.due || null,
-          person_id: pid,
-          project_id: eff.projectId || null,
-          notes: '',
-          inboxed: !taskFiled,
-          source: 'you',
-        } as Partial<WorkItem>);
-      }
+      // Build related_entities from all selected people + project
+      const relatedEntities: RelatedEntity[] = [
+        ...personIds.flatMap((id) => {
+          const p = people.find((p) => p.id === id);
+          return p ? [{ type: 'person' as const, id, name: p.name } as RelatedEntity] : [];
+        }),
+        ...(eff.projectId ? [{
+          type: 'project' as const,
+          id: eff.projectId,
+          name: data.projects.find((p) => p.id === eff.projectId)?.name || '',
+        } as RelatedEntity] : []),
+      ];
+
+      const person_id = personIds[0] || null;
+      const taskFiled = !!(person_id || eff.projectId || eff.due);
+      await insert('work_items', {
+        title, type: eff.type, priority: eff.priority,
+        due_date: eff.due || null,
+        person_id,
+        project_id: eff.projectId || null,
+        related_entities: relatedEntities.length > 0 ? relatedEntities : [],
+        notes: '',
+        inboxed: !taskFiled,
+        source: 'you',
+      } as Partial<WorkItem>);
       logActivity('add_item', title);
       onClose();
     } finally { setBusy(false); }
   };
 
-  // "More options" — hand effective values straight into ItemModal
+  // "More options" — pass effective values + multi-person links into ItemModal
   if (openFull) {
+    const relatedEntities: RelatedEntity[] = [
+      ...personIds.flatMap((id) => {
+        const p = people.find((p) => p.id === id);
+        return p ? [{ type: 'person' as const, id, name: p.name } as RelatedEntity] : [];
+      }),
+      ...(eff.projectId ? [{
+        type: 'project' as const,
+        id: eff.projectId,
+        name: data.projects.find((p) => p.id === eff.projectId)?.name || '',
+      } as RelatedEntity] : []),
+    ];
     return (
       <ItemModal
         defaults={{
           title: parsed.title || undefined,
           type: eff.type, priority: eff.priority, due_date: eff.due,
           person_id: personIds[0] || null, project_id: eff.projectId,
+          related_entities: relatedEntities,
         } as Partial<WorkItem>}
         onClose={onClose}
       />
@@ -224,11 +247,12 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
               onChange={(e) => setOv((o) => ({ ...o, due: e.target.value || null }))} />
           </label>
 
+          {/* Multi-person picker */}
           <div style={{ position: 'relative' }}>
             <button className={`qa-chip ${personIds.length > 0 ? 'set' : ''}`}
               onClick={() => setPicker((p) => (p === 'person' ? null : 'person'))}>
               👤 {personIds.length === 0
-                ? 'Person'
+                ? 'People'
                 : personIds.length === 1
                   ? (people.find((p) => p.id === personIds[0])?.name.split(' ')[0] || 'Person')
                   : `${personIds.length} people`}
@@ -238,7 +262,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
                 <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
                 <div className="action-send-picker action-send-picker--left">
                   {personIds.length > 0 && (
-                    <button className="send-picker-option" onClick={() => setOv((o) => ({ ...o, person: [] }))}>
+                    <button className="send-picker-option" onClick={() => setOv((o) => ({ ...o, personIds: [] }))}>
                       ✕ Clear all
                     </button>
                   )}
@@ -247,8 +271,10 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
                     return (
                       <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
                         onClick={() => {
-                          const next = sel ? personIds.filter((id) => id !== p.id) : [...personIds, p.id];
-                          setOv((o) => ({ ...o, person: next }));
+                          const next = sel
+                            ? personIds.filter((id) => id !== p.id)
+                            : [...personIds, p.id];
+                          setOv((o) => ({ ...o, personIds: next }));
                         }}>
                         <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
                           {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
@@ -291,13 +317,13 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             More options
           </button>
           <button className="btn btn-primary" onClick={add} disabled={!text.trim() || busy}>
-            {busy ? 'Adding…' : !filed ? 'Add to Inbox →' : personIds.length > 1 ? `Add ${personIds.length} Tasks →` : 'Add Task →'}
+            {busy ? 'Adding…' : !filed ? 'Add to Inbox →' : 'Add Task →'}
           </button>
         </div>
 
         <p className="quick-add-hint">
           {filed
-            ? 'Has a person, project or date — files straight into Tasks.'
+            ? `Has ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} — files straight into Tasks.`
             : 'Tip: set a person, project or date to file it; otherwise it waits in your Inbox.'}
         </p>
       </div>

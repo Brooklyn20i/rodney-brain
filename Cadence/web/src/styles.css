@@ -108,6 +108,7 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 .tag-waitingFor, .tag-waiting { background: var(--teal-bg); color: var(--teal); }
 .tag-action { background: var(--green-bg); color: var(--green); }
 .tag-info { background: var(--blue-bg); color: var(--blue); }
+.tag-note-link { background: var(--surface2); color: var(--text2); }
 .pri-high { background: var(--red-bg); color: var(--red); }
 .pri-medium { background: var(--orange-bg); color: var(--orange); }
 .pri-low { background: var(--surface2); color: var(--text2); }
@@ -935,9 +936,24 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .send-picker-option:hover { background: var(--surface2); }
 .send-picker-option.selected { background: var(--blue-bg); }
 .send-picker-check { margin-left: auto; color: var(--accent); font-size: 13px; flex-shrink: 0; }
-.send-picker-footer { padding: 8px 10px 10px; border-top: 1px solid var(--border); margin-top: 4px; }
-.send-picker-confirm { width: 100%; padding: 8px 12px; background: var(--accent); color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-.send-picker-confirm:hover { opacity: 0.9; }
+
+/* link-chip: removable entity chips inside ItemModal links section */
+.link-chips-area { display: flex; flex-direction: column; gap: 8px; }
+.link-chips-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.link-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 500; border: 1px solid transparent; }
+.link-chip-person { background: var(--green-bg); color: var(--green); border-color: var(--green-bg); }
+.link-chip-project { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-bg); }
+.link-chip-note { background: var(--surface2); color: var(--text2); border-color: var(--border); }
+.link-chip-remove { background: none; border: none; cursor: pointer; font-size: 10px; opacity: 0.6; padding: 0 0 0 2px; line-height: 1; color: inherit; font-family: inherit; }
+.link-chip-remove:hover { opacity: 1; }
+.link-add-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.link-add-btn { padding: 4px 10px; border-radius: 12px; border: 1px dashed var(--border); background: var(--surface2); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.12s; }
+.link-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.link-picker { position: absolute; left: 0; top: calc(100% + 4px); z-index: 50; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); min-width: 200px; max-width: 270px; max-height: 260px; overflow-y: auto; }
+.link-picker-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; background: none; border: none; text-align: left; font-size: 13px; cursor: pointer; font-family: inherit; color: var(--text); }
+.link-picker-option:hover { background: var(--surface2); }
+.link-picker-option.selected { background: var(--blue-bg); }
+.link-picker-check { margin-left: auto; color: var(--accent); font-size: 13px; flex-shrink: 0; }
 
 /* owner-name-input: free-text owner field in group meetings */
 .owner-name-input { border: none; border-bottom: 1px solid var(--border); background: transparent; font-size: 12px; font-family: inherit; color: var(--text); padding: 1px 4px; width: 90px; outline: none; }

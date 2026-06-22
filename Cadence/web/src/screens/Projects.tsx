@@ -316,7 +316,10 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
   const { data, insert, update, remove } = useCadence();
   const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
   const phases = useMemo(() => data.project_phases.filter((p) => p.project_id === project.id).sort((a, b) => a.sort - b.sort), [data.project_phases, project.id]);
-  const items = useMemo(() => data.work_items.filter((w) => w.project_id === project.id && !w.done), [data.work_items, project.id]);
+  const items = useMemo(() => data.work_items.filter((w) =>
+    (w.project_id === project.id || (w.related_entities || []).some((re) => re.type === 'project' && re.id === project.id)) &&
+    !w.done
+  ), [data.work_items, project.id]);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
   const [mTitle, setMTitle] = useState('');
