@@ -7,6 +7,7 @@ import type { ActionItem } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { buildTaskFromAction } from '../lib/tasks';
+import type { PushTarget } from '../lib/tasks';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
@@ -80,14 +81,31 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
   noteTitle: string;
   people: Person[];
   projects: import('../lib/types').Project[];
-  onSend: (targetId: string, targetType: 'person' | 'project', targetName: string) => void;
+  onSend: (targets: PushTarget[]) => void;
   onMarkDone: () => void;
 }) {
   const [showSend, setShowSend] = useState(false);
+  const [selectedTargets, setSelectedTargets] = useState<PushTarget[]>([]);
   const [done, setDone] = useState(false);
   const isLate = !!action.due && !done && action.due < todayStr();
   const ownerPerson = action.owner_person_id ? people.find((p) => p.id === action.owner_person_id) ?? null : null;
   const ownerLabel = action.owner === 'me' ? 'Me' : (ownerPerson?.name || action.owner_label || 'Them');
+
+  const toggleTarget = (t: PushTarget) =>
+    setSelectedTargets(prev =>
+      prev.some(x => x.id === t.id) ? prev.filter(x => x.id !== t.id) : [...prev, t]
+    );
+  const openSendPicker = (preselect?: PushTarget) => {
+    setSelectedTargets(preselect ? [preselect] : []);
+    setShowSend(true);
+  };
+  const confirmSend = () => {
+    if (selectedTargets.length > 0) {
+      onSend(selectedTargets);
+      setShowSend(false);
+      setSelectedTargets([]);
+    }
+  };
 
   const handleDone = () => {
     setDone(true);
@@ -110,42 +128,56 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
           )}
           {action.pushed_to ? (
             <span className="pushed-label">→ {action.pushed_to}</span>
-          ) : ownerPerson ? (
-            // Direct send to the assigned person — no picker needed
-            <button className="action-send-btn" title={`Send to ${ownerPerson.name}'s task list`}
-              onClick={() => onSend(ownerPerson.id, 'person', ownerPerson.name)}>
-              → {ownerPerson.name.split(' ')[0]}
-            </button>
           ) : (
             <div style={{ position: 'relative' }}>
-              <button className="action-send-btn" onClick={() => setShowSend((s) => !s)}>→ Send</button>
+              <button className="action-send-btn"
+                onClick={() => openSendPicker(ownerPerson ? { id: ownerPerson.id, type: 'person', name: ownerPerson.name } : undefined)}>
+                {ownerPerson ? `→ ${ownerPerson.name.split(' ')[0]}` : '→ Send'}
+              </button>
               {showSend && (
                 <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSend(false)} />
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => { setShowSend(false); setSelectedTargets([]); }} />
                   <div className="action-send-picker">
                     {people.length > 0 && (
                       <>
                         <div className="send-picker-section">People</div>
-                        {people.map((p) => (
-                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'person', p.name); setShowSend(false); }}>
-                            <span className="avatar" style={{ background: colorOf(p), width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                              {initials(p.name)}
-                            </span>
-                            {p.name}
-                          </button>
-                        ))}
+                        {people.map((p) => {
+                          const sel = selectedTargets.some(t => t.id === p.id);
+                          return (
+                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
+                              onClick={() => toggleTarget({ id: p.id, type: 'person', name: p.name })}>
+                              <span className="avatar" style={{ background: colorOf(p), width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                                {initials(p.name)}
+                              </span>
+                              {p.name}
+                              {sel && <span className="send-picker-check">✓</span>}
+                            </button>
+                          );
+                        })}
                       </>
                     )}
                     {projects.length > 0 && (
                       <>
                         <div className="send-picker-section">Projects</div>
-                        {projects.map((p) => (
-                          <button key={p.id} className="send-picker-option" onClick={() => { onSend(p.id, 'project', p.name); setShowSend(false); }}>
-                            <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
-                            {p.name}
-                          </button>
-                        ))}
+                        {projects.map((p) => {
+                          const sel = selectedTargets.some(t => t.id === p.id);
+                          return (
+                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
+                              onClick={() => toggleTarget({ id: p.id, type: 'project', name: p.name })}>
+                              <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
+                              {p.name}
+                              {sel && <span className="send-picker-check">✓</span>}
+                            </button>
+                          );
+                        })}
                       </>
+                    )}
+                    {selectedTargets.length > 0 && (
+                      <div className="send-picker-footer">
+                        <button className="send-picker-confirm" onClick={confirmSend}>
+                          Send to {selectedTargets.map(t => t.name.split(' ')[0]).join(' + ')}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </>
@@ -198,15 +230,16 @@ function GroupOpenActions({ group }: { group: Person }) {
     } as Partial<Note>);
   };
 
-  const handleSend = async (action: OpenAction, targetId: string, targetType: 'person' | 'project', targetName: string) => {
-    await insert('work_items', buildTaskFromAction(action, action.noteTitle, { id: targetId, type: targetType, name: targetName }) as Partial<WorkItem>);
-
-    // Update the note body to mark action as pushed
+  const handleSend = async (action: OpenAction, targets: PushTarget[]) => {
+    for (const t of targets) {
+      await insert('work_items', buildTaskFromAction(action, action.noteTitle, t) as Partial<WorkItem>);
+    }
+    const names = targets.map(t => t.name).join(', ');
     const note = data.notes.find((n) => n.id === action.noteId);
     if (note) {
       const { data: parsed } = parseMeeting(note.body);
       const updatedActions = parsed.actions.map((a) =>
-        a.id === action.id ? { ...a, pushed: true, pushed_to: targetName } : a
+        a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a
       );
       await update('notes', action.noteId, {
         body: JSON.stringify({ ...parsed, actions: updatedActions }),
@@ -233,7 +266,7 @@ function GroupOpenActions({ group }: { group: Person }) {
           noteTitle={action.noteTitle}
           people={people}
           projects={projects}
-          onSend={(tId, tType, tName) => handleSend(action, tId, tType, tName)}
+          onSend={(targets) => handleSend(action, targets)}
           onMarkDone={() => handleMarkDone(action)}
         />
       ))}
