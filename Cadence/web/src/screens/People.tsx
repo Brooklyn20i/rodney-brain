@@ -303,7 +303,10 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [draft, setDraft] = useState('');
 
-  const mine = data.work_items.filter((w) => w.person_id === person.id);
+  const mine = data.work_items.filter((w) =>
+    w.person_id === person.id ||
+    (w.related_entities || []).some((re) => re.type === 'person' && re.id === person.id)
+  );
   const open = mine.filter((w) => !w.done).sort((a, b) => priorityScore(b) - priorityScore(a));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));

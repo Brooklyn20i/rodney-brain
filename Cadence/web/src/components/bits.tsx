@@ -28,6 +28,10 @@ export function TaskRow({ w, onEdit, showPerson = true }: {
   const toggle = () => update('work_items', w.id, {
     done: !w.done, completed_at: !w.done ? new Date().toISOString() : null,
   } as Partial<WorkItem>);
+
+  // Show related_entities chips when present; fall back to primary person/project tags
+  const entities = w.related_entities && w.related_entities.length > 0 ? w.related_entities : null;
+
   return (
     <div className="card card-compact">
       <div className="card-row">
@@ -37,8 +41,21 @@ export function TaskRow({ w, onEdit, showPerson = true }: {
           <div className={`card-title ${w.done ? 'checkbox-done' : ''}`}>{w.title}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <TypeTag type={w.type} /><PriTag priority={w.priority} />
-            {proj && <span className="tag tag-info">{proj.name}</span>}
-            {showPerson && person && <span className="tag tag-action">{person.name}</span>}
+            {entities ? (
+              <>
+                {entities.slice(0, 3).map((re) => (
+                  <span key={re.id} className={`tag tag-${re.type === 'person' ? 'action' : re.type === 'project' ? 'info' : 'note-link'}`}>
+                    {re.type === 'note' && '📝 '}{re.name}
+                  </span>
+                ))}
+                {entities.length > 3 && <span className="tag">+{entities.length - 3}</span>}
+              </>
+            ) : (
+              <>
+                {proj && <span className="tag tag-info">{proj.name}</span>}
+                {showPerson && person && <span className="tag tag-action">{person.name}</span>}
+              </>
+            )}
             <Due date={w.due_date} />
           </div>
         </div>

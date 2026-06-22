@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { ItemType, Priority, WorkItem } from '../lib/types';
+import type { ItemType, Priority, WorkItem, RelatedEntity } from '../lib/types';
 import { Modal } from './bits';
 
 const TYPES: { v: ItemType; label: string }[] = [
@@ -19,21 +19,50 @@ export function ItemModal({ existing, defaults, onClose }: {
   const [type, setType] = useState<ItemType>((base.type as ItemType) || 'task');
   const [priority, setPriority] = useState<Priority>((base.priority as Priority) || 'medium');
   const [due, setDue] = useState(base.due_date || '');
-  const [projectId, setProjectId] = useState(base.project_id || '');
-  const [personId, setPersonId] = useState(base.person_id || '');
   const [notes, setNotes] = useState(base.notes || '');
+  const [picker, setPicker] = useState<null | 'person' | 'project' | 'note'>(null);
   const [busy, setBusy] = useState(false);
+
+  // Build initial links from related_entities (preferred) or from person_id/project_id
+  const [links, setLinks] = useState<RelatedEntity[]>(() => {
+    const re = base.related_entities;
+    if (re && re.length > 0) return re;
+    const seed: RelatedEntity[] = [];
+    if (base.person_id) {
+      const p = data.people.find((p) => p.id === base.person_id);
+      if (p) seed.push({ type: 'person', id: p.id, name: p.name });
+    }
+    if (base.project_id) {
+      const p = data.projects.find((p) => p.id === base.project_id);
+      if (p) seed.push({ type: 'project', id: p.id, name: p.name });
+    }
+    return seed;
+  });
+
+  const people = data.people.filter((p) => !p.type || p.type === 'person');
+  const meetingNotes = data.notes
+    .filter((n) => n.folder?.startsWith('__mtg__'))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 40);
+
+  const addLink = (entity: RelatedEntity) => {
+    setLinks((prev) => prev.some((l) => l.id === entity.id) ? prev : [...prev, entity]);
+    setPicker(null);
+  };
+  const removeLink = (id: string) => setLinks((prev) => prev.filter((l) => l.id !== id));
 
   const save = async () => {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      // "Filed" = has a person, project or due date — enough context to leave
-      // the triage Inbox. Editing an item to add any of these files it.
-      const filed = !!(personId || projectId || due);
+      const person_id = links.find((l) => l.type === 'person')?.id || null;
+      const project_id = links.find((l) => l.type === 'project')?.id || null;
+      const filed = !!(person_id || project_id || due);
       const patch = {
         title: title.trim(), type, priority, due_date: due || null,
-        project_id: projectId || null, person_id: personId || null, notes,
+        project_id, person_id,
+        related_entities: links,
+        notes,
       } as Partial<WorkItem>;
       if (existing) {
         await update('work_items', existing.id, { ...patch, ...(filed ? { inboxed: false } : {}) } as Partial<WorkItem>);
@@ -44,6 +73,16 @@ export function ItemModal({ existing, defaults, onClose }: {
       }
       onClose();
     } finally { setBusy(false); }
+  };
+
+  const renderChip = (re: RelatedEntity) => {
+    const icon = re.type === 'person' ? '👤' : re.type === 'project' ? '▤' : '📝';
+    return (
+      <span key={re.id} className={`link-chip link-chip-${re.type}`}>
+        {icon} {re.name}
+        <button className="link-chip-remove" onClick={() => removeLink(re.id)} title="Remove">✕</button>
+      </span>
+    );
   };
 
   return (
@@ -69,23 +108,95 @@ export function ItemModal({ existing, defaults, onClose }: {
           </select>
         </div>
       </div>
-      <div className="form-row">
-        <div className="form-group"><label>Due Date</label>
-          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-        </div>
-        <div className="form-group"><label>Project</label>
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">No project</option>
-            {data.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+      <div className="form-group">
+        <label>Due Date</label>
+        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+      </div>
+
+      {/* Multi-link section */}
+      <div className="form-group">
+        <label>Links — people, projects &amp; meetings</label>
+        <div className="link-chips-area">
+          {links.length > 0 && (
+            <div className="link-chips-list">
+              {links.map(renderChip)}
+            </div>
+          )}
+          <div className="link-add-row">
+            {/* Person picker */}
+            <div style={{ position: 'relative' }}>
+              <button className="link-add-btn" onClick={() => setPicker((p) => p === 'person' ? null : 'person')}>+ Person</button>
+              {picker === 'person' && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
+                  <div className="link-picker">
+                    {people.map((p) => {
+                      const sel = links.some((l) => l.id === p.id);
+                      return (
+                        <button key={p.id} className={`link-picker-option${sel ? ' selected' : ''}`}
+                          onClick={() => sel ? (removeLink(p.id), setPicker(null)) : addLink({ type: 'person', id: p.id, name: p.name })}>
+                          <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 20, height: 20, fontSize: 9, flexShrink: 0 }}>
+                            {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                          </span>
+                          {p.name}
+                          {sel && <span className="link-picker-check">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Project picker */}
+            <div style={{ position: 'relative' }}>
+              <button className="link-add-btn" onClick={() => setPicker((p) => p === 'project' ? null : 'project')}>+ Project</button>
+              {picker === 'project' && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
+                  <div className="link-picker">
+                    {data.projects.filter((p) => !p.deleted_at).map((p) => {
+                      const sel = links.some((l) => l.id === p.id);
+                      return (
+                        <button key={p.id} className={`link-picker-option${sel ? ' selected' : ''}`}
+                          onClick={() => sel ? (removeLink(p.id), setPicker(null)) : addLink({ type: 'project', id: p.id, name: p.name })}>
+                          <span style={{ color: p.color || 'var(--accent)', fontSize: 11 }}>▤</span>
+                          {p.name}
+                          {sel && <span className="link-picker-check">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Meeting note picker */}
+            <div style={{ position: 'relative' }}>
+              <button className="link-add-btn" onClick={() => setPicker((p) => p === 'note' ? null : 'note')}>+ Meeting</button>
+              {picker === 'note' && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
+                  <div className="link-picker">
+                    {meetingNotes.length === 0 && (
+                      <div style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 13 }}>No meeting notes yet</div>
+                    )}
+                    {meetingNotes.map((n) => {
+                      const sel = links.some((l) => l.id === n.id);
+                      return (
+                        <button key={n.id} className={`link-picker-option${sel ? ' selected' : ''}`}
+                          onClick={() => sel ? (removeLink(n.id), setPicker(null)) : addLink({ type: 'note', id: n.id, name: n.title })}>
+                          📝 {n.title}
+                          {sel && <span className="link-picker-check">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-      <div className="form-group"><label>Person (waiting on / follow up with)</label>
-        <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
-          <option value="">No person</option>
-          {data.people.filter((p) => !p.type || p.type === 'person').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
+
       <div className="form-group"><label>Notes</label>
         <textarea value={notes} placeholder="Context, links, details…" onChange={(e) => setNotes(e.target.value)} />
       </div>
