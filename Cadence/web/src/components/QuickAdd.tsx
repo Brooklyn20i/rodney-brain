@@ -113,7 +113,7 @@ const nextType = (t: ItemType): ItemType => TYPE_ORDER[(TYPE_ORDER.indexOf(t) + 
 // `undefined` on an override means "follow the parser"; an explicit value
 // (including null) means the user took manual control of that field.
 interface Overrides {
-  person?: string | null;
+  person?: string[];        // array = explicit selection (empty = cleared); undefined = follow parser
   project?: string | null;
   due?: string | null;
   priority?: Priority;
@@ -133,32 +133,37 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const parsed = parseInput(text, people, data.projects);
 
   // Effective values = manual override if set, otherwise the parser's guess.
+  const personIds: string[] = ov.person !== undefined
+    ? ov.person
+    : (parsed.person_id ? [parsed.person_id] : []);
   const eff = {
     type: ov.type ?? parsed.type,
     priority: ov.priority ?? parsed.priority,
     due: ov.due !== undefined ? ov.due : parsed.due_date,
-    personId: ov.person !== undefined ? ov.person : parsed.person_id,
     projectId: ov.project !== undefined ? ov.project : parsed.project_id,
   };
-  const personName = people.find((p) => p.id === eff.personId)?.name;
   const projectName = data.projects.find((p) => p.id === eff.projectId)?.name;
-  const filed = !!(eff.personId || eff.projectId || eff.due);
+  const filed = !!(personIds.length > 0 || eff.projectId || eff.due);
 
   const add = async () => {
     const title = parsed.title;
     if (!title) return;
     setBusy(true);
     try {
-      await insert('work_items', {
-        title, type: eff.type, priority: eff.priority,
-        due_date: eff.due || null,
-        person_id: eff.personId || null,
-        project_id: eff.projectId || null,
-        notes: '',
-        // Fully-specified captures skip triage; bare notes wait in the Inbox.
-        inboxed: !filed,
-        source: 'you',
-      } as Partial<WorkItem>);
+      // Create one task per selected person; fall back to a single unassigned task.
+      const targets = personIds.length > 0 ? personIds : [null];
+      for (const pid of targets) {
+        const taskFiled = !!(pid || eff.projectId || eff.due);
+        await insert('work_items', {
+          title, type: eff.type, priority: eff.priority,
+          due_date: eff.due || null,
+          person_id: pid,
+          project_id: eff.projectId || null,
+          notes: '',
+          inboxed: !taskFiled,
+          source: 'you',
+        } as Partial<WorkItem>);
+      }
       logActivity('add_item', title);
       onClose();
     } finally { setBusy(false); }
@@ -171,7 +176,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
         defaults={{
           title: parsed.title || undefined,
           type: eff.type, priority: eff.priority, due_date: eff.due,
-          person_id: eff.personId, project_id: eff.projectId,
+          person_id: personIds[0] || null, project_id: eff.projectId,
         } as Partial<WorkItem>}
         onClose={onClose}
       />
@@ -220,24 +225,39 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
           </label>
 
           <div style={{ position: 'relative' }}>
-            <button className={`qa-chip ${eff.personId ? 'set' : ''}`}
+            <button className={`qa-chip ${personIds.length > 0 ? 'set' : ''}`}
               onClick={() => setPicker((p) => (p === 'person' ? null : 'person'))}>
-              👤 {personName ? personName.split(' ')[0] : 'Person'}
+              👤 {personIds.length === 0
+                ? 'Person'
+                : personIds.length === 1
+                  ? (people.find((p) => p.id === personIds[0])?.name.split(' ')[0] || 'Person')
+                  : `${personIds.length} people`}
             </button>
             {picker === 'person' && (
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
                 <div className="action-send-picker action-send-picker--left">
-                  {eff.personId && <button className="send-picker-option" onClick={() => { setOv((o) => ({ ...o, person: null })); setPicker(null); }}>✕ Clear</button>}
-                  {people.map((p) => (
-                    <button key={p.id} className="send-picker-option"
-                      onClick={() => { setOv((o) => ({ ...o, person: p.id })); setPicker(null); }}>
-                      <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                        {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
-                      </span>
-                      {p.name}
+                  {personIds.length > 0 && (
+                    <button className="send-picker-option" onClick={() => setOv((o) => ({ ...o, person: [] }))}>
+                      ✕ Clear all
                     </button>
-                  ))}
+                  )}
+                  {people.map((p) => {
+                    const sel = personIds.includes(p.id);
+                    return (
+                      <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
+                        onClick={() => {
+                          const next = sel ? personIds.filter((id) => id !== p.id) : [...personIds, p.id];
+                          setOv((o) => ({ ...o, person: next }));
+                        }}>
+                        <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
+                          {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                        </span>
+                        {p.name}
+                        {sel && <span className="send-picker-check">✓</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -271,7 +291,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             More options
           </button>
           <button className="btn btn-primary" onClick={add} disabled={!text.trim() || busy}>
-            {busy ? 'Adding…' : filed ? 'Add Task →' : 'Add to Inbox →'}
+            {busy ? 'Adding…' : !filed ? 'Add to Inbox →' : personIds.length > 1 ? `Add ${personIds.length} Tasks →` : 'Add Task →'}
           </button>
         </div>
 
