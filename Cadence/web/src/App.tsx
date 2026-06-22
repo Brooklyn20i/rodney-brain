@@ -28,7 +28,7 @@ export function App() {
   useEffect(() => {
     if (!syncError) return;
     if (errorTimer.current) clearTimeout(errorTimer.current);
-    errorTimer.current = setTimeout(() => clearSyncError(), 5000);
+    errorTimer.current = setTimeout(() => clearSyncError(), 30000);
     return () => { if (errorTimer.current) clearTimeout(errorTimer.current); };
   // clearSyncError is stable (useCallback); omitting avoids double-timer bug.
   // eslint-disable-next-line react-hooks/exhaustive-deps
