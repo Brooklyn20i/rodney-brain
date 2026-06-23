@@ -17,6 +17,7 @@ import { Outbox } from './screens/Outbox';
 import { Review } from './screens/Review';
 import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
+import { Kobe } from './screens/Kobe';
 
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing } = useCadence();
@@ -87,6 +88,7 @@ export function App() {
       case 'outbox': return <Outbox onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
+      case 'kobe': return <Kobe onMenu={onMenu} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
       default: return <Today onMenu={onMenu} />;
     }

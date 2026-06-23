@@ -15,6 +15,9 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     { id: 'decisions', label: 'Decisions', icon: '⚖' },
     { id: 'outbox', label: 'Outbox', icon: '✉' },
   ]},
+  { section: 'AI', items: [
+    { id: 'kobe', label: 'Kobe', icon: '⚡' },
+  ]},
 ];
 const FOOTER: NavItem[] = [
   { id: 'review', label: 'Review', icon: '✓' },
