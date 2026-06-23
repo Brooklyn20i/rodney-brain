@@ -70,7 +70,7 @@ export function ItemModal({ existing, defaults, onClose }: {
         await update('work_items', existing.id, { ...patch, ...(filed ? { inboxed: false } : {}) } as Partial<WorkItem>);
         logActivity('edit_item', title.trim());
       } else {
-        await insert('work_items', { ...patch, inboxed: filed ? false : ((base as any).inboxed ?? true), source: 'you' } as Partial<WorkItem>);
+        await insert('work_items', { ...patch, inboxed: filed ? false : ((base as any).inboxed ?? true), source: (base as any).source || 'you' } as Partial<WorkItem>);
         logActivity('add_item', title.trim());
       }
       onClose();
