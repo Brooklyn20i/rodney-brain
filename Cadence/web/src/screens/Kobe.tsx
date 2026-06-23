@@ -1,28 +1,24 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import type { WorkItem } from '../lib/types';
 import { fmtDM } from '../lib/util';
 
-type Tab = 'chat' | 'brief' | 'work';
+type Tab = 'for_kobe' | 'brief' | 'from_kobe';
 
 export function Kobe({ onMenu }: { onMenu?: () => void }) {
-  const { data, insert } = useCadence();
-  const [modal, setModal] = useState<WorkItem | null>(null);
-  const [tab, setTab] = useState<Tab>('chat');
-  const [message, setMessage] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { data } = useCadence();
+  const [modal, setModal] = useState<WorkItem | 'new' | null>(null);
+  const [tab, setTab] = useState<Tab>('for_kobe');
 
-  // Chat messages — both sides of the conversation, sorted by time
-  const chatMessages = useMemo(
+  // Tasks Rodney assigned to Kobe
+  const kobeAssigned = useMemo(
     () =>
-      (data.agent_messages || [])
-        .filter((m) => !m.deleted_at)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [data.agent_messages],
+      data.work_items
+        .filter((w) => w.source === 'for:kobe' && !w.done && !w.deleted_at)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [data.work_items],
   );
 
   // Kobe briefings
@@ -34,7 +30,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     [data.notes],
   );
 
-  // Tasks Kobe created
+  // Tasks Kobe created on Rodney's behalf
   const kobeTasks = useMemo(
     () =>
       data.work_items
@@ -43,103 +39,60 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     [data.work_items],
   );
 
-  // Auto-scroll chat to bottom when new messages arrive
-  useEffect(() => {
-    if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages.length, tab]);
-
-  const sendMessage = async () => {
-    const text = message.trim();
-    if (!text || sending) return;
-    setSending(true);
-    setMessage('');
-    try {
-      await insert('agent_messages', {
-        sender_type: 'user',
-        recipient_type: 'agent',
-        recipient_key: 'agent:kobe',
-        body: text,
-        status: 'unread',
-      } as any);
-    } finally {
-      setSending(false);
-      textareaRef.current?.focus();
-    }
-  };
-
   const latestBrief = kobeNotes[0] ?? null;
   const olderNotes = kobeNotes.slice(1);
+
+  const taskRow = (w: WorkItem) => {
+    const person = w.person_id ? data.people.find((p) => p.id === w.person_id) : null;
+    const project = w.project_id ? data.projects.find((p) => p.id === w.project_id) : null;
+    return (
+      <button key={w.id} className="kobe-task-row" onClick={() => setModal(w)}>
+        <span className="kobe-task-title">{w.title}</span>
+        <div className="kobe-task-meta">
+          {person && <span className="tag tag-person">{person.name}</span>}
+          {project && <span className="tag tag-project">{project.name}</span>}
+          {w.due_date && <span className="kobe-task-due">{fmtDM(w.due_date)}</span>}
+        </div>
+      </button>
+    );
+  };
 
   return (
     <>
       <ScreenHeader title="Kobe" onMenu={onMenu} />
       <div className="kobe-screen">
         <div className="kobe-tabs">
-          <button className={`kobe-tab${tab === 'chat' ? ' active' : ''}`} onClick={() => setTab('chat')}>
-            Chat
-            {chatMessages.length > 0 && <span className="kobe-tab-count">{chatMessages.length}</span>}
+          <button className={`kobe-tab${tab === 'for_kobe' ? ' active' : ''}`} onClick={() => setTab('for_kobe')}>
+            For Kobe
+            {kobeAssigned.length > 0 && <span className="kobe-tab-count">{kobeAssigned.length}</span>}
           </button>
           <button className={`kobe-tab${tab === 'brief' ? ' active' : ''}`} onClick={() => setTab('brief')}>
             Briefings
             {kobeNotes.length > 0 && <span className="kobe-tab-count">{kobeNotes.length}</span>}
           </button>
-          <button className={`kobe-tab${tab === 'work' ? ' active' : ''}`} onClick={() => setTab('work')}>
-            Open tasks
+          <button className={`kobe-tab${tab === 'from_kobe' ? ' active' : ''}`} onClick={() => setTab('from_kobe')}>
+            From Kobe
             {kobeTasks.length > 0 && <span className="kobe-tab-count">{kobeTasks.length}</span>}
           </button>
         </div>
 
-        {/* ── Chat ── */}
-        {tab === 'chat' && (
-          <div className="kobe-chat-wrap">
-            <div className="kobe-chat-messages">
-              {chatMessages.length === 0 ? (
-                <div className="kobe-chat-empty">
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
-                  <p>Ask Kobe anything</p>
-                  <small>He'll reply here. He can read your tasks, meetings, projects, and notes.</small>
-                </div>
-              ) : (
-                chatMessages.map((m) => {
-                  const isKobe = m.sender_type === 'agent' || m.sender_type === 'system';
-                  return (
-                    <div key={m.id} className={`kobe-bubble-row${isKobe ? ' kobe-bubble-row--kobe' : ''}`}>
-                      {isKobe && <div className="kobe-bubble-avatar">⚡</div>}
-                      <div className={`kobe-bubble${isKobe ? ' kobe-bubble--kobe' : ' kobe-bubble--user'}`}>
-                        {isKobe ? (
-                          <div
-                            className="kobe-bubble-html"
-                            dangerouslySetInnerHTML={{ __html: m.body || '' }}
-                          />
-                        ) : (
-                          <span>{m.body}</span>
-                        )}
-                        <div className="kobe-bubble-time">{fmtDM(m.created_at)}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={bottomRef} />
+        {/* ── For Kobe ── */}
+        {tab === 'for_kobe' && (
+          <div className="kobe-panel">
+            <div className="kobe-panel-actions">
+              <button className="btn btn-primary" onClick={() => setModal('new')}>+ Task for Kobe</button>
             </div>
-            <div className="kobe-chat-input-wrap">
-              <textarea
-                ref={textareaRef}
-                className="kobe-chat-input"
-                placeholder="Message Kobe…"
-                value={message}
-                rows={1}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-                }}
-              />
-              <button
-                className="btn btn-primary kobe-send-btn"
-                onClick={sendMessage}
-                disabled={!message.trim() || sending}
-              >{sending ? '…' : '↑'}</button>
-            </div>
+            {kobeAssigned.length === 0 ? (
+              <div className="empty-state">
+                <div className="icon">⚡</div>
+                <p>No tasks for Kobe</p>
+                <small>Add non-urgent tasks here. Kobe checks this regularly and actions them without interrupting you.</small>
+              </div>
+            ) : (
+              <div className="kobe-task-list">
+                {kobeAssigned.map(taskRow)}
+              </div>
+            )}
           </div>
         )}
 
@@ -180,38 +133,31 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
           </div>
         )}
 
-        {/* ── Open tasks ── */}
-        {tab === 'work' && (
+        {/* ── From Kobe ── */}
+        {tab === 'from_kobe' && (
           <div className="kobe-panel">
             {kobeTasks.length === 0 ? (
               <div className="empty-state">
                 <div className="icon">◎</div>
-                <p>No open tasks from Kobe</p>
+                <p>Nothing from Kobe yet</p>
                 <small>Tasks Kobe creates on your behalf appear here.</small>
               </div>
             ) : (
               <div className="kobe-task-list">
-                {kobeTasks.map((w) => {
-                  const person = w.person_id ? data.people.find((p) => p.id === w.person_id) : null;
-                  const project = w.project_id ? data.projects.find((p) => p.id === w.project_id) : null;
-                  return (
-                    <button key={w.id} className="kobe-task-row" onClick={() => setModal(w)}>
-                      <span className="kobe-task-title">{w.title}</span>
-                      <div className="kobe-task-meta">
-                        {person && <span className="tag tag-person">{person.name}</span>}
-                        {project && <span className="tag tag-project">{project.name}</span>}
-                        {w.due_date && <span className="kobe-task-due">{fmtDM(w.due_date)}</span>}
-                      </div>
-                    </button>
-                  );
-                })}
+                {kobeTasks.map(taskRow)}
               </div>
             )}
           </div>
         )}
       </div>
 
-      {modal && <ItemModal existing={modal} onClose={() => setModal(null)} />}
+      {modal !== null && (
+        <ItemModal
+          existing={modal !== 'new' ? modal : undefined}
+          defaults={modal === 'new' ? { source: 'for:kobe', inboxed: false } as any : undefined}
+          onClose={() => setModal(null)}
+        />
+      )}
     </>
   );
 }
