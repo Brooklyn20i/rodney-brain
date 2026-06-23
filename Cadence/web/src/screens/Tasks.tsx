@@ -6,7 +6,7 @@ import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../lib/util';
 import { parseMeeting } from '../lib/meetingData';
-import { collectOpenMeetingActions, buildTaskFromAction } from '../lib/tasks';
+import { collectOpenMeetingActions, buildTaskFromAction, isUserTask } from '../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../lib/tasks';
 
 // ── Grouping ──────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const openActions = useMemo(() => collectOpenMeetingActions(data.notes), [data.notes]);
 
   const { groups, counts } = useMemo(() => {
-    const open = data.work_items.filter((w) => !w.done);
+    const open = data.work_items.filter(isUserTask);
     const counts = {
       total: open.length,
       overdue: open.filter((w) => isOverdue(w.due_date)).length,
@@ -114,15 +114,34 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
 
   // File a meeting action into the task system (carrying its due date + owner),
   // then mark it pushed in the source note so it stops showing as "needs filing".
+  // Guard against double-filing: if the action is already pushed in the latest
+  // note body, do nothing (prevents a duplicate work_item on rapid taps / stale
+  // realtime snapshots).
+  const filing = React.useRef<Set<string>>(new Set());
   const fileAction = async (action: OpenMeetingAction, target: PushTarget | null) => {
-    await insert('work_items', buildTaskFromAction(action, action.noteTitle, target) as Partial<WorkItem>);
+    const guardKey = `${action.noteId}:${action.id}`;
+    if (filing.current.has(guardKey)) return;
     const note = data.notes.find((n) => n.id === action.noteId);
     if (note) {
       const { data: parsed } = parseMeeting(note.body);
-      const label = target ? target.name : (action.owner_person_id ? 'your tasks' : 'Inbox');
-      const updated = parsed.actions.map((a) =>
-        a.id === action.id ? { ...a, pushed: true, pushed_to: label } : a);
-      await update('notes', action.noteId, { body: JSON.stringify({ ...parsed, actions: updated }) } as Partial<Note>);
+      const current = parsed.actions.find((a) => a.id === action.id);
+      if (current?.pushed) return; // already filed in the latest snapshot
+    }
+    filing.current.add(guardKey);
+    try {
+      await insert('work_items', buildTaskFromAction(action, action.noteTitle, target) as Partial<WorkItem>);
+      // Re-read the freshest note body right before writing so we don't clobber
+      // a concurrent edit to a sibling action in the same note.
+      const fresh = data.notes.find((n) => n.id === action.noteId);
+      if (fresh) {
+        const { data: parsed } = parseMeeting(fresh.body);
+        const label = target ? target.name : (action.owner_person_id ? 'your tasks' : 'Inbox');
+        const updated = parsed.actions.map((a) =>
+          a.id === action.id ? { ...a, pushed: true, pushed_to: label } : a);
+        await update('notes', action.noteId, { body: JSON.stringify({ ...parsed, actions: updated }) } as Partial<Note>);
+      }
+    } finally {
+      filing.current.delete(guardKey);
     }
   };
 

@@ -15,10 +15,23 @@ export interface PushTarget {
   name: string;
 }
 
-// A task is considered "filed" (out of the triage Inbox) once it has any
-// context that tells you where it belongs: a person, a project, or a due date.
-export const isFiled = (w: Pick<WorkItem, 'person_id' | 'project_id' | 'due_date'>): boolean =>
-  !!(w.person_id || w.project_id || w.due_date);
+// A task is considered "filed" (out of the triage Inbox) once it has been
+// assigned a home: a person or a project. A bare due date is deliberately NOT
+// enough — adding a date in the editor shouldn't make an un-triaged capture
+// silently vanish from the Inbox before you've said where it belongs.
+export const isFiled = (w: Pick<WorkItem, 'person_id' | 'project_id'>): boolean =>
+  !!(w.person_id || w.project_id);
+
+// Tasks owned by an agent rather than the user. `for:kobe` = delegated to Kobe;
+// `agent:kobe` / `agent:ace` = created by an agent. These belong on the Kobe/Ace
+// screens, not in the user's own Today / Tasks / Inbox lists or counts.
+export const isAgentTask = (w: Pick<WorkItem, 'source'>): boolean =>
+  /^(for:|agent:)/.test(w.source || '');
+
+// The user's own open work — excludes completed and agent-owned items. This is
+// the canonical base filter for every user-facing task list and count.
+export const isUserTask = (w: Pick<WorkItem, 'done' | 'source'>): boolean =>
+  !w.done && !isAgentTask(w);
 
 // Build the work_item payload for a meeting action. An explicit target wins;
 // otherwise fall back to the action's own owner_person_id. The action's due

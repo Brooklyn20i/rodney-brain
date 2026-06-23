@@ -26,6 +26,7 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
   const { insert, logActivity } = useCadence();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const item = queue.find((q) => q.id === selected) || null;
 
   const addCapture = () => {
@@ -42,12 +43,29 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
   };
   const toggle = (i: number) => setQueue((cur) => cur.map((q) => q.id === selected ? { ...q, results: q.results.map((r, idx) => idx === i ? { ...r, checked: !r.checked } : r) } : q));
   const addChecked = async () => {
-    if (!item) return;
-    for (const r of item.results.filter((r) => r.checked)) {
-      await insert('work_items', { title: r.title, type: r.type, priority: r.priority, due_date: null, project_id: null, person_id: null, notes: '', inboxed: true, source: 'capture' } as Partial<WorkItem>);
+    if (!item || adding) return;
+    const checkedIdx = item.results.map((r, i) => (r.checked ? i : -1)).filter((i) => i >= 0);
+    if (checkedIdx.length === 0) return;
+    setAdding(true);
+    // Indices that successfully saved — used to avoid re-inserting on retry.
+    const savedOk = new Set<number>();
+    try {
+      for (const i of checkedIdx) {
+        const r = item.results[i];
+        await insert('work_items', { title: r.title, type: r.type, priority: r.priority, due_date: null, project_id: null, person_id: null, notes: '', inboxed: true, source: 'capture' } as Partial<WorkItem>);
+        savedOk.add(i);
+      }
+      logActivity('capture_extract', `${checkedIdx.length} items`);
+      setQueue((cur) => cur.filter((q) => q.id !== selected));
+      setSelected(null);
+    } catch {
+      // Keep only the results that did NOT save, so a retry inserts the rest.
+      setQueue((cur) => cur.map((q) => q.id === selected
+        ? { ...q, results: q.results.filter((_, i) => !savedOk.has(i)) }
+        : q));
+    } finally {
+      setAdding(false);
     }
-    logActivity('capture_extract', `${item.results.filter((r) => r.checked).length} items`);
-    setQueue((cur) => cur.filter((q) => q.id !== selected)); setSelected(null);
   };
 
   return (
@@ -88,7 +106,7 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
                       <div className="ri-tags"><TypeTag type={r.type} /><PriTag priority={r.priority} /></div></div>
                   </div>
                 ))}
-                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addChecked}>Add Checked to Inbox</button>
+                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addChecked} disabled={adding}>{adding ? 'Adding…' : 'Add Checked to Inbox'}</button>
               </>}
             </div>
           </div>

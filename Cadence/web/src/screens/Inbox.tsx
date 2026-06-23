@@ -5,7 +5,7 @@ import { TaskRow, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore } from '../lib/util';
-import { isFiled } from '../lib/tasks';
+import { isFiled, isUserTask } from '../lib/tasks';
 
 type BucketKey = 'overdue' | 'today' | 'week' | 'later' | 'none';
 const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
@@ -37,7 +37,7 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
     // Triage queue = inboxed AND still without context (person/project/date).
     // The `!isFiled` guard keeps legacy items (older captures that were flagged
     // inboxed but already have a person or date) out of the triage pile.
-    const open = data.work_items.filter((w) => !w.done && w.inboxed && !isFiled(w));
+    const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed && !isFiled(w));
     const grouped: Record<BucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
     open.forEach((w) => grouped[bucketOf(w.due_date)].push(w));
     (['overdue', 'today', 'week', 'later'] as BucketKey[]).forEach((k) =>

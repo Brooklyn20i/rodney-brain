@@ -6,6 +6,7 @@ import { TypeTag, PriTag, Due, ScreenHeader, TaskRow } from '../components/bits'
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
+import { isUserTask } from '../lib/tasks';
 
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const fmtMtgDay = (iso: string) => {
@@ -33,20 +34,20 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
   const [adding, setAdding] = useState(false);
 
   const view = useMemo(() => {
-    const active = data.work_items.filter((w) => !w.done);
+    const active = data.work_items.filter(isUserTask);
     const scored = [...active].sort((a, b) => priorityScore(b) - priorityScore(a));
     const todayDate = todayStr();
     const nextWeekStr = addDaysStr(7);
+    // Partition so a task lands in exactly one of the lists below: waitingFor
+    // items belong to "Waiting", everything else can be Overdue/Due Today.
+    // (Top 3 is an intentional highlights overlay and may repeat.)
     return {
       focus: scored[0],
       top3: scored.slice(0, 3),
-      overdue: active.filter((w) => isOverdue(w.due_date)),
+      overdue: active.filter((w) => w.type !== 'waitingFor' && isOverdue(w.due_date)),
       waiting: active.filter((w) => w.type === 'waitingFor'),
       dueToday: active.filter((w) => isDueToday(w.due_date) && w.type !== 'waitingFor'),
-      decisions: [
-        ...data.decisions.filter((d) => d.status === 'pending'),
-        ...data.work_items.filter((w) => w.type === 'decision' && !w.done),
-      ] as { id: string; title: string }[],
+      decisions: active.filter((w) => w.type === 'decision'),
       oneOnOnes: data.people
         .filter((p) => !p.type || p.type === 'person')
         .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
@@ -54,7 +55,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         .map(({ p, mtg }) => ({
           person: p,
           meeting: mtg as string,
-          openTopics: data.work_items.filter((w) => w.person_id === p.id && !w.done).length,
+          openTopics: active.filter((w) => w.person_id === p.id).length,
           isToday: mtg === todayDate,
         }))
         .sort((a, b) => a.meeting.localeCompare(b.meeting)),
@@ -131,7 +132,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
         <Section title="Decisions Needed" count={view.decisions.length} color="var(--purple)">
           {view.decisions.length ? view.decisions.map((d) => (
-            <div className="card card-compact" key={d.id}>
+            <div className="card card-compact" key={d.id} style={{ cursor: 'pointer' }} onClick={() => setEditing(d)}>
               <div className="card-row"><span className="tag tag-decision">Decision</span>
                 <span className="card-title" style={{ flex: 1 }}>{d.title}</span></div>
             </div>

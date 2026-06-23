@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskFromAction, isFiled, collectOpenMeetingActions, MTG_FOLDER_PREFIX } from '../tasks';
+import { buildTaskFromAction, isFiled, isAgentTask, isUserTask, collectOpenMeetingActions, MTG_FOLDER_PREFIX } from '../tasks';
 import type { ActionItem } from '../meetingData';
 import type { Note } from '../types';
 
@@ -7,19 +7,50 @@ import type { Note } from '../types';
 
 describe('isFiled', () => {
   it('is filed when it has a person_id', () => {
-    expect(isFiled({ person_id: 'p1', project_id: null, due_date: null })).toBe(true);
+    expect(isFiled({ person_id: 'p1', project_id: null })).toBe(true);
   });
 
   it('is filed when it has a project_id', () => {
-    expect(isFiled({ person_id: null, project_id: 'proj1', due_date: null })).toBe(true);
+    expect(isFiled({ person_id: null, project_id: 'proj1' })).toBe(true);
   });
 
-  it('is filed when it has a due_date', () => {
-    expect(isFiled({ person_id: null, project_id: null, due_date: '2026-06-30' })).toBe(true);
+  it('is NOT filed by a bare due date — triage needs a person or project', () => {
+    expect(isFiled({ person_id: null, project_id: null })).toBe(false);
   });
 
-  it('is NOT filed when all are null/empty', () => {
-    expect(isFiled({ person_id: null, project_id: null, due_date: null })).toBe(false);
+  it('is NOT filed when person and project are null', () => {
+    expect(isFiled({ person_id: null, project_id: null })).toBe(false);
+  });
+});
+
+// ── isAgentTask / isUserTask ──────────────────────────────────────────────────
+
+describe('isAgentTask', () => {
+  it('flags tasks delegated to Kobe', () => {
+    expect(isAgentTask({ source: 'for:kobe' })).toBe(true);
+  });
+  it('flags tasks created by an agent', () => {
+    expect(isAgentTask({ source: 'agent:kobe' })).toBe(true);
+    expect(isAgentTask({ source: 'agent:ace' })).toBe(true);
+  });
+  it('does not flag ordinary user tasks', () => {
+    expect(isAgentTask({ source: 'you' })).toBe(false);
+    expect(isAgentTask({ source: 'capture' })).toBe(false);
+    expect(isAgentTask({ source: 'meeting' })).toBe(false);
+    expect(isAgentTask({ source: '' })).toBe(false);
+  });
+});
+
+describe('isUserTask', () => {
+  it('is the user\'s own open work', () => {
+    expect(isUserTask({ done: false, source: 'you' })).toBe(true);
+  });
+  it('excludes completed work', () => {
+    expect(isUserTask({ done: true, source: 'you' })).toBe(false);
+  });
+  it('excludes agent-owned work', () => {
+    expect(isUserTask({ done: false, source: 'for:kobe' })).toBe(false);
+    expect(isUserTask({ done: false, source: 'agent:ace' })).toBe(false);
   });
 });
 

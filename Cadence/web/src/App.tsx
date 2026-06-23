@@ -11,9 +11,7 @@ import { Inbox } from './screens/Inbox';
 import { Projects } from './screens/Projects';
 import { People } from './screens/People';
 import { Meetings } from './screens/Meetings';
-import { Decisions } from './screens/Decisions';
 import { Notes } from './screens/Notes';
-import { Outbox } from './screens/Outbox';
 import { Review } from './screens/Review';
 import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
@@ -64,8 +62,6 @@ export function App() {
     tasks: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: 'red' },
     inbox: { count: data.work_items.filter((w) => !w.done && w.inboxed && !isFiled(w)).length, cls: '' },
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
-    decisions: { count: data.decisions.filter((d) => d.status === 'pending').length + data.work_items.filter((w) => w.type === 'decision' && !w.done).length, cls: 'purple' },
-    outbox: { count: data.outbox.filter((m) => m.status === 'queued').length, cls: 'blue' },
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
@@ -84,9 +80,7 @@ export function App() {
       case 'projects': return <Projects onMenu={onMenu} />;
       case 'people': return <People onMenu={onMenu} />;
       case 'meetings': return <Meetings onMenu={onMenu} />;
-      case 'decisions': return <Decisions onMenu={onMenu} />;
       case 'notes': return <Notes onMenu={onMenu} />;
-      case 'outbox': return <Outbox onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
       case 'ace': return <Ace onMenu={onMenu} />;
