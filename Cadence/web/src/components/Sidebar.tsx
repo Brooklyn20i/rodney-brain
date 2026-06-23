@@ -16,6 +16,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     { id: 'outbox', label: 'Outbox', icon: '✉' },
   ]},
   { section: 'AI', items: [
+    { id: 'ace', label: 'Ace', icon: '◆' },
     { id: 'kobe', label: 'Kobe', icon: '⚡' },
   ]},
 ];
