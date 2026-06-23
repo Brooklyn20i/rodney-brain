@@ -617,5 +617,228 @@ def send_agent_message(
         return {"error": str(e)}
 
 
+# ── Agent queue (agent_control_events) ───────────────────────────────────────
+
+@mcp.tool()
+def list_agent_queue(status: str = "pending", limit: int = 50) -> list[dict]:
+    """List agent_control_events by status.
+    status: 'pending' (not yet started), 'processing' (in flight), 'processed', 'failed', 'ignored'
+    — use 'pending' on your normal triage loop to find what needs action next."""
+    try:
+        q = f"select=*&deleted_at=is.null&order=created_at.asc"
+        if status != "all":
+            q += f"&status=eq.{status}"
+        return bridge.select("agent_control_events", q, limit=limit)
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def claim_agent_event(event_id: str) -> dict:
+    """Claim an agent_control_event before working on it (sets status=processing, claimed_at=now).
+    Always claim before acting to prevent duplicate processing if the sweep fires again mid-flight."""
+    try:
+        from datetime import datetime, timezone
+        return bridge.patch_row("agent_control_events", event_id, {
+            "status": "processing",
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def complete_agent_event(event_id: str, summary: str = "") -> dict:
+    """Mark an agent_control_event as processed after Kobe has acted on it.
+    summary: brief note on what was done (stored in payload for audit trail)."""
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        patch: dict = {"status": "processed", "processed_at": now}
+        if summary:
+            existing = bridge.select("agent_control_events", f"select=payload&id=eq.{event_id}", limit=1)
+            old_payload = (existing[0].get("payload") or {}) if isinstance(existing, list) and existing else {}
+            patch["payload"] = {**old_payload, "kobe_summary": summary}
+        return bridge.patch_row("agent_control_events", event_id, patch)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def fail_agent_event(event_id: str, error: str) -> dict:
+    """Mark an agent_control_event as failed. error: brief description of what went wrong."""
+    try:
+        from datetime import datetime, timezone
+        return bridge.patch_row("agent_control_events", event_id, {
+            "status": "failed",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+            "error": error,
+        })
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def ignore_agent_event(event_id: str, reason: str = "") -> dict:
+    """Mark an agent_control_event as ignored (no action needed). Use when an item is
+    already handled, irrelevant, or superseded by a newer event for the same entity."""
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        patch: dict = {"status": "ignored", "processed_at": now}
+        if reason:
+            existing = bridge.select("agent_control_events", f"select=payload&id=eq.{event_id}", limit=1)
+            old_payload = (existing[0].get("payload") or {}) if isinstance(existing, list) and existing else {}
+            patch["payload"] = {**old_payload, "ignore_reason": reason}
+        return bridge.patch_row("agent_control_events", event_id, patch)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def create_agent_event(
+    entity_type: str,
+    entity_id: str,
+    event_type: str,
+    priority: str = "medium",
+    payload: dict | None = None,
+) -> dict:
+    """Manually create an agent_control_event — use when Kobe spots something that warrants
+    later review but isn't in the automated sweep output. Idempotent: same entity_id +
+    event_type won't create a duplicate if already pending.
+    entity_type: work_item | project | person | decision | note
+    event_type: created | updated | due | overdue | blocked | needs_review | needs_rodney | stale"""
+    try:
+        import hashlib, json as _json
+        idem_key = f"manual:{entity_type}:{entity_id}:{event_type}"
+        row = {
+            "owner_id":       bridge.discover_owner_id(),
+            "entity_type":    entity_type,
+            "entity_id":      entity_id,
+            "event_type":     event_type,
+            "priority":       priority,
+            "status":         "pending",
+            "idempotency_key": idem_key,
+            "payload":        payload or {},
+        }
+        res = bridge.insert("agent_control_events", row)
+        return res[0] if isinstance(res, list) and res else res
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Evening executive review ──────────────────────────────────────────────────
+
+@mcp.tool()
+def get_evening_review() -> dict:
+    """Produce an end-of-day executive review: what moved, what didn't, what's blocked,
+    what needs Rodney tomorrow, and hygiene issues. Counterpart to get_morning_brief()."""
+    try:
+        today = date.today()
+        today_str = today.isoformat()
+        tomorrow_str = (today + timedelta(days=1)).isoformat()
+        week_end = (today + timedelta(days=7)).isoformat()
+        since_morning = (
+            __import__("datetime").datetime.combine(today, __import__("datetime").time(6, 0))
+            .isoformat() + "Z"
+        )
+        # stale_cutoff unused here — kept for future blocking detection
+        # stale_cutoff = (today - timedelta(days=1)).isoformat()
+
+        # What moved today
+        completed_today = bridge.select(
+            "work_items",
+            f"select=id,title,type,priority,project_id,person_id&done=eq.true&deleted_at=is.null&updated_at=gte.{since_morning}&order=updated_at.desc",
+            limit=30,
+        )
+
+        # What did not move (open, medium+, not touched since this morning)
+        not_moved = bridge.select(
+            "work_items",
+            f"select=id,title,type,priority,due_date,project_id,person_id&done=eq.false&deleted_at=is.null&priority=in.(high,medium)&updated_at=lt.{since_morning}&order=priority.desc",
+            limit=20,
+        )
+
+        # Still overdue
+        overdue = bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&due_date=lt.{today_str}&order=due_date.asc",
+            limit=20,
+        )
+
+        # Due tomorrow
+        due_tomorrow = bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&due_date=eq.{tomorrow_str}&order=priority.desc",
+            limit=20,
+        )
+
+        # Due this week
+        due_week = bridge.select(
+            "work_items",
+            f"select=id,title,type,priority,due_date,project_id&done=eq.false&deleted_at=is.null&due_date=gte.{tomorrow_str}&due_date=lte.{week_end}&order=due_date.asc",
+            limit=30,
+        )
+
+        # Pending decisions (any age)
+        pending_decisions = bridge.select(
+            "decisions",
+            "select=*&status=eq.pending&deleted_at=is.null&order=due_date.asc.nullslast",
+            limit=15,
+        )
+
+        # At-risk projects
+        at_risk_projects = bridge.select(
+            "projects",
+            "select=*&status=eq.active&health=in.(amber,red)&deleted_at=is.null",
+            limit=10,
+        )
+
+        # Inbox backlog
+        inbox_backlog = bridge.select(
+            "work_items",
+            "select=id,title,type,priority,inboxed&inboxed=eq.true&done=eq.false&deleted_at=is.null&order=created_at.asc",
+            limit=20,
+        )
+
+        # Activity today
+        activity_today = bridge.select(
+            "activity",
+            f"select=actor,action,detail,created_at&created_at=gte.{since_morning}&order=created_at.desc",
+            limit=50,
+        )
+
+        # Hygiene: items with no due date, no project, no person (open tasks adrift)
+        adrift_items = bridge.select(
+            "work_items",
+            "select=id,title,type,priority,created_at&done=eq.false&deleted_at=is.null&due_date=is.null&project_id=is.null&person_id=is.null&priority=eq.high",
+            limit=10,
+        )
+
+        return {
+            "date": today_str,
+            "tomorrow": tomorrow_str,
+            "completed_today":   completed_today if isinstance(completed_today, list) else [],
+            "not_moved_today":   not_moved if isinstance(not_moved, list) else [],
+            "overdue":           overdue if isinstance(overdue, list) else [],
+            "due_tomorrow":      due_tomorrow if isinstance(due_tomorrow, list) else [],
+            "due_this_week":     due_week if isinstance(due_week, list) else [],
+            "pending_decisions": pending_decisions if isinstance(pending_decisions, list) else [],
+            "at_risk_projects":  at_risk_projects if isinstance(at_risk_projects, list) else [],
+            "inbox_backlog":     inbox_backlog if isinstance(inbox_backlog, list) else [],
+            "activity_today":    activity_today if isinstance(activity_today, list) else [],
+            "hygiene_adrift_high_priority": adrift_items if isinstance(adrift_items, list) else [],
+            "summary": {
+                "completed_count":  len(completed_today) if isinstance(completed_today, list) else 0,
+                "not_moved_count":  len(not_moved) if isinstance(not_moved, list) else 0,
+                "overdue_count":    len(overdue) if isinstance(overdue, list) else 0,
+                "due_tomorrow_count": len(due_tomorrow) if isinstance(due_tomorrow, list) else 0,
+                "pending_dec_count": len(pending_decisions) if isinstance(pending_decisions, list) else 0,
+            },
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -45,7 +45,7 @@ from typing import Any
 TABLES = [
     "projects", "milestones", "project_updates", "people", "talking_points",
     "work_items", "comments", "decisions", "notes", "outbox", "links", "activity",
-    "cadence_agent_access", "agent_messages",
+    "cadence_agent_access", "agent_messages", "agent_control_events",
 ]
 
 
