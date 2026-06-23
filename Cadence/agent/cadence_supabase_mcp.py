@@ -8,6 +8,7 @@ and the agent password from macOS Keychain.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from mcp.server.fastmcp import FastMCP
 
 import cadence_bridge as bridge
@@ -279,6 +280,276 @@ def triage_inbox_item(
         if priority is not None: patch["priority"] = priority
         return bridge.patch_row("work_items", item_id, patch)
     except bridge.CadenceBridgeError as e:
+        return {"error": str(e)}
+
+
+# ── Context-assembly tools ─────────────────────────────────────────────────────
+
+@mcp.tool()
+def get_person_brief(person_name: str) -> dict:
+    """Assemble everything Kobe needs about a person: tasks, talking points, recent meeting notes.
+    Matches by name (case-insensitive, partial match). Returns structured context bundle."""
+    try:
+        people = bridge.select(
+            "people",
+            f"select=*&name=ilike.*{person_name}*&deleted_at=is.null&order=name.asc",
+            limit=5,
+        )
+        if not isinstance(people, list) or not people:
+            return {"error": f"No person found matching '{person_name}'"}
+        person = people[0]
+        pid = person["id"]
+
+        tasks = bridge.select(
+            "work_items",
+            f"select=*&person_id=eq.{pid}&done=eq.false&deleted_at=is.null&order=updated_at.desc",
+            limit=15,
+        )
+        talking_points = bridge.select(
+            "talking_points",
+            f"select=*&person_id=eq.{pid}&done=eq.false&deleted_at=is.null",
+            limit=20,
+        )
+        # Meeting notes use folder like __mtg__<person_id> — match by id substring
+        meeting_notes = bridge.select(
+            "notes",
+            f"select=id,title,body,updated_at,folder&folder=ilike.*{pid}*&deleted_at=is.null&order=updated_at.desc",
+            limit=3,
+        )
+        return {
+            "person": person,
+            "open_tasks": tasks if isinstance(tasks, list) else [],
+            "talking_points": talking_points if isinstance(talking_points, list) else [],
+            "recent_meeting_notes": meeting_notes if isinstance(meeting_notes, list) else [],
+            "match_note": f"Matched '{person['name']}'" + (f" (also found: {[p['name'] for p in people[1:]]})" if len(people) > 1 else ""),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def get_project_status(project_name: str) -> dict:
+    """Assemble full project status: health, open items, milestones, risks, days since last update."""
+    try:
+        projects = bridge.select(
+            "projects",
+            f"select=*&name=ilike.*{project_name}*&deleted_at=is.null&order=name.asc",
+            limit=5,
+        )
+        if not isinstance(projects, list) or not projects:
+            return {"error": f"No project found matching '{project_name}'"}
+        project = projects[0]
+        pid = project["id"]
+
+        open_items = bridge.select(
+            "work_items",
+            f"select=*&project_id=eq.{pid}&done=eq.false&deleted_at=is.null&order=priority.desc",
+            limit=20,
+        )
+        milestones = bridge.select(
+            "milestones",
+            f"select=*&project_id=eq.{pid}&done=eq.false&deleted_at=is.null&order=due_date.asc",
+            limit=10,
+        )
+        updates = bridge.select(
+            "project_updates",
+            f"select=*&project_id=eq.{pid}&deleted_at=is.null&order=created_at.desc",
+            limit=1,
+        )
+        raid = bridge.select(
+            "raid_items",
+            f"select=*&project_id=eq.{pid}&status=eq.open&deleted_at=is.null",
+            limit=10,
+        )
+
+        latest_update = (updates[0] if isinstance(updates, list) and updates else None)
+        days_since_update = None
+        if latest_update and latest_update.get("created_at"):
+            try:
+                last = date.fromisoformat(latest_update["created_at"][:10])
+                days_since_update = (date.today() - last).days
+            except ValueError:
+                pass
+
+        return {
+            "project": project,
+            "health": project.get("health"),
+            "days_since_update": days_since_update,
+            "open_items": open_items if isinstance(open_items, list) else [],
+            "open_milestones": milestones if isinstance(milestones, list) else [],
+            "open_risks": raid if isinstance(raid, list) else [],
+            "latest_update": latest_update,
+            "match_note": f"Matched '{project['name']}'" + (f" (also found: {[p['name'] for p in projects[1:]]})" if len(projects) > 1 else ""),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def get_morning_brief() -> dict:
+    """Produce a proactive daily summary: overdue items, stale decisions, at-risk projects,
+    neglected people (no meeting note in 14+ days), and today's tasks."""
+    try:
+        today = date.today()
+        today_str = today.isoformat()
+        stale_cutoff = (today - timedelta(days=7)).isoformat()
+        neglect_cutoff = (today - timedelta(days=14)).isoformat()
+
+        overdue = bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&due_date=lt.{today_str}&order=due_date.asc",
+            limit=20,
+        )
+        due_today = bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&due_date=eq.{today_str}&order=priority.desc",
+            limit=20,
+        )
+        stale_decisions = bridge.select(
+            "decisions",
+            f"select=*&status=eq.pending&deleted_at=is.null&created_at=lt.{stale_cutoff}&order=created_at.asc",
+            limit=10,
+        )
+        at_risk_projects = bridge.select(
+            "projects",
+            f"select=*&status=eq.active&health=in.(amber,red)&deleted_at=is.null",
+            limit=10,
+        )
+        # Find people with no meeting note updated in 14+ days
+        all_people = bridge.select("people", "select=id,name&deleted_at=is.null&order=name.asc", limit=100)
+        recent_notes = bridge.select(
+            "notes",
+            f"select=folder,updated_at&folder=ilike.*__mtg__*&updated_at=gte.{neglect_cutoff}&deleted_at=is.null",
+            limit=200,
+        )
+        recent_person_ids = set()
+        if isinstance(recent_notes, list):
+            for n in recent_notes:
+                folder = n.get("folder", "")
+                # folder format is __mtg__<person_id> — extract the uuid portion
+                parts = folder.split("__mtg__")
+                if len(parts) > 1 and parts[1]:
+                    recent_person_ids.add(parts[1].strip())
+
+        neglected_people = []
+        if isinstance(all_people, list):
+            neglected_people = [p for p in all_people if p["id"] not in recent_person_ids]
+
+        return {
+            "date": today_str,
+            "overdue_items": overdue if isinstance(overdue, list) else [],
+            "due_today": due_today if isinstance(due_today, list) else [],
+            "stale_decisions": stale_decisions if isinstance(stale_decisions, list) else [],
+            "at_risk_projects": at_risk_projects if isinstance(at_risk_projects, list) else [],
+            "neglected_people": neglected_people[:10],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def search_all(query: str) -> list[dict]:
+    """Search across work items, notes, decisions, project updates, and people by keyword.
+    Returns up to 20 results ranked by relevance (title match scores higher than body match)."""
+    try:
+        q = query.replace("*", "").replace("'", "")  # basic sanitisation
+        results: list[dict] = []
+
+        def fetch(table: str, filter_str: str, score_key: str | None = None) -> None:
+            try:
+                rows = bridge.select(table, filter_str, limit=10)
+                if isinstance(rows, list):
+                    for r in rows:
+                        r["_table"] = table
+                        title_field = r.get("title") or r.get("name") or r.get("text") or ""
+                        r["_score"] = 2 if q.lower() in title_field.lower() else 1
+                        results.append(r)
+            except Exception:
+                pass
+
+        fetch("work_items",      f"select=id,title,type,priority,done,due_date,person_id,project_id&deleted_at=is.null&or=(title.ilike.*{q}*,notes.ilike.*{q}*)")
+        fetch("notes",           f"select=id,title,folder,updated_at&deleted_at=is.null&or=(title.ilike.*{q}*,body.ilike.*{q}*)")
+        fetch("decisions",       f"select=id,title,status,context,outcome&deleted_at=is.null&or=(title.ilike.*{q}*,context.ilike.*{q}*,outcome.ilike.*{q}*)")
+        fetch("project_updates", f"select=id,project_id,text,created_at&deleted_at=is.null&text=ilike.*{q}*")
+        fetch("people",          f"select=id,name,role,email&deleted_at=is.null&or=(name.ilike.*{q}*,notes.ilike.*{q}*)")
+
+        results.sort(key=lambda r: r.get("_score", 0), reverse=True)
+        return results[:20]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def get_week_ahead() -> dict:
+    """Return everything due in the next 7 days: tasks, decisions, and projects with upcoming target dates."""
+    try:
+        today = date.today()
+        week_end = (today + timedelta(days=7)).isoformat()
+        today_str = today.isoformat()
+
+        items = bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&due_date=gte.{today_str}&due_date=lte.{week_end}&order=due_date.asc",
+            limit=50,
+        )
+        decisions = bridge.select(
+            "decisions",
+            f"select=*&status=eq.pending&deleted_at=is.null&due_date=gte.{today_str}&due_date=lte.{week_end}&order=due_date.asc",
+            limit=20,
+        )
+        projects = bridge.select(
+            "projects",
+            f"select=*&status=eq.active&deleted_at=is.null&target_date=gte.{today_str}&target_date=lte.{week_end}&order=target_date.asc",
+            limit=10,
+        )
+
+        # Group items by due date
+        by_day: dict[str, list] = {}
+        for item in (items if isinstance(items, list) else []):
+            d = item.get("due_date", "")[:10]
+            by_day.setdefault(d, []).append(item)
+
+        return {
+            "week_start": today_str,
+            "week_end": week_end,
+            "items_by_day": by_day,
+            "upcoming_decisions": decisions if isinstance(decisions, list) else [],
+            "projects_due": projects if isinstance(projects, list) else [],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def get_stale_items(days: int = 7) -> list[dict]:
+    """List open work items that have not been updated in the given number of days.
+    Useful for surfacing things that are quietly going nowhere."""
+    try:
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        return bridge.select(
+            "work_items",
+            f"select=*&done=eq.false&deleted_at=is.null&updated_at=lt.{cutoff}&order=updated_at.asc",
+            limit=30,
+        )
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def write_kobe_note(title: str, content: str, folder: str = "__kobe__") -> dict:
+    """Write a note into Cadence on Kobe's behalf. Use folder='__kobe__' for briefings and
+    general output, '__kobe__research' for research notes, or '__mtg__<person_id>' to file
+    a meeting note under a specific person. These notes appear in the Kobe tab, not Notes."""
+    try:
+        row = {
+            "owner_id": bridge.discover_owner_id(),
+            "title": title,
+            "body": content,
+            "folder": folder,
+        }
+        res = bridge.insert("notes", row)
+        return res[0] if isinstance(res, list) and res else res
+    except Exception as e:
         return {"error": str(e)}
 
 
