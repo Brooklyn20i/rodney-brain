@@ -9,15 +9,87 @@ const folderOf = (n: Note) => (n.folder || '').trim();
 const byUpdated = (a: Note, b: Note) => b.updated_at.localeCompare(a.updated_at);
 const NEW_FOLDER = '__new__';
 
-// Strip HTML tags for list preview
 function stripHtml(html: string) {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
 }
 
+// ── Stable sub-components (defined outside Notes so React never remounts them) ─
+
+function NoteRow({ n, selected, onSelect }: { n: Note; selected: string | null; onSelect: (n: Note) => void }) {
+  return (
+    <button className={`note-list-item ${selected === n.id ? 'selected' : ''}`} onClick={() => onSelect(n)}>
+      <div className="nli-title">{n.title || 'Untitled note'}</div>
+      <div className="nli-sub">{fmtDM(n.updated_at)} · {stripHtml(n.body)}</div>
+    </button>
+  );
+}
+
+interface FolderRowProps {
+  name: string;
+  notes: Note[];
+  isCollapsed: boolean;
+  isEditing: boolean;
+  editingName: string;
+  selectedId: string | null;
+  onToggle: () => void;
+  onStartEdit: () => void;
+  onEditNameChange: (v: string) => void;
+  onCommitEdit: () => void;
+  onCancelEdit: () => void;
+  onNewNote: () => void;
+  onSelectNote: (n: Note) => void;
+}
+
+function FolderRow({
+  name, notes, isCollapsed, isEditing, editingName, selectedId,
+  onToggle, onStartEdit, onEditNameChange, onCommitEdit, onCancelEdit, onNewNote, onSelectNote,
+}: FolderRowProps) {
+  return (
+    <div>
+      <div className="folder-header" onClick={() => !isEditing && onToggle()}>
+        <span className={`folder-caret ${isCollapsed ? 'collapsed' : ''}`} style={{ visibility: isEditing ? 'hidden' : undefined }}>▾</span>
+        <span style={{ fontSize: 14 }}>📁</span>
+        {isEditing ? (
+          <input
+            className="folder-rename-input"
+            autoFocus
+            value={editingName}
+            onChange={(e) => onEditNameChange(e.target.value)}
+            onBlur={onCommitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); onCommitEdit(); }
+              if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="folder-name">{name}</span>
+        )}
+        <span className="folder-count">{notes.length}</span>
+        {isEditing
+          ? <button className="folder-add" title="Confirm rename" onMouseDown={(e) => { e.preventDefault(); onCommitEdit(); }}>✓</button>
+          : <button className="folder-add" title="Rename folder" onClick={(e) => { e.stopPropagation(); onStartEdit(); }}>✎</button>}
+        <button className="folder-add" title="New note in this folder" onClick={(e) => { e.stopPropagation(); onNewNote(); }}>＋</button>
+      </div>
+      {!isCollapsed && notes.map((n) => (
+        <div key={n.id} className="folder-notes">
+          <NoteRow n={n} selected={selectedId} onSelect={onSelectNote} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main screen ────────────────────────────────────────────────────────────────
+
 export function Notes({ onMenu }: { onMenu?: () => void }) {
   const { data: rawData, insert, update, remove } = useCadence();
-  // Hide system notes (title or folder starting with __) — includes WIN state and meeting notes
-  const data = useMemo(() => ({ ...rawData, notes: rawData.notes.filter((n) => !n.title.startsWith('__') && !(n.folder || '').startsWith('__')) }), [rawData]);
+  // Hide system notes (title or folder starting with __) — meeting notes and WIN state
+  const data = useMemo(() => ({
+    ...rawData,
+    notes: rawData.notes.filter((n) => !n.title.startsWith('__') && !(n.folder || '').startsWith('__')),
+  }), [rawData]);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [showList, setShowList] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -50,9 +122,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
       await update('notes', note.id, patch);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus((s) => s === 'saved' ? 'idle' : s), 2000);
-    } catch {
-      setSaveStatus('error');
-    }
+    } catch { setSaveStatus('error'); }
   };
 
   const scheduleBodySave = (html: string) => {
@@ -86,8 +156,11 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
     return name;
   };
 
-  const renameFolder = async (oldName: string, newName: string) => {
-    if (!newName || newName === oldName) { setEditingFolder(null); return; }
+  const commitRename = async () => {
+    const oldName = editingFolder;
+    const newName = editingFolderName.trim();
+    setEditingFolder(null);
+    if (!oldName || !newName || newName === oldName) return;
     const toUpdate = data.notes.filter((n) => folderOf(n) === oldName);
     await Promise.all(toUpdate.map((n) => update('notes', n.id, { folder: newName } as Partial<Note>)));
     setExtraFolders((f) => f.map((x) => (x === oldName ? newName : x)));
@@ -96,7 +169,6 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
       if (oldName in next) { next[newName] = next[oldName]; delete next[oldName]; }
       return next;
     });
-    setEditingFolder(null);
   };
 
   const onFolderSelect = async (v: string) => {
@@ -105,56 +177,6 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   };
 
   const selectNote = (n: Note) => { setSelected(n.id); setTitle(n.title || ''); setShowList(false); };
-
-  const NoteRow = (n: Note) => (
-    <button className={`note-list-item ${selected === n.id ? 'selected' : ''}`} key={n.id} onClick={() => selectNote(n)}>
-      <div className="nli-title">{n.title || 'Untitled note'}</div>
-      <div className="nli-sub">{fmtDM(n.updated_at)} · {stripHtml(n.body)}</div>
-    </button>
-  );
-
-  const Folder = ({ name }: { name: string }) => {
-    const items = notesIn(name);
-    const isCollapsed = collapsed[name];
-    const isEditing = editingFolder === name;
-    const startEdit = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setEditingFolderName(name);
-      setEditingFolder(name);
-    };
-    const commitEdit = () => renameFolder(name, editingFolderName.trim());
-    return (
-      <div key={name}>
-        <div className="folder-header" onClick={() => !isEditing && setCollapsed((c) => ({ ...c, [name]: !c[name] }))}>
-          <span className={`folder-caret ${isCollapsed ? 'collapsed' : ''}`} style={{ visibility: isEditing ? 'hidden' : undefined }}>▾</span>
-          <span style={{ fontSize: 14 }}>📁</span>
-          {isEditing ? (
-            <input
-              className="folder-rename-input"
-              autoFocus
-              value={editingFolderName}
-              onChange={(e) => setEditingFolderName(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
-                if (e.key === 'Escape') setEditingFolder(null);
-              }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <span className="folder-name">{name}</span>
-          )}
-          <span className="folder-count">{items.length}</span>
-          {isEditing
-            ? <button className="folder-add" title="Confirm rename" onClick={(e) => { e.stopPropagation(); commitEdit(); }}>✓</button>
-            : <button className="folder-add" title="Rename folder" onClick={startEdit}>✎</button>
-          }
-          <button className="folder-add" title="New note in this folder" onClick={(e) => { e.stopPropagation(); newNote(name); }}>＋</button>
-        </div>
-        {!isCollapsed && <div className="folder-notes">{items.map(NoteRow)}</div>}
-      </div>
-    );
-  };
 
   return (
     <>
@@ -178,7 +200,24 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                   <span className="folder-count">{data.notes.length}</span>
                 </div>
                 <div className="tree-sep" />
-                {folders.map((f) => <Folder key={f} name={f} />)}
+                {folders.map((f) => (
+                  <FolderRow
+                    key={f}
+                    name={f}
+                    notes={notesIn(f)}
+                    isCollapsed={!!collapsed[f]}
+                    isEditing={editingFolder === f}
+                    editingName={editingFolder === f ? editingFolderName : f}
+                    selectedId={selected}
+                    onToggle={() => setCollapsed((c) => ({ ...c, [f]: !c[f] }))}
+                    onStartEdit={() => { setEditingFolderName(f); setEditingFolder(f); }}
+                    onEditNameChange={setEditingFolderName}
+                    onCommitEdit={commitRename}
+                    onCancelEdit={() => setEditingFolder(null)}
+                    onNewNote={() => newNote(f)}
+                    onSelectNote={selectNote}
+                  />
+                ))}
                 {uncategorized.length > 0 && (
                   <>
                     {folders.length > 0 && <div className="tree-sep" />}
@@ -188,7 +227,11 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                       <span className="folder-name" style={{ color: 'var(--text2)' }}>Uncategorised</span>
                       <span className="folder-count">{uncategorized.length}</span>
                     </div>
-                    {!collapsed[''] && <div className="folder-notes">{uncategorized.map(NoteRow)}</div>}
+                    {!collapsed[''] && uncategorized.map((n) => (
+                      <div key={n.id} className="folder-notes">
+                        <NoteRow n={n} selected={selected} onSelect={selectNote} />
+                      </div>
+                    ))}
                   </>
                 )}
               </>}
