@@ -5,6 +5,7 @@ import { ScreenHeader } from '../components/bits';
 import { fmtDM } from '../lib/util';
 import { RichEditor } from '../components/RichEditor';
 import { ItemModal } from '../components/ItemModal';
+import { NoteSharePanel } from '../components/NoteSharePanel';
 
 const folderOf = (n: Note) => (n.folder || '').trim();
 const byUpdated = (a: Note, b: Note) => b.updated_at.localeCompare(a.updated_at);
@@ -201,6 +202,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
   const [title, setTitle] = useState('');
+  const [sharing, setSharing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -365,6 +367,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                 {folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}
                 <option value={NEW_FOLDER}>＋ New folder…</option>
               </select>
+              <button className="btn btn-share btn-sm" onClick={() => setSharing(true)} title="Export to OneNote">📤 OneNote</button>
               <button className="btn btn-danger btn-sm" onClick={() => { remove('notes', note.id); setSelected(null); setShowList(true); }}>Delete</button>
             </div>
             <div className="split-panel-body" style={{ padding: 0, overflow: 'hidden', flex: '1 1 0' }}>
@@ -383,6 +386,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
               workItems={data.work_items}
               update={updateWorkItem}
             />
+            {sharing && <NoteSharePanel note={note} onClose={() => setSharing(false)} />}
           </div>
         ) : (
           <div className="split-right">
