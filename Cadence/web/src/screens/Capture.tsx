@@ -30,7 +30,7 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
   const item = queue.find((q) => q.id === selected) || null;
 
   const addCapture = () => {
-    const id = Math.random().toString(36).slice(2);
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
     const q: QueueItem = { id, name: `Capture ${queue.length + 1}`, text: '', results: [] };
     setQueue((cur) => [...cur, q]); setSelected(id);
   };

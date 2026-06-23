@@ -62,7 +62,8 @@ function parseInput(
     due_date = localDateStr(d); dateLabel = 'Tomorrow';
   } else if (/\bend of (the )?week\b/.test(low)) {
     const d = new Date(today);
-    const toFri = (5 - d.getDay() + 7) % 7 || 5;
+    // Days until Friday; 0 when today is Friday (don't skip a week).
+    const toFri = (5 - d.getDay() + 7) % 7;
     d.setDate(d.getDate() + toFri);
     due_date = localDateStr(d); dateLabel = 'End of week';
   } else if (/\bnext week\b/.test(low)) {
@@ -149,7 +150,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
 
   const add = async () => {
     const title = parsed.title;
-    if (!title) return;
+    if (!title || busy) return; // busy guard: Enter can fire before the button disables
     setBusy(true);
     try {
       // Build related_entities from all selected people + project
