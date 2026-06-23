@@ -1,16 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from '../lib/store';
+import { supabase } from '../lib/supabase';
 import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import type { WorkItem } from '../lib/types';
 import { fmtDM } from '../lib/util';
 
-type Tab = 'for_kobe' | 'brief' | 'from_kobe';
+type Tab = 'ace' | 'for_kobe' | 'brief' | 'from_kobe';
 
 export function Kobe({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [modal, setModal] = useState<WorkItem | 'new' | null>(null);
-  const [tab, setTab] = useState<Tab>('for_kobe');
+  const [tab, setTab] = useState<Tab>('ace');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Ace chat — messages in both directions, filtered by recipient_key
+  const aceMessages = useMemo(
+    () =>
+      (data.agent_messages || [])
+        .filter((m) => !m.deleted_at && m.recipient_key === 'agent:ace')
+        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    [data.agent_messages],
+  );
 
   // Tasks Rodney assigned to Kobe
   const kobeAssigned = useMemo(
@@ -39,6 +53,28 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     [data.work_items],
   );
 
+  useEffect(() => {
+    if (tab === 'ace') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [aceMessages.length, tab]);
+
+  const sendToAce = async () => {
+    const text = message.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setMessage('');
+    try {
+      const { error } = await supabase.functions.invoke('ace-chat', {
+        body: { message: text },
+      });
+      if (error) console.error('Ace error:', error);
+    } catch (e) {
+      console.error('Ace error:', e);
+    } finally {
+      setSending(false);
+      textareaRef.current?.focus();
+    }
+  };
+
   const latestBrief = kobeNotes[0] ?? null;
   const olderNotes = kobeNotes.slice(1);
 
@@ -62,6 +98,9 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
       <ScreenHeader title="Kobe" onMenu={onMenu} />
       <div className="kobe-screen">
         <div className="kobe-tabs">
+          <button className={`kobe-tab${tab === 'ace' ? ' active' : ''}`} onClick={() => setTab('ace')}>
+            Ace
+          </button>
           <button className={`kobe-tab${tab === 'for_kobe' ? ' active' : ''}`} onClick={() => setTab('for_kobe')}>
             For Kobe
             {kobeAssigned.length > 0 && <span className="kobe-tab-count">{kobeAssigned.length}</span>}
@@ -76,6 +115,65 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
           </button>
         </div>
 
+        {/* ── Ace chat ── */}
+        {tab === 'ace' && (
+          <div className="kobe-chat-wrap">
+            <div className="kobe-chat-messages">
+              {aceMessages.length === 0 ? (
+                <div className="kobe-chat-empty">
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>◆</div>
+                  <p>Ask Ace anything about your Cadence</p>
+                  <small>Ace can read your tasks, projects, people and decisions — and take action on your behalf.</small>
+                </div>
+              ) : (
+                aceMessages.map((m) => {
+                  const isAce = m.sender_type === 'agent' || m.sender_type === 'system';
+                  return (
+                    <div key={m.id} className={`kobe-bubble-row${isAce ? ' kobe-bubble-row--kobe' : ''}`}>
+                      {isAce && <div className="kobe-bubble-avatar ace-avatar">◆</div>}
+                      <div className={`kobe-bubble${isAce ? ' kobe-bubble--kobe' : ' kobe-bubble--user'}`}>
+                        {isAce ? (
+                          <div className="kobe-bubble-html" dangerouslySetInnerHTML={{ __html: m.body || '' }} />
+                        ) : (
+                          <span>{m.body}</span>
+                        )}
+                        <div className="kobe-bubble-time">{fmtDM(m.created_at)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {sending && (
+                <div className="kobe-bubble-row kobe-bubble-row--kobe">
+                  <div className="kobe-bubble-avatar ace-avatar">◆</div>
+                  <div className="kobe-bubble kobe-bubble--kobe kobe-bubble--thinking">
+                    <span className="ace-thinking-dots"><span /><span /><span /></span>
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+            <div className="kobe-chat-input-wrap">
+              <textarea
+                ref={textareaRef}
+                className="kobe-chat-input"
+                placeholder="Ask Ace…"
+                value={message}
+                rows={1}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToAce(); }
+                }}
+              />
+              <button
+                className="btn btn-primary kobe-send-btn"
+                onClick={sendToAce}
+                disabled={!message.trim() || sending}
+              >{sending ? '…' : '↑'}</button>
+            </div>
+          </div>
+        )}
+
         {/* ── For Kobe ── */}
         {tab === 'for_kobe' && (
           <div className="kobe-panel">
@@ -89,9 +187,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                 <small>Add non-urgent tasks here. Kobe checks this regularly and actions them without interrupting you.</small>
               </div>
             ) : (
-              <div className="kobe-task-list">
-                {kobeAssigned.map(taskRow)}
-              </div>
+              <div className="kobe-task-list">{kobeAssigned.map(taskRow)}</div>
             )}
           </div>
         )}
@@ -112,10 +208,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                     <span className="kobe-brief-title">{latestBrief.title}</span>
                     <span className="kobe-brief-time">{fmtDM(latestBrief.updated_at)}</span>
                   </div>
-                  <div
-                    className="kobe-brief-body"
-                    dangerouslySetInnerHTML={{ __html: latestBrief.body || '<p>No content.</p>' }}
-                  />
+                  <div className="kobe-brief-body" dangerouslySetInnerHTML={{ __html: latestBrief.body || '<p>No content.</p>' }} />
                 </div>
                 {olderNotes.length > 0 && (
                   <div className="kobe-older-notes">
@@ -143,9 +236,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                 <small>Tasks Kobe creates on your behalf appear here.</small>
               </div>
             ) : (
-              <div className="kobe-task-list">
-                {kobeTasks.map(taskRow)}
-              </div>
+              <div className="kobe-task-list">{kobeTasks.map(taskRow)}</div>
             )}
           </div>
         )}

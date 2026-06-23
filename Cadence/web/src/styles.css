@@ -522,6 +522,13 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .kobe-tab-count { background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
 .kobe-panel { flex: 1; overflow-y: auto; padding: 20px; }
 .kobe-panel-actions { margin-bottom: 16px; }
+.ace-avatar { background: var(--accent) !important; color: #fff !important; }
+.kobe-bubble--thinking { padding: 12px 16px; }
+.ace-thinking-dots { display: flex; gap: 4px; align-items: center; }
+.ace-thinking-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); animation: ace-dot 1.2s infinite; }
+.ace-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ace-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ace-dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
 .kobe-brief-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
 .kobe-brief-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
 .kobe-brief-title { font-size: 14px; font-weight: 600; color: #e8c84a; }
