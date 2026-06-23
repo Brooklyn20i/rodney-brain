@@ -9,6 +9,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
 
 interface Props {
   content: string;
@@ -117,10 +118,36 @@ export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typ
       TableHeader,
       TableCell,
       Placeholder.configure({ placeholder }),
+      Image.configure({ allowBase64: true, inline: false }),
     ],
     content,
     onUpdate: ({ editor }) => onChange?.(editor.getHTML()),
     onBlur: ({ editor }) => onBlur?.(editor.getHTML()),
+    editorProps: {
+      handlePaste(view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (!file) continue;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const src = e.target?.result as string;
+              if (src) view.dispatch(
+                view.state.tr.replaceSelectionWith(
+                  view.state.schema.nodes.image.create({ src })
+                )
+              );
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
+      },
+    },
   });
 
   // Sync when content prop changes due to external updates (e.g. navigation).
