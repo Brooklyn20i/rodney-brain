@@ -973,6 +973,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .link-picker-option:hover { background: var(--surface2); }
 .link-picker-option.selected { background: var(--blue-bg); }
 .link-picker-check { margin-left: auto; color: var(--accent); font-size: 13px; flex-shrink: 0; }
+.link-picker-me { font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); }
+.send-picker-me { font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); }
 
 /* owner-name-input: free-text owner field in group meetings */
 .owner-name-input { border: none; border-bottom: 1px solid var(--border); background: transparent; font-size: 12px; font-family: inherit; color: var(--text); padding: 1px 4px; width: 90px; outline: none; }

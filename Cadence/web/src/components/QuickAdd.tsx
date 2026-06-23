@@ -121,7 +121,7 @@ interface Overrides {
 }
 
 export function QuickAdd({ onClose }: { onClose: () => void }) {
-  const { data, insert, logActivity } = useCadence();
+  const { data, insert, logActivity, session } = useCadence();
   const [text, setText] = useState('');
   const [openFull, setOpenFull] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -130,6 +130,8 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const people = data.people.filter((p) => !p.type || p.type === 'person');
+  const myEmail = session?.user?.email?.toLowerCase();
+  const mePerson = myEmail ? people.find((p) => p.email?.toLowerCase() === myEmail) : null;
   const parsed = parseInput(text, people, data.projects);
 
   // Effective values = manual override if set, otherwise the parser's guess.
@@ -261,6 +263,17 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
                 <div className="action-send-picker action-send-picker--left">
+                  {mePerson && (
+                    <button className={`send-picker-option send-picker-me${personIds.includes(mePerson.id) ? ' selected' : ''}`}
+                      onClick={() => {
+                        const sel = personIds.includes(mePerson.id);
+                        const next = sel ? personIds.filter((id) => id !== mePerson.id) : [...personIds, mePerson.id];
+                        setOv((o) => ({ ...o, personIds: next }));
+                      }}>
+                      ★ Me ({mePerson.name})
+                      {personIds.includes(mePerson.id) && <span className="send-picker-check">✓</span>}
+                    </button>
+                  )}
                   {personIds.length > 0 && (
                     <button className="send-picker-option" onClick={() => setOv((o) => ({ ...o, personIds: [] }))}>
                       ✕ Clear all
