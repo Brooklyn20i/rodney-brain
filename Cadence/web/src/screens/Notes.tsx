@@ -22,6 +22,8 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const [showList, setShowList] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
+  const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
   const [title, setTitle] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,9 +86,8 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
     return name;
   };
 
-  const renameFolder = async (oldName: string) => {
-    const newName = window.prompt('Rename folder', oldName)?.trim();
-    if (!newName || newName === oldName) return;
+  const renameFolder = async (oldName: string, newName: string) => {
+    if (!newName || newName === oldName) { setEditingFolder(null); return; }
     const toUpdate = data.notes.filter((n) => folderOf(n) === oldName);
     await Promise.all(toUpdate.map((n) => update('notes', n.id, { folder: newName } as Partial<Note>)));
     setExtraFolders((f) => f.map((x) => (x === oldName ? newName : x)));
@@ -95,6 +96,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
       if (oldName in next) { next[newName] = next[oldName]; delete next[oldName]; }
       return next;
     });
+    setEditingFolder(null);
   };
 
   const onFolderSelect = async (v: string) => {
@@ -114,14 +116,39 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const Folder = ({ name }: { name: string }) => {
     const items = notesIn(name);
     const isCollapsed = collapsed[name];
+    const isEditing = editingFolder === name;
+    const startEdit = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingFolderName(name);
+      setEditingFolder(name);
+    };
+    const commitEdit = () => renameFolder(name, editingFolderName.trim());
     return (
       <div key={name}>
-        <div className="folder-header" onClick={() => setCollapsed((c) => ({ ...c, [name]: !c[name] }))}>
-          <span className={`folder-caret ${isCollapsed ? 'collapsed' : ''}`}>▾</span>
+        <div className="folder-header" onClick={() => !isEditing && setCollapsed((c) => ({ ...c, [name]: !c[name] }))}>
+          <span className={`folder-caret ${isCollapsed ? 'collapsed' : ''}`} style={{ visibility: isEditing ? 'hidden' : undefined }}>▾</span>
           <span style={{ fontSize: 14 }}>📁</span>
-          <span className="folder-name">{name}</span>
+          {isEditing ? (
+            <input
+              className="folder-rename-input"
+              autoFocus
+              value={editingFolderName}
+              onChange={(e) => setEditingFolderName(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                if (e.key === 'Escape') setEditingFolder(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="folder-name">{name}</span>
+          )}
           <span className="folder-count">{items.length}</span>
-          <button className="folder-add" title="Rename folder" onClick={(e) => { e.stopPropagation(); renameFolder(name); }}>✎</button>
+          {isEditing
+            ? <button className="folder-add" title="Confirm rename" onClick={(e) => { e.stopPropagation(); commitEdit(); }}>✓</button>
+            : <button className="folder-add" title="Rename folder" onClick={startEdit}>✎</button>
+          }
           <button className="folder-add" title="New note in this folder" onClick={(e) => { e.stopPropagation(); newNote(name); }}>＋</button>
         </div>
         {!isCollapsed && <div className="folder-notes">{items.map(NoteRow)}</div>}

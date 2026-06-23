@@ -490,6 +490,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .folder-add { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 4px; }
 .folder-add:hover { color: var(--accent); background: var(--blue-bg); }
 .folder-notes { padding-left: 14px; }
+.folder-rename-input { flex: 1; border: none; border-bottom: 1.5px solid var(--accent); background: transparent; font-size: 13px; font-weight: 600; font-family: inherit; color: var(--text); outline: none; padding: 0 2px; min-width: 0; }
 .tree-sep { height: 1px; background: var(--border); margin: 8px 6px; }
 .note-folder-select { width: auto; font-size: 12px; font-weight: 600; padding: 5px 26px 5px 10px; border-radius: 14px; border: 1px solid #C8DEF5; background-color: var(--blue-bg); color: var(--accent); }
 .note-preview { padding: 4px; font-size: 15px; line-height: 1.7; }
