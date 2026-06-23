@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal } from '../components/bits';
 import { MeetingNoteModal, parseMeeting } from '../components/MeetingNoteModal';
+import { serializeMeeting } from '../lib/meetingData';
 import type { ActionItem } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
@@ -218,32 +219,41 @@ function GroupOpenActions({ group }: { group: Person }) {
   const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
+  // Guard against double-taps firing duplicate work_items / writes.
+  const busy = useRef<Set<string>>(new Set());
+
   const handleMarkDone = async (action: OpenAction) => {
     const note = data.notes.find((n) => n.id === action.noteId);
     if (!note) return;
-    const { data: parsed } = parseMeeting(note.body);
+    const { data: parsed, raw } = parseMeeting(note.body);
     const updatedActions = parsed.actions.map((a) =>
       a.id === action.id ? { ...a, done: true } : a
     );
     await update('notes', action.noteId, {
-      body: JSON.stringify({ ...parsed, actions: updatedActions }),
+      body: serializeMeeting({ ...parsed, actions: updatedActions }, raw),
     } as Partial<Note>);
   };
 
   const handleSend = async (action: OpenAction, targets: PushTarget[]) => {
-    for (const t of targets) {
-      await insert('work_items', buildTaskFromAction(action, action.noteTitle, t) as Partial<WorkItem>);
-    }
-    const names = targets.map(t => t.name).join(', ');
-    const note = data.notes.find((n) => n.id === action.noteId);
-    if (note) {
-      const { data: parsed } = parseMeeting(note.body);
-      const updatedActions = parsed.actions.map((a) =>
-        a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a
-      );
-      await update('notes', action.noteId, {
-        body: JSON.stringify({ ...parsed, actions: updatedActions }),
-      } as Partial<Note>);
+    if (busy.current.has(action.id)) return;
+    busy.current.add(action.id);
+    try {
+      for (const t of targets) {
+        await insert('work_items', buildTaskFromAction(action, action.noteTitle, t) as Partial<WorkItem>);
+      }
+      const names = targets.map(t => t.name).join(', ');
+      const note = data.notes.find((n) => n.id === action.noteId);
+      if (note) {
+        const { data: parsed, raw } = parseMeeting(note.body);
+        const updatedActions = parsed.actions.map((a) =>
+          a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a
+        );
+        await update('notes', action.noteId, {
+          body: serializeMeeting({ ...parsed, actions: updatedActions }, raw),
+        } as Partial<Note>);
+      }
+    } finally {
+      busy.current.delete(action.id);
     }
   };
 
@@ -281,10 +291,15 @@ function GroupMeetingNotes({ group }: { group: Person }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(group.id);
+  // Sort newest-first by meeting day. Normalise to a YYYY-MM-DD key so an
+  // explicit date (10 chars) and a created_at timestamp (24 chars) compare
+  // correctly instead of the timestamp always sorting after the bare date.
+  const dayKey = (n: Note) => (dates[n.id] || n.created_at).slice(0, 10);
   const meetings = useMemo(() =>
     data.notes.filter((n) => n.folder === folder)
-      .sort((a, b) => (dates[b.id] || b.created_at).localeCompare(dates[a.id] || a.created_at)),
-    [data.notes, folder, dates]
+      .sort((a, b) => dayKey(b).localeCompare(dayKey(a))),
+    // dayKey closes over `dates`; listed below.
+    [data.notes, folder, dates] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const newMeeting = async () => {
@@ -294,8 +309,13 @@ function GroupMeetingNotes({ group }: { group: Person }) {
     let n: Note;
     try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
     catch (e: any) {
-      if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
-      else throw e;
+      // Without a folder the note can't be associated with this group and would
+      // become an invisible orphan — fail loudly instead of stranding data.
+      if (/folder/i.test(String(e?.message || e))) {
+        alert('Could not create the meeting note — the database is missing the "folder" column. Please run the latest migration.');
+        return;
+      }
+      throw e;
     }
     try { await setMeetingDate(n.id, todayDate); } catch { /* non-critical */ }
     setOpenId(n.id);

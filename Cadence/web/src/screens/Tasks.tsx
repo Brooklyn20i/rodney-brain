@@ -5,7 +5,7 @@ import { TaskRow, ScreenHeader, EmptyState } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../lib/util';
-import { parseMeeting } from '../lib/meetingData';
+import { parseMeeting, serializeMeeting } from '../lib/meetingData';
 import { collectOpenMeetingActions, buildTaskFromAction, isUserTask } from '../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../lib/tasks';
 
@@ -134,11 +134,11 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       // a concurrent edit to a sibling action in the same note.
       const fresh = data.notes.find((n) => n.id === action.noteId);
       if (fresh) {
-        const { data: parsed } = parseMeeting(fresh.body);
+        const { data: parsed, raw } = parseMeeting(fresh.body);
         const label = target ? target.name : (action.owner_person_id ? 'your tasks' : 'Inbox');
         const updated = parsed.actions.map((a) =>
           a.id === action.id ? { ...a, pushed: true, pushed_to: label } : a);
-        await update('notes', action.noteId, { body: JSON.stringify({ ...parsed, actions: updated }) } as Partial<Note>);
+        await update('notes', action.noteId, { body: serializeMeeting({ ...parsed, actions: updated }, raw) } as Partial<Note>);
       }
     } finally {
       filing.current.delete(guardKey);

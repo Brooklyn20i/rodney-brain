@@ -24,18 +24,34 @@ export interface MeetingData {
 }
 
 export const emptyMeeting = (): MeetingData => ({ agenda: [], actions: [], notes: '' });
-export const uid = () => Math.random().toString(36).slice(2, 10);
+// crypto.randomUUID avoids the collision risk of short Math.random ids — these
+// ids are React keys and are matched across notes (carry-forward, dedupe).
+export const uid = () =>
+  (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2, 10);
 
-export function parseMeeting(body: string): { data: MeetingData; isLegacy: boolean } {
-  if (!body.trim()) return { data: emptyMeeting(), isLegacy: false };
+// `raw` is the full parsed object. Unknown top-level keys (written by a newer
+// web build, the Swift app, or the Python agent — all sharing the notes table)
+// are preserved here so serializeMeeting can write them back instead of
+// silently dropping them on the next save.
+export function parseMeeting(body: string): { data: MeetingData; isLegacy: boolean; raw: Record<string, unknown> } {
+  if (!body.trim()) return { data: emptyMeeting(), isLegacy: false, raw: {} };
   try {
     const p = JSON.parse(body);
     if (p && typeof p === 'object' && ('agenda' in p || 'actions' in p)) {
       return {
         data: { agenda: p.agenda || [], actions: p.actions || [], notes: p.notes || '' },
         isLegacy: false,
+        raw: p as Record<string, unknown>,
       };
     }
   } catch {}
-  return { data: { agenda: [], actions: [], notes: body }, isLegacy: true };
+  return { data: { agenda: [], actions: [], notes: body }, isLegacy: true, raw: {} };
+}
+
+// Serialize a meeting body, preserving any forward-compat keys from `raw`.
+// Always pass the `raw` returned by parseMeeting for the same note.
+export function serializeMeeting(data: MeetingData, raw: Record<string, unknown> = {}): string {
+  return JSON.stringify({ ...raw, agenda: data.agenda, actions: data.actions, notes: data.notes });
 }

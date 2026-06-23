@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseMeeting, emptyMeeting } from '../meetingData';
+import { parseMeeting, serializeMeeting, emptyMeeting } from '../meetingData';
 
 describe('parseMeeting', () => {
   it('returns empty data for empty body', () => {
-    expect(parseMeeting('')).toEqual({ data: emptyMeeting(), isLegacy: false });
-    expect(parseMeeting('   ')).toEqual({ data: emptyMeeting(), isLegacy: false });
+    expect(parseMeeting('')).toEqual({ data: emptyMeeting(), isLegacy: false, raw: {} });
+    expect(parseMeeting('   ')).toEqual({ data: emptyMeeting(), isLegacy: false, raw: {} });
   });
 
   it('parses a well-formed JSON body', () => {
@@ -52,5 +52,20 @@ describe('parseMeeting', () => {
     const body = JSON.stringify({ actions: [] });
     const { isLegacy } = parseMeeting(body);
     expect(isLegacy).toBe(false);
+  });
+
+  it('preserves unknown forward-compat keys through a parse/serialize round-trip', () => {
+    const body = JSON.stringify({
+      agenda: [],
+      actions: [],
+      notes: 'hi',
+      version: 2,            // written by a newer client
+      swift_only_field: 'x', // written by the Swift app
+    });
+    const { data, raw } = parseMeeting(body);
+    const out = JSON.parse(serializeMeeting(data, raw));
+    expect(out.version).toBe(2);
+    expect(out.swift_only_field).toBe('x');
+    expect(out.notes).toBe('hi');
   });
 });

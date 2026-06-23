@@ -7,10 +7,11 @@ import type { Project } from '../lib/types';
 import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
 import { useMeetingDates } from '../lib/meetings';
-import { parseMeeting, uid } from '../lib/meetingData';
+import { parseMeeting, serializeMeeting, uid } from '../lib/meetingData';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
+import { sanitizeHtml } from '../lib/sanitize';
 
 // Data model + parser now live in lib/meetingData (React-free). Re-export here
 // so existing import sites (Meetings.tsx, SharePanel.tsx) keep working.
@@ -106,7 +107,7 @@ function AgendaItemRow({ item, onChange, onDelete }: {
         {rich ? (
           // Rich notes: clean read-only preview that opens the full editor on tap.
           <div className="agenda-notes-preview" onClick={() => setSheetOpen(true)} title="Tap to edit">
-            <div className="re-content" dangerouslySetInnerHTML={{ __html: item.notes }} />
+            <div className="re-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.notes) }} />
             <span className="agenda-notes-edit-hint">✏️ Edit</span>
           </div>
         ) : (editingNotes || item.notes) ? (
@@ -382,7 +383,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // meetings; body-only changes (realtime sync) do NOT reset to avoid clobbering
   // in-progress edits.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const { data: parsed } = useMemo(() => parseMeeting(note.body), [note.id]);
+  const { data: parsed, raw: parsedRaw } = useMemo(() => parseMeeting(note.body), [note.id]);
   const [agenda, setAgenda] = useState<AgendaItem[]>(parsed.agenda);
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
   const [notes, setNotes] = useState<string>(parsed.notes);
@@ -404,12 +405,18 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setLocalMeetingDate(date);
     setDateErr('');
 
-    // Auto-update the note title when it follows the expected pattern
+    // Auto-update the note title only when it's still the auto-generated form
+    // (prefix alone, or prefix + a DD/MM/YYYY date). If the user added a custom
+    // suffix, leave their title untouched.
     const prefix = isGroupMeeting ? `${person.name} · ` : `1:1 · ${person.name} · `;
     if (date && title.startsWith(prefix)) {
-      const newTitle = `${prefix}${fmtDMY(date)}`;
-      setTitle(newTitle);
-      update('notes', note.id, { title: newTitle } as Partial<Note>);
+      const suffix = title.slice(prefix.length);
+      const looksAuto = suffix === '' || /^\d{2}\/\d{2}\/\d{4}$/.test(suffix);
+      if (looksAuto) {
+        const newTitle = `${prefix}${fmtDMY(date)}`;
+        setTitle(newTitle);
+        update('notes', note.id, { title: newTitle } as Partial<Note>);
+      }
     }
 
     try { await setMeetingDate(note.id, date || null); }
@@ -422,6 +429,9 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const actionsRef = useRef(actions);
   const notesRef = useRef(notes);
   const noteIdRef = useRef(note.id);
+  // Forward-compat keys from the stored body, preserved across saves so we don't
+  // drop fields written by the Swift app or the agent.
+  const rawRef = useRef<Record<string, unknown>>(parsedRaw);
   agendaRef.current = agenda;
   actionsRef.current = actions;
   notesRef.current = notes;
@@ -431,11 +441,10 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const flushSave = useCallback(() => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    const body = JSON.stringify({
-      agenda: agendaRef.current,
-      actions: actionsRef.current,
-      notes: notesRef.current,
-    });
+    const body = serializeMeeting(
+      { agenda: agendaRef.current, actions: actionsRef.current, notes: notesRef.current },
+      rawRef.current,
+    );
     update('notes', noteIdRef.current, { body } as Partial<Note>);
   }, [update]);
 
@@ -454,11 +463,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // Reset state when navigating between meetings (note.id change only — body changes
   // from real-time sync are intentionally NOT reset to avoid clobbering in-progress edits).
   useEffect(() => {
-    const { data: p } = parseMeeting(note.body);
+    const { data: p, raw } = parseMeeting(note.body);
     setAgenda(p.agenda);
     setActions(p.actions);
     setNotes(p.notes);
     setTitle(note.title);
+    rawRef.current = raw;
     setShowImport(false);
     setImportSel(new Set());
   }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -517,37 +527,62 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const addAction = (owner: 'me' | 'them' = 'me') =>
     setAc([...actions, { id: uid(), title: '', owner, due: '', done: false, pushed: false }]);
 
+  // Busy guard so a double-tap (common on iPad, before the optimistic state has
+  // re-rendered) can't insert every action twice.
+  const pushing = useRef(false);
   const pushAllToTasks = async () => {
-    const toPush = actions.filter((a) => !a.pushed && a.title.trim());
+    if (pushing.current) return;
+    // Read from the ref, not the render closure, so we see actions filed by a
+    // concurrent edit that hasn't re-rendered yet.
+    const toPush = actionsRef.current.filter((a) => !a.pushed && a.title.trim());
+    if (toPush.length === 0) return;
+    pushing.current = true;
     // For a 1:1, the meeting person owns the action unless it names someone
     // else; for a group meeting there's no default owner. Either way the
     // action's due date and explicit owner are preserved by buildTaskFromAction.
     const defaultTarget: PushTarget | null = isGroupMeeting
       ? null
       : { id: person.id, type: 'person', name: person.name };
-    for (const a of toPush) {
-      await insert('work_items', buildTaskFromAction(a, title, defaultTarget) as Partial<WorkItem>);
+    try {
+      for (const a of toPush) {
+        await insert('work_items', buildTaskFromAction(a, title, defaultTarget) as Partial<WorkItem>);
+      }
+      const pushedIds = new Set(toPush.map((a) => a.id));
+      // Only mark the actions we actually pushed; merge against the freshest
+      // state via the functional updater to preserve concurrent edits.
+      setActions((prev) => prev.map((a) => (pushedIds.has(a.id) ? { ...a, pushed: true } : a)));
+      scheduleSave();
+      logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
+    } finally {
+      pushing.current = false;
     }
-    const updated = actions.map((a) => ({ ...a, pushed: a.pushed || !!a.title.trim() }));
-    setAc(updated);
-    logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
   };
 
+  const sending = useRef<Set<string>>(new Set());
   const onSendAction = async (action: ActionItem, targets: PushTarget[]) => {
-    for (const t of targets) {
-      await insert('work_items', buildTaskFromAction(action, title, t) as Partial<WorkItem>);
+    if (sending.current.has(action.id)) return;
+    sending.current.add(action.id);
+    try {
+      for (const t of targets) {
+        await insert('work_items', buildTaskFromAction(action, title, t) as Partial<WorkItem>);
+      }
+      const names = targets.map((t) => t.name).join(', ');
+      setActions((prev) => prev.map((a) => (a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a)));
+      scheduleSave();
+    } finally {
+      sending.current.delete(action.id);
     }
-    const names = targets.map(t => t.name).join(', ');
-    const updated = actions.map((a) => a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a);
-    setAc(updated);
   };
 
   const markCarryForwardDone = (cfAction: ActionItem, done: boolean) => {
     if (!prevMeeting) return;
-    const { data: prev } = parseMeeting(prevMeeting.body);
-    const updated = prev.actions.map((a) => a.id === cfAction.id ? { ...a, done } : a);
+    // Re-read the freshest body for the previous note and preserve its
+    // forward-compat keys so this targeted write can't clobber other fields.
+    const fresh = allMeetings.find((m) => m.id === prevMeeting.id) ?? prevMeeting;
+    const { data: prev, raw } = parseMeeting(fresh.body);
+    const updated = prev.actions.map((a) => (a.id === cfAction.id ? { ...a, done } : a));
     update('notes', prevMeeting.id, {
-      body: JSON.stringify({ ...prev, actions: updated }),
+      body: serializeMeeting({ ...prev, actions: updated }, raw),
     } as Partial<Note>);
   };
 
@@ -735,7 +770,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               {carryForward.length > 0 && (
                 <>
                   <div className="mtg-section-sep">
-                    Carry-forward · {prevMeeting ? fmtDM(prevMeeting.created_at) : 'last meeting'}
+                    Carry-forward · {prevMeeting ? fmtDM(dates[prevMeeting.id] || prevMeeting.created_at) : 'last meeting'}
                   </div>
                   {carryForward.map((cf) => (
                     <CarryForwardRow key={cf.id} item={cf} personName={person.name}
@@ -755,7 +790,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
               {notesExpanded ? '⤡ Collapse' : '⤢ Expand'}
             </button>
           </div>
-          <RichEditor key={note.id} content={notes} onBlur={setN}
+          <RichEditor key={note.id} content={notes} onChange={setN}
             placeholder="Key context, decisions, things to remember…" />
         </div>
 
