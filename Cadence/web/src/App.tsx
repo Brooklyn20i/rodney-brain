@@ -19,7 +19,7 @@ import { Kobe } from './screens/Kobe';
 import { Ace } from './screens/Ace';
 
 export function App() {
-  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing } = useCadence();
+  const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing, canEdit } = useCadence();
   const [screen, setScreen] = useState('today');
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviteBanner, setInviteBanner] = useState<string | null>(null);
@@ -96,6 +96,9 @@ export function App() {
         <div className="offline-banner">
           Offline{pendingCount > 0 ? ` — ${pendingCount} change${pendingCount === 1 ? '' : 's'} pending sync` : ''}
         </div>
+      )}
+      {!canEdit && (
+        <div className="syncing-banner" style={{ background: 'var(--text2)' }}>👁 Read-only access — you can view but not edit this workspace</div>
       )}
       {!isOffline && isSyncing && (
         <div className="syncing-banner">Syncing…</div>

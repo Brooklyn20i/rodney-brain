@@ -24,6 +24,8 @@ interface Ctx {
   remove: (table: Table, id: string) => Promise<void>;
   reload: (table?: Table) => Promise<void>;
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
+  myRole: 'admin' | 'editor' | 'viewer' | null;
+  canEdit: boolean;
   syncError: string | null;
   clearSyncError: () => void;
   createWorkspace: (name: string) => Promise<void>;
@@ -136,7 +138,14 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     for (const entry of entries) {
       try {
         const { op } = entry;
-        if (op.op === 'update') {
+        if (op.op === 'insert') {
+          // Row carries a client-generated id, so replay is idempotent: a
+          // duplicate insert collides on the primary key and is treated as done.
+          const { error } = await supabase.from(op.table).insert(op.row);
+          if (!error || /duplicate key|already exists/i.test(error.message || '')) dropEntry(entry.qid);
+          else if (!isNetworkError(error)) dropEntry(entry.qid);
+          else _failed++;
+        } else if (op.op === 'update') {
           const { error } = await supabase
             .from(op.table)
             .update(op.patch)
@@ -235,12 +244,36 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => { await supabase.auth.signOut(); };
 
+  // The current user's role in the active workspace. Null when there's no
+  // membership record yet (single-user / pre-migration) — treated as full access.
+  const myRole: 'admin' | 'editor' | 'viewer' | null =
+    (session && workspaceMembers.find((m) => m.user_id === session.user.id)?.role) || null;
+  // Viewers are read-only; everyone else (incl. no-membership owner) can write.
+  const canEdit = myRole !== 'viewer';
+
   const insert = async <K extends Table>(table: K, row: Partial<Row<K>>) => {
+    if (!canEdit) { setSyncError('You have read-only access to this workspace.'); throw new Error('read-only'); }
     // Always include owner_id + workspace_id so rows are correctly scoped.
     // workspace_id is omitted pre-migration and dropMissingColumn handles it gracefully.
     const ownedRow = session?.user?.id
       ? { owner_id: session.user.id, ...(workspace?.id ? { workspace_id: workspace.id } : {}), ...row }
       : row;
+
+    // Offline: stamp a client id so the optimistic row and the queued replay
+    // share one stable primary key (idempotent on reconnect), then queue it.
+    if (!navigator.onLine) {
+      const now = new Date().toISOString();
+      const offlineRow: any = {
+        id: (row as any).id || crypto.randomUUID(),
+        created_at: now, updated_at: now, deleted_at: null,
+        ...ownedRow,
+      };
+      enqueue({ op: 'insert', table: table as string, row: offlineRow });
+      setPendingCount((c) => c + 1);
+      setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], offlineRow] }));
+      return offlineRow as Row<K>;
+    }
+
     let payload: any = ownedRow;
     // Tolerate a database that predates a migration: if a column the app writes
     // doesn't exist yet, drop it and retry rather than failing the whole save.
@@ -249,6 +282,15 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       if (!error) {
         setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
         return d as Row<K>;
+      }
+      if (isNetworkError(error)) {
+        // Dropped connection mid-save — stamp an id and queue for replay.
+        const now = new Date().toISOString();
+        const offlineRow: any = { id: payload.id || crypto.randomUUID(), created_at: now, updated_at: now, deleted_at: null, ...payload };
+        enqueue({ op: 'insert', table: table as string, row: offlineRow });
+        setPendingCount((c) => c + 1);
+        setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], offlineRow] }));
+        return offlineRow as Row<K>;
       }
       const stripped = dropMissingColumn(payload, error);
       if (!stripped) { setSyncError(error?.message || 'Save failed'); throw error; }
@@ -259,6 +301,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => {
+    if (!canEdit) { setSyncError('You have read-only access to this workspace.'); throw new Error('read-only'); }
     // Optimistic: apply patch to state immediately for instant UI feedback.
     const prev = (data as any)[table].find((r: any) => r.id === id) as Row<K> | undefined;
     setData((prev) => ({
@@ -298,6 +341,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const remove = async (table: Table, id: string) => {
+    if (!canEdit) { setSyncError('You have read-only access to this workspace.'); throw new Error('read-only'); }
     // Optimistic: remove from state immediately.
     const removed = (data as any)[table].find((r: any) => r.id === id);
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
@@ -381,7 +425,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, syncError, clearSyncError, createWorkspace, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, myRole, canEdit, syncError, clearSyncError, createWorkspace, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
       {children}
     </CadenceCtx.Provider>
   );

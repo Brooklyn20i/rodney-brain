@@ -2,6 +2,7 @@
 // survive page reloads and are replayed automatically when the network returns.
 
 export type QueuedOp =
+  | { op: 'insert'; table: string; row: Record<string, unknown> }
   | { op: 'update'; table: string; id: string; patch: Record<string, unknown> }
   | { op: 'remove'; table: string; id: string };
 

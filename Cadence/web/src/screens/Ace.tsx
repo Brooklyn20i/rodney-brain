@@ -8,6 +8,7 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -27,14 +28,21 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
     const text = message.trim();
     if (!text || sending) return;
     setSending(true);
+    setError(null);
     setMessage('');
     try {
       const { error } = await supabase.functions.invoke('ace-chat', {
         body: { message: text },
       });
-      if (error) console.error('Ace error:', error);
+      if (error) {
+        console.error('Ace error:', error);
+        setError("Ace couldn't respond. Make sure the ace-chat function is deployed, then try again.");
+        setMessage(text); // restore so the message isn't lost
+      }
     } catch (e) {
       console.error('Ace error:', e);
+      setError('Could not reach Ace — check your connection and try again.');
+      setMessage(text);
     } finally {
       setSending(false);
       textareaRef.current?.focus();
@@ -80,6 +88,9 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
           )}
           <div ref={bottomRef} />
         </div>
+        {error && (
+          <div style={{ padding: '8px 16px', color: 'var(--red)', fontSize: 13, textAlign: 'center' }}>{error}</div>
+        )}
         <div className="kobe-chat-input-wrap">
           <textarea
             ref={textareaRef}
