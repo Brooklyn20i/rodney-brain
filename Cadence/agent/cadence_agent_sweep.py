@@ -164,6 +164,13 @@ def _agent_items() -> list[dict]:
                 limit=30)
 
 
+def _tasks_for_kobe() -> list[dict]:
+    """Tasks Rodney assigned to Kobe via the 'For Kobe' tab — non-urgent queue."""
+    return _sel("work_items",
+                "select=*&source=eq.for%3Akobe&done=eq.false&deleted_at=is.null&order=created_at.asc",
+                limit=30)
+
+
 def _stale_queue(hours: int = 24) -> list[dict]:
     cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)).isoformat()
     return _sel("agent_control_events",
@@ -250,6 +257,7 @@ def _build_sweep_payload(
     due_today: list[dict],
     high_pri: list[dict],
     agent_items: list[dict],
+    for_kobe: list[dict],
     stale_queue: list[dict],
     pending_queue: list[dict],
 ) -> dict:
@@ -268,12 +276,13 @@ def _build_sweep_payload(
         "generated_at": _now_iso(),
         "today": _today(),
         "summary": {
-            "inbox_count":       len(inbox),
-            "overdue_count":     len(overdue),
-            "due_today_count":   len(due_today),
-            "updated_count":     len(updated),
-            "agent_items_count": len(agent_items),
-            "stale_queue_count": len(stale_queue),
+            "inbox_count":        len(inbox),
+            "overdue_count":      len(overdue),
+            "due_today_count":    len(due_today),
+            "updated_count":      len(updated),
+            "agent_items_count":  len(agent_items),
+            "for_kobe_count":     len(for_kobe),
+            "stale_queue_count":  len(stale_queue),
             "pending_queue_count": len(pending_queue),
         },
         "inbox":                    dedup(inbox),
@@ -282,6 +291,7 @@ def _build_sweep_payload(
         "updated_since_last_sweep": dedup(updated),
         "high_priority":            dedup(high_pri),
         "agent_items":              dedup(agent_items),
+        "tasks_for_kobe":           dedup(for_kobe),
         "stale_queue_events":       stale_queue,
         "pending_queue_events":     pending_queue,
     }
@@ -296,6 +306,7 @@ def _build_morning_payload(cursor: str | None) -> dict:
     stale_dec     = _stale_decisions()
     inbox         = _inbox()
     agent_items   = _agent_items()
+    for_kobe      = _tasks_for_kobe()
     pending_q     = _pending_queue(limit=20)
 
     return {
@@ -311,6 +322,7 @@ def _build_morning_payload(cursor: str | None) -> dict:
         "at_risk_projects": at_risk_proj,
         "stale_decisions": stale_dec,
         "agent_items": [_slim(i) for i in agent_items],
+        "tasks_for_kobe": [_slim(i) for i in for_kobe],
         "pending_queue_events": pending_q,
         "summary": {
             "inbox_count":        len(inbox),
@@ -319,6 +331,7 @@ def _build_morning_payload(cursor: str | None) -> dict:
             "due_week_count":     len(due_week),
             "at_risk_proj_count": len(at_risk_proj),
             "stale_dec_count":    len(stale_dec),
+            "for_kobe_count":     len(for_kobe),
         },
     }
 
@@ -387,13 +400,14 @@ def run_sweep(force: bool = False, dry_run: bool = False) -> int:
             due_today   = _due_today()
             high_pri    = _high_priority()
             agent_items = _agent_items()
+            for_kobe    = _tasks_for_kobe()
             updated     = _updated_since(cursor) if cursor else []
             stale_q     = _stale_queue()
             pending_q   = _pending_queue()
 
             # Compute hashes for all candidate items
             all_items: dict[str, dict] = {}
-            for lst in (inbox, overdue, due_today, high_pri, agent_items, updated):
+            for lst in (inbox, overdue, due_today, high_pri, agent_items, for_kobe, updated):
                 for i in lst:
                     all_items[i["id"]] = i
 
@@ -402,8 +416,9 @@ def run_sweep(force: bool = False, dry_run: bool = False) -> int:
             has_inbox    = bool(inbox)
             has_overdue  = bool(overdue)
             has_stale_q  = bool(stale_q)
+            has_for_kobe = bool(for_kobe)
 
-            has_change = bool(changed_ids or has_inbox or has_overdue or has_stale_q or not cursor)
+            has_change = bool(changed_ids or has_inbox or has_overdue or has_stale_q or has_for_kobe or not cursor)
 
             if not has_change and not force:
                 if not dry_run:
@@ -411,7 +426,7 @@ def run_sweep(force: bool = False, dry_run: bool = False) -> int:
                 return 2  # nothing to do — exit silently
 
             payload = _build_sweep_payload(
-                inbox, updated, overdue, due_today, high_pri, agent_items, stale_q, pending_q,
+                inbox, updated, overdue, due_today, high_pri, agent_items, for_kobe, stale_q, pending_q,
             )
 
             if dry_run:

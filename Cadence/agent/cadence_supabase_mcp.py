@@ -620,6 +620,21 @@ def send_agent_message(
 # ── Agent queue (agent_control_events) ───────────────────────────────────────
 
 @mcp.tool()
+def list_tasks_for_kobe(limit: int = 50) -> list[dict]:
+    """List open tasks Rodney has assigned to Kobe via the 'For Kobe' tab in Cadence.
+    These are non-urgent tasks Rodney wants Kobe to action independently.
+    After completing one, mark it done via update_work_item(id, done=True)."""
+    try:
+        return bridge.select(
+            "work_items",
+            "select=*&source=eq.for%3Akobe&done=eq.false&deleted_at=is.null&order=created_at.asc",
+            limit=limit,
+        )
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
 def list_agent_queue(status: str = "pending", limit: int = 50) -> list[dict]:
     """List agent_control_events by status.
     status: 'pending' (not yet started), 'processing' (in flight), 'processed', 'failed', 'ignored'
