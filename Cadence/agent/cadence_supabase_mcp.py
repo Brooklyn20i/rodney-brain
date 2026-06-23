@@ -553,5 +553,36 @@ def write_kobe_note(title: str, content: str, folder: str = "__kobe__") -> dict:
         return {"error": str(e)}
 
 
+@mcp.tool()
+def check_inbox(since_iso: str | None = None) -> list[dict]:
+    """Read messages Rodney has sent to Kobe from within Cadence.
+    Pass since_iso (ISO 8601 timestamp) to fetch only messages newer than your last check.
+    Poll this every ~30 seconds to pick up new messages promptly."""
+    try:
+        q = "select=id,title,body,created_at&folder=eq.__kobe_inbox__&order=created_at.asc"
+        if since_iso:
+            q += f"&created_at=gt.{since_iso}"
+        return bridge.select("notes", q, limit=20)
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def reply_to_chat(response_text: str) -> dict:
+    """Write a reply into the Cadence chat panel. Rodney will see it instantly via Realtime.
+    Use markdown for formatting — Cadence renders it as rich text."""
+    try:
+        row = {
+            "owner_id": bridge.discover_owner_id(),
+            "title": "Kobe",
+            "body": response_text,
+            "folder": "__kobe_reply__",
+        }
+        res = bridge.insert("notes", row)
+        return res[0] if isinstance(res, list) and res else res
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     mcp.run()
