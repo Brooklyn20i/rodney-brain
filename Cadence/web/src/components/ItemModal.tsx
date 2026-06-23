@@ -13,7 +13,7 @@ const PRIORITIES: Priority[] = ['high', 'medium', 'low'];
 export function ItemModal({ existing, defaults, onClose }: {
   existing?: WorkItem; defaults?: Partial<WorkItem>; onClose: () => void;
 }) {
-  const { data, insert, update, logActivity } = useCadence();
+  const { data, insert, update, logActivity, session } = useCadence();
   const base = existing || defaults || {};
   const [title, setTitle] = useState(base.title || '');
   const [type, setType] = useState<ItemType>((base.type as ItemType) || 'task');
@@ -40,6 +40,8 @@ export function ItemModal({ existing, defaults, onClose }: {
   });
 
   const people = data.people.filter((p) => !p.type || p.type === 'person');
+  const myEmail = session?.user?.email?.toLowerCase();
+  const mePerson = myEmail ? people.find((p) => p.email?.toLowerCase() === myEmail) : null;
   const meetingNotes = data.notes
     .filter((n) => n.folder?.startsWith('__mtg__'))
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -130,6 +132,13 @@ export function ItemModal({ existing, defaults, onClose }: {
                 <>
                   <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setPicker(null)} />
                   <div className="link-picker">
+                    {mePerson && (
+                      <button className={`link-picker-option link-picker-me${links.some((l) => l.id === mePerson.id) ? ' selected' : ''}`}
+                        onClick={() => links.some((l) => l.id === mePerson.id) ? (removeLink(mePerson.id), setPicker(null)) : addLink({ type: 'person', id: mePerson.id, name: mePerson.name })}>
+                        ★ Me ({mePerson.name})
+                        {links.some((l) => l.id === mePerson.id) && <span className="link-picker-check">✓</span>}
+                      </button>
+                    )}
                     {people.map((p) => {
                       const sel = links.some((l) => l.id === p.id);
                       return (
