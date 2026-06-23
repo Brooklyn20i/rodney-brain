@@ -12,10 +12,8 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     { id: 'projects', label: 'Projects', icon: '▤' },
     { id: 'people', label: 'People', icon: '✦' },
     { id: 'meetings', label: 'Meetings', icon: '🗓' },
-    { id: 'decisions', label: 'Decisions', icon: '⚖' },
-    { id: 'outbox', label: 'Outbox', icon: '✉' },
   ]},
-  { section: 'AI', items: [
+  { section: 'Agents', items: [
     { id: 'ace', label: 'Ace', icon: '◆' },
     { id: 'kobe', label: 'Kobe', icon: '⚡' },
   ]},
