@@ -1,9 +1,10 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useCadence } from '../lib/store';
-import type { Note, Person, WorkItem, RelatedEntity } from '../lib/types';
+import type { Note, WorkItem, RelatedEntity } from '../lib/types';
 import { ScreenHeader } from '../components/bits';
 import { fmtDM } from '../lib/util';
 import { RichEditor } from '../components/RichEditor';
+import { ItemModal } from '../components/ItemModal';
 
 const folderOf = (n: Note) => (n.folder || '').trim();
 const byUpdated = (a: Note, b: Note) => b.updated_at.localeCompare(a.updated_at);
@@ -84,127 +85,100 @@ function FolderRow({
 
 interface NoteActionsProps {
   note: Note;
-  people: Person[];
   workItems: WorkItem[];
-  insert: (table: 'work_items', row: Partial<WorkItem>) => Promise<WorkItem>;
   update: (table: 'work_items', id: string, patch: Partial<WorkItem>) => Promise<WorkItem>;
 }
 
-function NoteActions({ note, people, workItems, insert, update }: NoteActionsProps) {
-  const tasks = workItems.filter((w) =>
-    !w.done &&
+function NoteActions({ note, workItems, update }: NoteActionsProps) {
+  const linked = workItems.filter((w) =>
     (w.related_entities || []).some((re) => re.type === 'note' && re.id === note.id)
   );
-  const doneTasks = workItems.filter((w) =>
-    w.done &&
-    (w.related_entities || []).some((re) => re.type === 'note' && re.id === note.id)
-  );
+  const tasks = linked.filter((w) => !w.done);
+  const doneTasks = linked.filter((w) => w.done);
 
   const [open, setOpen] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newPersonId, setNewPersonId] = useState('');
   const [showDone, setShowDone] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [modal, setModal] = useState<'new' | WorkItem | null>(null);
 
-  useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
+  const noteLink: RelatedEntity = { type: 'note', id: note.id, name: note.title };
 
-  const addTask = async () => {
-    const title = newTitle.trim();
-    if (!title) return;
-    const re: RelatedEntity[] = [{ type: 'note', id: note.id, name: note.title }];
-    const person = people.find((p) => p.id === newPersonId);
-    if (person) re.push({ type: 'person', id: person.id, name: person.name });
-    await insert('work_items', {
-      title,
-      type: 'task',
-      priority: 'medium',
-      done: false,
-      inboxed: !newPersonId,
-      person_id: newPersonId || null,
-      related_entities: re,
+  const toggleDone = (e: React.MouseEvent, w: WorkItem) => {
+    e.stopPropagation();
+    update('work_items', w.id, {
+      done: !w.done,
+      completed_at: !w.done ? new Date().toISOString() : null,
     } as Partial<WorkItem>);
-    setNewTitle('');
-    setNewPersonId('');
-    setAdding(false);
   };
 
-  const toggleDone = (w: WorkItem) =>
-    update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
+  const entityTags = (w: WorkItem) => {
+    const ents = w.related_entities || [];
+    const visible = ents.filter((re) => re.type !== 'note');
+    return visible.map((re) => (
+      <span key={re.id} className={`tag tag-${re.type === 'person' ? 'person' : 'project'}`}
+        style={{ fontSize: 11, padding: '1px 6px' }}>{re.name}</span>
+    ));
+  };
 
   return (
-    <div className="note-actions-panel">
-      <div className="note-actions-header" onClick={() => setOpen((v) => !v)}>
-        <span className={`folder-caret ${open ? '' : 'collapsed'}`}>▾</span>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Actions</span>
-        <span className="folder-count">{tasks.length}</span>
-        <button
-          className="btn btn-primary btn-sm"
-          style={{ marginLeft: 'auto', fontSize: 12 }}
-          onClick={(e) => { e.stopPropagation(); setOpen(true); setAdding(true); }}
-        >+ Task</button>
+    <>
+      <div className="note-actions-panel">
+        <div className="note-actions-header" onClick={() => setOpen((v) => !v)}>
+          <span className={`folder-caret ${open ? '' : 'collapsed'}`}>▾</span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Actions</span>
+          {tasks.length > 0 && <span className="folder-count">{tasks.length}</span>}
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ marginLeft: 'auto', fontSize: 12 }}
+            onClick={(e) => { e.stopPropagation(); setOpen(true); setModal('new'); }}
+          >+ Task</button>
+        </div>
+
+        {open && (
+          <div className="note-actions-body">
+            {tasks.length === 0 && doneTasks.length === 0 && (
+              <p className="note-actions-empty">No tasks yet — tap + Task to add one.</p>
+            )}
+            {tasks.map((w) => (
+              <div key={w.id} className="note-action-item" onClick={() => setModal(w)}>
+                <input type="checkbox" checked={false}
+                  onChange={() => {}}
+                  onClick={(e) => toggleDone(e, w)}
+                  className="note-action-check" />
+                <span className="note-action-title">{w.title}</span>
+                <div className="note-action-tags">{entityTags(w)}</div>
+              </div>
+            ))}
+
+            {doneTasks.length > 0 && (
+              <button className="note-action-show-done"
+                onClick={() => setShowDone((v) => !v)}>
+                {showDone ? '▾' : '▸'} {doneTasks.length} completed
+              </button>
+            )}
+            {showDone && doneTasks.map((w) => (
+              <div key={w.id} className="note-action-item note-action-done" onClick={() => setModal(w)}>
+                <input type="checkbox" checked
+                  onChange={() => {}}
+                  onClick={(e) => toggleDone(e, w)}
+                  className="note-action-check" />
+                <span className="note-action-title">{w.title}</span>
+                <div className="note-action-tags">{entityTags(w)}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {open && (
-        <div className="note-actions-body">
-          {tasks.map((w) => {
-            const person = people.find((p) => p.id === w.person_id);
-            return (
-              <div key={w.id} className="note-action-item">
-                <input type="checkbox" checked={false} onChange={() => toggleDone(w)} className="note-action-check" />
-                <span className="note-action-title">{w.title}</span>
-                {person && <span className="tag tag-person" style={{ fontSize: 11, padding: '1px 6px' }}>{person.name}</span>}
-              </div>
-            );
-          })}
-
-          {adding && (
-            <div className="note-action-add-form">
-              <input
-                ref={inputRef}
-                className="note-action-input"
-                placeholder="Task title…"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); addTask(); }
-                  if (e.key === 'Escape') { setAdding(false); setNewTitle(''); setNewPersonId(''); }
-                }}
-              />
-              <select
-                className="note-action-person-select"
-                value={newPersonId}
-                onChange={(e) => setNewPersonId(e.target.value)}
-              >
-                <option value="">No assignee</option>
-                {people.filter((p) => p.type !== 'meeting_group').map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <button className="btn btn-primary btn-sm" onClick={addTask}>Add</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setAdding(false); setNewTitle(''); setNewPersonId(''); }}>✕</button>
-            </div>
-          )}
-
-          {doneTasks.length > 0 && (
-            <button
-              className="note-action-show-done"
-              onClick={() => setShowDone((v) => !v)}
-            >{showDone ? '▾' : '▸'} {doneTasks.length} completed</button>
-          )}
-          {showDone && doneTasks.map((w) => {
-            const person = people.find((p) => p.id === w.person_id);
-            return (
-              <div key={w.id} className="note-action-item note-action-done">
-                <input type="checkbox" checked onChange={() => toggleDone(w)} className="note-action-check" />
-                <span className="note-action-title">{w.title}</span>
-                {person && <span className="tag tag-person" style={{ fontSize: 11, padding: '1px 6px' }}>{person.name}</span>}
-              </div>
-            );
-          })}
-        </div>
+      {modal === 'new' && (
+        <ItemModal
+          defaults={{ related_entities: [noteLink], inboxed: true } as Partial<WorkItem>}
+          onClose={() => setModal(null)}
+        />
       )}
-    </div>
+      {modal && modal !== 'new' && (
+        <ItemModal existing={modal as WorkItem} onClose={() => setModal(null)} />
+      )}
+    </>
   );
 }
 
@@ -212,8 +186,6 @@ function NoteActions({ note, people, workItems, insert, update }: NoteActionsPro
 
 export function Notes({ onMenu }: { onMenu?: () => void }) {
   const { data: rawData, insert, update, remove } = useCadence();
-  const insertWorkItem = (table: 'work_items', row: Partial<WorkItem>) =>
-    insert(table, row) as Promise<WorkItem>;
   const updateWorkItem = (table: 'work_items', id: string, patch: Partial<WorkItem>) =>
     update(table, id, patch) as Promise<WorkItem>;
   // Hide system notes (title or folder starting with __) — meeting notes and WIN state
@@ -408,9 +380,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
             </div>
             <NoteActions
               note={note}
-              people={data.people}
               workItems={data.work_items}
-              insert={insertWorkItem}
               update={updateWorkItem}
             />
           </div>
