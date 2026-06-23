@@ -1,22 +1,26 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useCadence } from './lib/store';
 import { isOverdue } from './lib/util';
 import { isFiled } from './lib/tasks';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar } from './components/Sidebar';
-import { Today } from './screens/Today';
-import { Tasks } from './screens/Tasks';
-import { Inbox } from './screens/Inbox';
-import { Projects } from './screens/Projects';
-import { People } from './screens/People';
-import { Meetings } from './screens/Meetings';
-import { Notes } from './screens/Notes';
-import { Review } from './screens/Review';
-import { Search } from './screens/Search';
-import { Settings } from './screens/Settings';
-import { Kobe } from './screens/Kobe';
-import { Ace } from './screens/Ace';
+import { Today } from './screens/Today'; // eager — the default landing screen
+
+// Lazy-load the remaining screens so the initial bundle ships only Today plus
+// the shell. The per-screen chunks (vite manualChunks) are now actually
+// deferred instead of eagerly imported by this module.
+const Tasks = lazy(() => import('./screens/Tasks').then((m) => ({ default: m.Tasks })));
+const Inbox = lazy(() => import('./screens/Inbox').then((m) => ({ default: m.Inbox })));
+const Projects = lazy(() => import('./screens/Projects').then((m) => ({ default: m.Projects })));
+const People = lazy(() => import('./screens/People').then((m) => ({ default: m.People })));
+const Meetings = lazy(() => import('./screens/Meetings').then((m) => ({ default: m.Meetings })));
+const Notes = lazy(() => import('./screens/Notes').then((m) => ({ default: m.Notes })));
+const Review = lazy(() => import('./screens/Review').then((m) => ({ default: m.Review })));
+const Search = lazy(() => import('./screens/Search').then((m) => ({ default: m.Search })));
+const Settings = lazy(() => import('./screens/Settings').then((m) => ({ default: m.Settings })));
+const Kobe = lazy(() => import('./screens/Kobe').then((m) => ({ default: m.Kobe })));
+const Ace = lazy(() => import('./screens/Ace').then((m) => ({ default: m.Ace })));
 
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing, canEdit } = useCadence();
@@ -119,7 +123,11 @@ export function App() {
       )}
       <Sidebar current={screen} onNavigate={navigate} badges={badges} open={menuOpen} workspaceName={workspace?.name ?? null} />
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
-      <div id="main">{render()}</div>
+      <div id="main">
+        <Suspense fallback={<div className="screen-content" style={{ padding: 24, color: 'var(--text3)' }}>Loading…</div>}>
+          {render()}
+        </Suspense>
+      </div>
     </div>
   );
 }

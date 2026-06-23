@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { localDateStr } from '../lib/util';
+import { isAgentTask } from '../lib/tasks';
 import { supabase } from '../lib/supabase';
 
 
@@ -295,8 +296,13 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
   const myRole = workspaceMembers.find((m) => m.user_id === session?.user?.id)?.role;
   const isAdmin = myRole === 'admin';
 
-  const total = data.work_items.length;
-  const completed = data.work_items.filter((w) => w.done).length;
+  // Count the user's own items (exclude agent-owned tasks) so the stats match
+  // what's shown across the app rather than inflating with Kobe/Ace rows.
+  const userItems = data.work_items.filter((w) => !isAgentTask(w));
+  const total = userItems.length;
+  const completed = userItems.filter((w) => w.done).length;
+  const peopleCount = data.people.filter((p) => !p.type || p.type === 'person').length;
+  const notesCount = data.notes.filter((n) => !(n.folder || '').startsWith('__kobe')).length;
 
   const totalRecords = data.people.length + data.work_items.length + data.notes.length +
     data.projects.length + data.decisions.length + data.activity.length;
@@ -362,8 +368,8 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
           <div className="settings-row"><div className="settings-row-label">Total items</div><strong>{total}</strong></div>
           <div className="settings-row"><div className="settings-row-label">Completed</div><strong>{completed}</strong></div>
           <div className="settings-row"><div className="settings-row-label">Projects</div><strong>{data.projects.length}</strong></div>
-          <div className="settings-row"><div className="settings-row-label">People</div><strong>{data.people.length}</strong></div>
-          <div className="settings-row"><div className="settings-row-label">Notes &amp; meetings</div><strong>{data.notes.length}</strong></div>
+          <div className="settings-row"><div className="settings-row-label">People</div><strong>{peopleCount}</strong></div>
+          <div className="settings-row"><div className="settings-row-label">Notes &amp; meetings</div><strong>{notesCount}</strong></div>
         </div>
 
         <p className="card-meta" style={{ textAlign: 'center', color: 'var(--text3)', marginTop: 20 }}>Cadence — Executive Operating System</p>

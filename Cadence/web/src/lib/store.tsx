@@ -387,13 +387,29 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
 
   const createInvite = async (role: 'admin' | 'editor' | 'viewer'): Promise<string> => {
     if (!workspace?.id) throw new Error('No workspace');
+    const link = (id: string) => window.location.origin + window.location.pathname + '?invite=' + id;
+
+    // Reuse an existing unexpired, unaccepted invite for this role rather than
+    // minting a fresh token (and orphan row) every time the panel is opened.
+    const { data: existing } = await supabase
+      .from('workspace_invites')
+      .select('id')
+      .eq('workspace_id', workspace.id)
+      .eq('role', role)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing?.id) return link(existing.id);
+
     const { data: row, error } = await supabase
       .from('workspace_invites')
       .insert({ workspace_id: workspace.id, invited_by: session!.user.id, role })
       .select('id')
       .single();
     if (error || !row) { setSyncError(error?.message || 'Could not create invite'); throw error; }
-    return window.location.origin + window.location.pathname + '?invite=' + row.id;
+    return link(row.id);
   };
 
   const removeWorkspaceMember = async (userId: string): Promise<void> => {

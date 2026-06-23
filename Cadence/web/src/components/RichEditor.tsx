@@ -10,6 +10,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import { sanitizeHtml } from '../lib/sanitize';
 
 interface Props {
   content: string;
@@ -124,6 +125,9 @@ export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typ
     onUpdate: ({ editor }) => onChange?.(editor.getHTML()),
     onBlur: ({ editor }) => onBlur?.(editor.getHTML()),
     editorProps: {
+      // Strip scripts / event handlers from pasted HTML before it enters (and
+      // later persists from) the document.
+      transformPastedHTML: (html) => sanitizeHtml(html),
       handlePaste(view, event) {
         const items = event.clipboardData?.items;
         if (!items) return false;

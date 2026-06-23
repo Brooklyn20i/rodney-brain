@@ -6,6 +6,13 @@ import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
+import { isUserTask, isAgentTask } from '../lib/tasks';
+
+// A work item belongs to a person if it's their primary person or links to them
+// via related_entities. Used identically by the list rail and the detail panel
+// so their "action items" counts always agree.
+const isPersonLinked = (w: WorkItem, id: string) =>
+  w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -44,27 +51,28 @@ function PersonModal({ existing, onClose, onDelete, groups }: { existing?: Perso
       else { const created = await insert('people', patch); personId = (created as any)?.id; }
 
       if (personId) {
-        const folder = mtgFolder(personId);
-        const today = todayStr();
-        const upcomingNote = data.notes
-          .filter((n) => { const d = dates[n.id]; return n.folder === folder && !!d && d >= today; })
-          .sort((a, b) => (dates[a.id] || '').localeCompare(dates[b.id] || ''))[0];
+        try {
+          const folder = mtgFolder(personId);
+          const today = todayStr();
+          const upcomingNote = data.notes
+            .filter((n) => { const d = dates[n.id]; return n.folder === folder && !!d && d >= today; })
+            .sort((a, b) => (dates[a.id] || '').localeCompare(dates[b.id] || ''))[0];
 
-        if (nextMeeting) {
-          if (upcomingNote) {
-            await setMeetingDate(upcomingNote.id, nextMeeting);
-          } else {
-            const noteTitle = `1:1 · ${name.trim()} · ${fmtDMY(nextMeeting)}`;
-            let n: Note;
-            try { n = await insert('notes', { title: noteTitle, body: '', folder } as Partial<Note>); }
-            catch (e: any) {
-              if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title: noteTitle, body: '' } as Partial<Note>);
-              else throw e;
+          if (nextMeeting) {
+            if (upcomingNote) {
+              await setMeetingDate(upcomingNote.id, nextMeeting);
+            } else {
+              const noteTitle = `1:1 · ${name.trim()} · ${fmtDMY(nextMeeting)}`;
+              const n = await insert('notes', { title: noteTitle, body: '', folder } as Partial<Note>);
+              await setMeetingDate(n.id, nextMeeting);
             }
-            await setMeetingDate(n.id, nextMeeting);
+          } else if (upcomingNote) {
+            await setMeetingDate(upcomingNote.id, null);
           }
-        } else if (upcomingNote) {
-          try { await setMeetingDate(upcomingNote.id, null); } catch { /* best-effort */ }
+        } catch {
+          // The person saved fine; only the 1:1 date didn't. Tell the user so it
+          // isn't silently dropped, but don't block the rest of the save.
+          alert('Saved, but the next 1:1 date could not be set — please try again from the meeting.');
         }
       }
 
@@ -303,10 +311,7 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [draft, setDraft] = useState('');
 
-  const mine = data.work_items.filter((w) =>
-    w.person_id === person.id ||
-    (w.related_entities || []).some((re) => re.type === 'person' && re.id === person.id)
-  );
+  const mine = data.work_items.filter((w) => !isAgentTask(w) && isPersonLinked(w, person.id));
   const open = mine.filter((w) => !w.done).sort((a, b) => priorityScore(b) - priorityScore(a));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
@@ -316,12 +321,14 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const quickAdd = async () => {
     const title = draft.trim();
     if (!title) return;
-    setDraft('');
-    await insert('work_items', {
-      title, type: 'followUp', priority: 'medium', person_id: person.id,
-      notes: '', inboxed: false, source: 'you',
-    } as Partial<WorkItem>);
-    logActivity('add_item', title);
+    try {
+      await insert('work_items', {
+        title, type: 'followUp', priority: 'medium', person_id: person.id,
+        notes: '', inboxed: false, source: 'you',
+      } as Partial<WorkItem>);
+      setDraft(''); // clear only after the save succeeds, so nothing is lost
+      logActivity('add_item', title);
+    } catch { /* error surfaced via syncError; keep the draft for retry */ }
   };
 
   return (
@@ -447,7 +454,7 @@ export function People({ onMenu }: { onMenu?: () => void }) {
                   <div key={groupName}>
                     <div className="people-group-hdr">{groupName}</div>
                     {gPeople.map((p, idx) => {
-                      const openCount = data.work_items.filter(w => w.person_id === p.id && !w.done).length;
+                      const openCount = data.work_items.filter((w) => isUserTask(w) && isPersonLinked(w, p.id)).length;
                       const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
                       const pMeeting = getNextMeeting(p.id, data.notes, dates);
                       return (
