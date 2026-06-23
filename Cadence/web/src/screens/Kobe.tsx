@@ -3,9 +3,12 @@ import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import type { WorkItem } from '../lib/types';
-import { fmtDM } from '../lib/util';
+import { fmtDM, fmtDMY } from '../lib/util';
 
-type Tab = 'for_kobe' | 'brief' | 'from_kobe';
+type Tab = 'for_kobe' | 'brief' | 'from_kobe' | 'activity';
+
+const fmtAction = (s: string) =>
+  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function Kobe({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
@@ -34,6 +37,11 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
         .filter((w) => w.source === 'agent:kobe' && !w.done && !w.deleted_at)
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
     [data.work_items],
+  );
+
+  const kobeActivity = useMemo(
+    () => data.activity.filter((a) => a.actor.startsWith('agent:')),
+    [data.activity],
   );
 
   const latestBrief = kobeNotes[0] ?? null;
@@ -70,6 +78,9 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
           <button className={`kobe-tab${tab === 'from_kobe' ? ' active' : ''}`} onClick={() => setTab('from_kobe')}>
             From Kobe
             {kobeTasks.length > 0 && <span className="kobe-tab-count">{kobeTasks.length}</span>}
+          </button>
+          <button className={`kobe-tab${tab === 'activity' ? ' active' : ''}`} onClick={() => setTab('activity')}>
+            Activity Log
           </button>
         </div>
 
@@ -121,6 +132,34 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                   </div>
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── Activity Log ── */}
+        {tab === 'activity' && (
+          <div className="kobe-panel">
+            {kobeActivity.length === 0 ? (
+              <div className="empty-state">
+                <div className="icon">📋</div>
+                <p>No activity yet</p>
+                <small>Actions Kobe takes in Cadence will appear here.</small>
+              </div>
+            ) : (
+              <div className="kobe-activity-list">
+                {kobeActivity.map((a) => (
+                  <div key={a.id} className="kobe-activity-row">
+                    <div className="kobe-activity-dot" />
+                    <div className="kobe-activity-body">
+                      <div className="kobe-activity-action">{fmtAction(a.action)}</div>
+                      {a.detail && <div className="kobe-activity-detail">{a.detail}</div>}
+                    </div>
+                    <div className="kobe-activity-time" title={a.created_at}>
+                      {fmtDMY(a.created_at.slice(0, 10))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
