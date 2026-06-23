@@ -129,6 +129,27 @@ export interface Activity {
   actor: string; action: string; detail: string; created_at: string;
 }
 
+export type MessageSenderType = 'user' | 'agent' | 'system';
+export type MessageRecipientType = 'user' | 'agent' | 'workspace';
+export type MessageStatus = 'unread' | 'processing' | 'processed' | 'failed';
+
+export interface AgentMessage {
+  id: string; owner_id: string;
+  sender_type: MessageSenderType;
+  sender_id: string | null;
+  recipient_type: MessageRecipientType;
+  recipient_key: string | null;
+  body: string;
+  status: MessageStatus;
+  linked_work_item_id: string | null;
+  linked_project_id: string | null;
+  linked_person_id: string | null;
+  linked_note_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string; updated_at: string;
+  processed_at: string | null; deleted_at: string | null;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -175,16 +196,17 @@ export interface CadenceData {
   project_phases: ProjectPhase[];
   raid_items: RaidItem[];
   stakeholders: Stakeholder[];
+  agent_messages: AgentMessage[];
 }
 
 export const TABLES: (keyof CadenceData)[] = [
   'projects', 'milestones', 'project_updates', 'people', 'talking_points',
   'work_items', 'comments', 'decisions', 'notes', 'outbox', 'links', 'activity',
-  'project_phases', 'raid_items', 'stakeholders',
+  'project_phases', 'raid_items', 'stakeholders', 'agent_messages',
 ];
 
 export const emptyData = (): CadenceData => ({
   projects: [], milestones: [], project_updates: [], people: [], talking_points: [],
   work_items: [], comments: [], decisions: [], notes: [], outbox: [], links: [], activity: [],
-  project_phases: [], raid_items: [], stakeholders: [],
+  project_phases: [], raid_items: [], stakeholders: [], agent_messages: [],
 });

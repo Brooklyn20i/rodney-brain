@@ -19,10 +19,10 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
   // Chat messages — both sides of the conversation, sorted by time
   const chatMessages = useMemo(
     () =>
-      data.notes
-        .filter((n) => n.folder === '__kobe_inbox__' || n.folder === '__kobe_reply__')
+      (data.agent_messages || [])
+        .filter((m) => !m.deleted_at)
         .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [data.notes],
+    [data.agent_messages],
   );
 
   // Kobe briefings
@@ -54,10 +54,12 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     setSending(true);
     setMessage('');
     try {
-      await insert('notes', {
-        title: new Date().toISOString(),
+      await insert('agent_messages', {
+        sender_type: 'user',
+        recipient_type: 'agent',
+        recipient_key: 'agent:kobe',
         body: text,
-        folder: '__kobe_inbox__',
+        status: 'unread',
       } as any);
     } finally {
       setSending(false);
@@ -99,7 +101,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                 </div>
               ) : (
                 chatMessages.map((m) => {
-                  const isKobe = m.folder === '__kobe_reply__';
+                  const isKobe = m.sender_type === 'agent' || m.sender_type === 'system';
                   return (
                     <div key={m.id} className={`kobe-bubble-row${isKobe ? ' kobe-bubble-row--kobe' : ''}`}>
                       {isKobe && <div className="kobe-bubble-avatar">⚡</div>}

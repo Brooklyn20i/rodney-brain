@@ -97,6 +97,10 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       const q = workspaceId ? (base as any).eq('workspace_id', workspaceId) : base;
       const r = t === 'activity'
         ? await q.order('created_at', { ascending: false }).limit(200)
+        : t === 'agent_messages'
+        // agent_messages is owner-scoped via RLS, not workspace-scoped; skip workspace filter
+        // so Kobe's replies appear regardless of whether workspace_id is set on the row.
+        ? await base.is('deleted_at', null).order('created_at', { ascending: true }).limit(200)
         : await q.is('deleted_at', null).order('created_at', { ascending: true });
       return { t, r };
     }));
