@@ -554,31 +554,64 @@ def write_kobe_note(title: str, content: str, folder: str = "__kobe__") -> dict:
 
 
 @mcp.tool()
-def check_inbox(since_iso: str | None = None) -> list[dict]:
-    """Read messages Rodney has sent to Kobe from within Cadence.
-    Pass since_iso (ISO 8601 timestamp) to fetch only messages newer than your last check.
-    Poll this every ~30 seconds to pick up new messages promptly."""
+def list_agent_messages(status: str | None = None, since_iso: str | None = None, limit: int = 50) -> list[dict]:
+    """Read messages from the Cadence in-app chat.
+    status: filter by 'unread', 'processing', 'processed', 'failed' — omit for all.
+    since_iso: ISO 8601 timestamp — returns only messages created after this time.
+    Messages where sender_type='user' are from Rodney; sender_type='agent' are Kobe's own replies.
+    Poll with status='unread' on a ~30s loop to pick up new messages promptly."""
     try:
-        q = "select=id,title,body,created_at&folder=eq.__kobe_inbox__&order=created_at.asc"
+        q = "select=*&deleted_at=is.null&order=created_at.asc"
+        if status:
+            q += f"&status=eq.{status}"
         if since_iso:
             q += f"&created_at=gt.{since_iso}"
-        return bridge.select("notes", q, limit=20)
+        return bridge.select("agent_messages", q, limit=limit)
     except Exception as e:
         return [{"error": str(e)}]
 
 
 @mcp.tool()
-def reply_to_chat(response_text: str) -> dict:
-    """Write a reply into the Cadence chat panel. Rodney will see it instantly via Realtime.
-    Use markdown for formatting — Cadence renders it as rich text."""
+def mark_agent_message_processed(message_id: str) -> dict:
+    """Mark a user message as processed after Kobe has replied.
+    Call this after send_agent_message() so the message doesn't get re-processed on the next poll."""
     try:
-        row = {
+        from datetime import datetime, timezone
+        return bridge.patch_row("agent_messages", message_id, {
+            "status": "processed",
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def send_agent_message(
+    body: str,
+    linked_work_item_id: str | None = None,
+    linked_project_id: str | None = None,
+    linked_person_id: str | None = None,
+) -> dict:
+    """Send a reply from Kobe to Rodney in the Cadence in-app chat.
+    body: the response text — markdown supported, rendered as rich HTML in the chat panel.
+    Rodney sees the reply instantly via Supabase Realtime (no page refresh needed).
+    Optionally link to a work item, project, or person to add context chips below the message."""
+    try:
+        row: dict = {
             "owner_id": bridge.discover_owner_id(),
-            "title": "Kobe",
-            "body": response_text,
-            "folder": "__kobe_reply__",
+            "sender_type": "agent",
+            "recipient_type": "user",
+            "recipient_key": "user",
+            "body": body,
+            "status": "processed",
         }
-        res = bridge.insert("notes", row)
+        if linked_work_item_id:
+            row["linked_work_item_id"] = linked_work_item_id
+        if linked_project_id:
+            row["linked_project_id"] = linked_project_id
+        if linked_person_id:
+            row["linked_person_id"] = linked_person_id
+        res = bridge.insert("agent_messages", row)
         return res[0] if isinstance(res, list) and res else res
     except Exception as e:
         return {"error": str(e)}
