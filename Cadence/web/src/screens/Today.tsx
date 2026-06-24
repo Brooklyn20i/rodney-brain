@@ -1,148 +1,249 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import { priorityScore, isOverdue, isDueToday, autoColor, todayStr, addDaysStr, fmtWeekDM, fmtHeaderDate } from '../lib/util';
-import type { WorkItem } from '../lib/types';
-import { TypeTag, PriTag, Due, ScreenHeader, TaskRow } from '../components/bits';
+import { autoColor, fmtHeaderDate, fmtWeekDM, todayStr, addDaysStr, fmtDM } from '../lib/util';
+import type { WorkItem, Project, Activity } from '../lib/types';
+import { PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isUserTask } from '../lib/tasks';
+import {
+  getNeedsRodney, getHotThisWeek, getBlockedRisky,
+  getKobeHandling, getRecentlyChanged,
+} from '../lib/selectors';
 
-const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+
 const fmtMtgDay = (iso: string) => {
   if (iso === todayStr()) return 'Today';
   if (iso === addDaysStr(1)) return 'Tomorrow';
   return fmtWeekDM(iso);
 };
 
-function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
+// ── Cockpit section wrapper ───────────────────────────────────────────────────
+function CockpitSection({ label, count, accent, empty, children }: {
+  label: string; count: number; accent: string; empty: string; children: React.ReactNode;
+}) {
   return (
-    <>
-      <div className="section-header">
-        <h2>{title}</h2>
-        <span className="section-count" style={{ background: color }}>{count}</span>
+    <div className="cockpit-section">
+      <div className="cockpit-section-hdr">
+        <span className="cockpit-section-label">{label}</span>
+        <span className="cockpit-section-count" style={{ background: accent }}>{count}</span>
       </div>
-      {children}
-    </>
+      {count === 0
+        ? <div className="cockpit-empty">{empty}</div>
+        : <div className="cockpit-section-body">{children}</div>}
+    </div>
   );
 }
 
+// ── Compact work item row for the cockpit ─────────────────────────────────────
+function CockpitRow({ w, people, projects, onEdit }: {
+  w: WorkItem; people: { id: string; name: string }[];
+  projects: Project[]; onEdit: (w: WorkItem) => void;
+}) {
+  const proj = projects.find((p) => p.id === w.project_id);
+  const person = people.find((p) => p.id === w.person_id);
+  return (
+    <button className="cockpit-row" onClick={() => onEdit(w)}>
+      <PriTag priority={w.priority} />
+      <div className="cockpit-row-title">{w.title}</div>
+      <div className="cockpit-row-meta">
+        {proj && <span className="cockpit-meta-chip cockpit-chip-proj">▤ {proj.name}</span>}
+        {person && <span className="cockpit-meta-chip cockpit-chip-person">👤 {person.name.split(' ')[0]}</span>}
+        <Due date={w.due_date} />
+      </div>
+    </button>
+  );
+}
+
+// ── Blocked / risky project chip ──────────────────────────────────────────────
+function RiskyProjectChip({ project, onClick }: { project: Project; onClick?: () => void }) {
+  const healthColour: Record<string, string> = { green: 'var(--green)', amber: 'var(--orange)', red: 'var(--red)' };
+  return (
+    <div className="cockpit-risky-proj" onClick={onClick}>
+      <span className="cockpit-health-dot" style={{ background: healthColour[project.health] || 'var(--text3)' }} />
+      <span className="cockpit-risky-name">{project.name}</span>
+      {project.next_action && <span className="cockpit-risky-next">→ {project.next_action}</span>}
+    </div>
+  );
+}
+
+// ── Activity row ──────────────────────────────────────────────────────────────
+const ACTION_LABEL: Record<string, string> = {
+  add_item: 'Added task', edit_item: 'Edited task', push_meeting_tasks: 'Pushed tasks',
+  project_update: 'Project update', capture_extract: 'Captured items',
+  add_item_kobe: 'Kobe added task', meeting_note: 'Meeting note',
+};
+
+function ActivityRow({ a }: { a: Activity }) {
+  const label = ACTION_LABEL[a.action] || a.action.replace(/_/g, ' ');
+  const time = a.created_at
+    ? new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+  const day = a.created_at ? a.created_at.slice(0, 10) : '';
+  const isToday = day === todayStr();
+  return (
+    <div className="cockpit-activity-row">
+      <span className="cockpit-activity-time">{isToday ? time : fmtDM(day)}</span>
+      <span className="cockpit-activity-label">{label}</span>
+      {a.detail && <span className="cockpit-activity-detail">{a.detail.slice(0, 60)}{a.detail.length > 60 ? '…' : ''}</span>}
+    </div>
+  );
+}
+
+// ── Project pulse (compact amber/red summary) ─────────────────────────────────
+function ProjectPulse({ projects }: { projects: Project[] }) {
+  const active = projects.filter((p) => p.status === 'active' && !p.deleted_at);
+  const red = active.filter((p) => p.health === 'red');
+  const amber = active.filter((p) => p.health === 'amber');
+  const green = active.filter((p) => p.health === 'green');
+  if (!active.length) return null;
+
+  return (
+    <div className="cockpit-pulse">
+      <span className="cockpit-pulse-label">Portfolio</span>
+      {red.length > 0 && <span className="cockpit-pulse-chip" style={{ background: 'var(--red-bg)', color: 'var(--red)' }}>🔴 {red.length} off track</span>}
+      {amber.length > 0 && <span className="cockpit-pulse-chip" style={{ background: 'var(--orange-bg)', color: 'var(--orange)' }}>🟠 {amber.length} at risk</span>}
+      {green.length > 0 && <span className="cockpit-pulse-chip" style={{ background: 'var(--green-bg)', color: 'var(--green)' }}>🟢 {green.length} on track</span>}
+    </div>
+  );
+}
+
+// ── Main Control screen ───────────────────────────────────────────────────────
 export function Today({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const view = useMemo(() => {
-    const active = data.work_items.filter(isUserTask);
-    const scored = [...active].sort((a, b) => priorityScore(b) - priorityScore(a));
-    const todayDate = todayStr();
-    const nextWeekStr = addDaysStr(7);
-    // Partition so a task lands in exactly one of the lists below: waitingFor
-    // items belong to "Waiting", everything else can be Overdue/Due Today.
-    // (Top 3 is an intentional highlights overlay and may repeat.)
-    return {
-      focus: scored[0],
-      top3: scored.slice(0, 3),
-      overdue: active.filter((w) => w.type !== 'waitingFor' && isOverdue(w.due_date)),
-      waiting: active.filter((w) => w.type === 'waitingFor'),
-      dueToday: active.filter((w) => isDueToday(w.due_date) && w.type !== 'waitingFor'),
-      decisions: active.filter((w) => w.type === 'decision'),
-      oneOnOnes: data.people
-        .filter((p) => !p.type || p.type === 'person')
-        .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
-        .filter(({ mtg }) => mtg && mtg >= todayDate && mtg <= nextWeekStr)
-        .map(({ p, mtg }) => ({
-          person: p,
-          meeting: mtg as string,
-          openTopics: active.filter((w) => w.person_id === p.id).length,
-          isToday: mtg === todayDate,
-        }))
-        .sort((a, b) => a.meeting.localeCompare(b.meeting)),
-    };
-  }, [data, dates]);
+  const people = useMemo(() =>
+    data.people.filter((p) => !p.type || p.type === 'person'),
+    [data.people]
+  );
 
-  const dateLabel = fmtHeaderDate(todayStr());
+  const view = useMemo(() => {
+    const items = data.work_items;
+    const today = todayStr();
+    const next7 = addDaysStr(7);
+
+    const needsRodney = getNeedsRodney(items);
+    const hotThisWeek = getHotThisWeek(items);
+    const blockedItems = getBlockedRisky(items);
+    const blockedProjects = data.projects.filter(
+      (p) => p.status === 'active' && !p.deleted_at && (p.health === 'amber' || p.health === 'red')
+    );
+    const kobeHandling = getKobeHandling(items);
+    const recentActivity = getRecentlyChanged(data.activity);
+
+    const oneOnOnes = people
+      .map((p) => ({ p, mtg: getNextMeeting(p.id, data.notes, dates) }))
+      .filter(({ mtg }) => mtg && mtg >= today && mtg <= next7)
+      .map(({ p, mtg }) => ({
+        person: p,
+        meeting: mtg as string,
+        openTopics: items.filter((w) => isUserTask(w) && w.person_id === p.id).length,
+        isToday: mtg === today,
+      }))
+      .sort((a, b) => a.meeting.localeCompare(b.meeting));
+
+    return { needsRodney, hotThisWeek, blockedItems, blockedProjects, kobeHandling, recentActivity, oneOnOnes };
+  }, [data, dates, people]);
 
   return (
     <>
-      <ScreenHeader title="Today" subtitle={dateLabel} onMenu={onMenu}>
+      <ScreenHeader title="Control" subtitle={fmtHeaderDate(todayStr())} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </ScreenHeader>
+
       <div className="screen-content">
-        <div id="today-focus-block">
-          <div className="focus-icon">🧠</div>
-          <div className="focus-text">
-            <small>Suggested Focus</small>
-            <p>{view.focus ? view.focus.title : 'Add items to see your top priority here'}</p>
-          </div>
-        </div>
 
-        <Section title="Top 3 Priorities" count={view.top3.length} color="var(--accent)">
-          {view.top3.length ? (
-            <div className="priority-cards">
-              {view.top3.map((w) => {
-                const proj = data.projects.find((p) => p.id === w.project_id);
-                return (
-                  <div className="priority-card" key={w.id} onClick={() => setEditing(w)}>
-                    <div className="card-tags"><TypeTag type={w.type} /><PriTag priority={w.priority} /></div>
-                    <div className="card-title">{w.title}</div>
-                    <div className="card-due">{proj ? proj.name + ' · ' : ''}<Due date={w.due_date} /></div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : <div className="empty-state"><div className="icon">✓</div><p>All clear!</p></div>}
-        </Section>
+        {/* Portfolio pulse bar */}
+        <ProjectPulse projects={data.projects} />
 
+        {/* 1:1s This Week — time-sensitive, show first */}
         {view.oneOnOnes.length > 0 && (
-          <Section title="1:1s This Week" count={view.oneOnOnes.length} color="var(--green)">
-            {view.oneOnOnes.map(({ person, meeting, openTopics, isToday }) => (
-              <div key={person.id} className="card card-compact">
-                <div className="card-row">
-                  <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 30, height: 30, fontSize: 11, lineHeight: '30px', flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+          <CockpitSection
+            label="1:1s This Week" count={view.oneOnOnes.length}
+            accent="var(--green)" empty="">
+            <div className="cockpit-1on1s">
+              {view.oneOnOnes.map(({ person, meeting, openTopics, isToday }) => (
+                <div key={person.id} className="cockpit-1on1-card">
+                  <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 32, height: 32, fontSize: 12, flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
                     {initials(person.name)}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="card-title">{person.name}{person.role ? <span style={{ fontWeight: 400, color: 'var(--text2)', fontSize: 12, marginLeft: 6 }}>{person.role}</span> : ''}</div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{
-                        background: isToday ? 'var(--green-bg)' : 'var(--surface2)',
-                        color: isToday ? 'var(--green)' : 'var(--text2)',
-                        padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600
-                      }}>📅 {fmtMtgDay(meeting)}</span>
-                      {openTopics > 0 && <span className="tag tag-info">{openTopics} action item{openTopics !== 1 ? 's' : ''}</span>}
+                    <div className="cockpit-1on1-name">
+                      {person.name}
+                      {person.role && <span className="cockpit-1on1-role">{person.role}</span>}
+                    </div>
+                    <div className="cockpit-1on1-meta">
+                      <span className={`cockpit-meta-chip ${isToday ? 'cockpit-chip-today' : 'cockpit-chip-plain'}`}>
+                        📅 {fmtMtgDay(meeting)}
+                      </span>
+                      {openTopics > 0 && (
+                        <span className="cockpit-meta-chip cockpit-chip-plain">
+                          {openTopics} open action{openTopics !== 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </Section>
+              ))}
+            </div>
+          </CockpitSection>
         )}
 
-        <Section title="Overdue" count={view.overdue.length} color="var(--red)">
-          {view.overdue.length ? view.overdue.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
-            : <small style={{ color: 'var(--text3)' }}>None — great!</small>}
-        </Section>
+        {/* Needs Rodney */}
+        <CockpitSection
+          label="Needs Rodney" count={view.needsRodney.length}
+          accent="var(--orange)" empty="No decisions or approvals pending">
+          {view.needsRodney.map((w) => (
+            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+          ))}
+        </CockpitSection>
 
-        <Section title="Waiting on Others" count={view.waiting.length} color="var(--purple)">
-          {view.waiting.length ? view.waiting.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
-            : <small style={{ color: 'var(--text3)' }}>Nothing waiting</small>}
-        </Section>
+        {/* Hot This Week */}
+        <CockpitSection
+          label="Hot This Week" count={view.hotThisWeek.length}
+          accent="var(--accent)" empty="Nothing due in the next 7 days">
+          {view.hotThisWeek.map((w) => (
+            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+          ))}
+        </CockpitSection>
 
-        <Section title="Decisions Needed" count={view.decisions.length} color="var(--purple)">
-          {view.decisions.length ? view.decisions.map((d) => (
-            <div className="card card-compact" key={d.id} style={{ cursor: 'pointer' }} onClick={() => setEditing(d)}>
-              <div className="card-row"><span className="tag tag-decision">Decision</span>
-                <span className="card-title" style={{ flex: 1 }}>{d.title}</span></div>
-            </div>
-          )) : <small style={{ color: 'var(--text3)' }}>No pending decisions</small>}
-        </Section>
+        {/* Blocked / Risky */}
+        <CockpitSection
+          label="Blocked / Risky"
+          count={view.blockedItems.length + view.blockedProjects.length}
+          accent="var(--red)" empty="Nothing blocked or at risk">
+          {view.blockedProjects.map((p) => (
+            <RiskyProjectChip key={p.id} project={p} />
+          ))}
+          {view.blockedItems.map((w) => (
+            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+          ))}
+        </CockpitSection>
 
-        <Section title="Due Today" count={view.dueToday.length} color="var(--orange)">
-          {view.dueToday.length ? view.dueToday.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)
-            : <small style={{ color: 'var(--text3)' }}>Nothing else due today</small>}
-        </Section>
+        {/* Kobe Handling */}
+        <CockpitSection
+          label="Kobe Handling" count={view.kobeHandling.length}
+          accent="var(--purple)" empty="Nothing delegated to Kobe">
+          {view.kobeHandling.map((w) => (
+            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+          ))}
+        </CockpitSection>
+
+        {/* Recently Changed */}
+        <CockpitSection
+          label="Recently Changed" count={view.recentActivity.length}
+          accent="var(--text3)" empty="No recent activity">
+          {view.recentActivity.map((a) => (
+            <ActivityRow key={a.id} a={a} />
+          ))}
+        </CockpitSection>
+
       </div>
 
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
