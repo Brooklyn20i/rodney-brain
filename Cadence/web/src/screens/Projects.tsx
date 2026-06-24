@@ -11,6 +11,7 @@ import {
   STRATEGY_NOTE_TITLE, uid, emptyWinState,
 } from '../lib/strategy';
 import type { StrategyContent, WinState } from '../lib/strategy';
+import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason } from '../lib/selectors';
 
 const WIN_STATE_TITLE = '__win_state__';
 
@@ -194,45 +195,67 @@ function ScoreboardView({ strategy, winState, saveWinState }: { strategy: Strate
   );
 }
 
-// ── Project card ───────────────────────────────────────────────────────────
+// ── Project control card ────────────────────────────────────────────────────
 const HEALTH_COLOR: Record<Health, string> = { green: 'var(--green)', amber: 'var(--orange)', red: 'var(--red)' };
+const HEALTH_BG: Record<Health, string> = { green: 'var(--green-bg)', amber: 'var(--orange-bg)', red: 'var(--red-bg)' };
+const HEALTH_LABEL: Record<Health, string> = { green: 'On track', amber: 'At risk', red: 'Off track' };
 
 function ProjectCard({ project, onClick, strategy }: { project: Project; onClick: () => void; strategy: StrategyContent }) {
   const { data } = useCadence();
-  const updates = useMemo(() => data.project_updates.filter((u) => u.project_id === project.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at)), [data.project_updates, project.id]);
-  const openCount = useMemo(() => data.work_items.filter((w) => w.project_id === project.id && !w.done).length, [data.work_items, project.id]);
-  const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
-  const pct = milestones.length ? Math.round(milestones.filter((m) => m.done).length / milestones.length * 100) : 0;
-  const lastUpdate = updates[0] || null;
+  const topActions = useMemo(() => getProjectTopActions(project.id, data.work_items), [data.work_items, project.id]);
+  const totalOpen = useMemo(() => data.work_items.filter((w) => w.project_id === project.id && !w.done).length, [data.work_items, project.id]);
+  const healthReason = useMemo(() => inferHealthReason(project, data.project_updates, data.work_items), [project, data.project_updates, data.work_items]);
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
 
-  const daysSince = lastUpdate
-    ? Math.floor((Date.now() - new Date(lastUpdate.created_at).getTime()) / 86400000)
-    : null;
-  const stale = daysSince !== null && daysSince > 7;
-
   return (
-    <button className="proj-card" onClick={onClick}>
-      <div className="proj-card-stripe" style={{ background: HEALTH_COLOR[project.health] }} />
-      <div className="proj-card-body">
-        <div className="proj-card-row1">
-          <span className="proj-card-name">{project.name}</span>
-          {pillar && <span className="tag tag-decision" style={{ flexShrink: 0 }}>{pillar.name}</span>}
+    <button className="proj-ctrl-card" onClick={onClick}>
+      <div className="proj-ctrl-stripe" style={{ background: HEALTH_COLOR[project.health] }} />
+      <div className="proj-ctrl-body">
+        {/* Row 1: name + pillar badge */}
+        <div className="proj-ctrl-row1">
+          <span className="proj-ctrl-name">{project.name}</span>
+          {pillar && <span className="tag tag-decision" style={{ flexShrink: 0, fontSize: 10 }}>{pillar.name}</span>}
         </div>
-        {lastUpdate
-          ? <p className="proj-card-snippet">{lastUpdate.text}</p>
-          : <p className="proj-card-snippet proj-card-no-update">No status updates yet</p>}
-        <div className="proj-card-meta">
-          {daysSince !== null
-            ? <span className={stale ? 'proj-stale' : ''}>{daysSince === 0 ? 'Updated today' : `${daysSince}d ago`}{stale ? ' ⚠' : ''}</span>
-            : <span style={{ color: 'var(--text3)' }}>Never updated</span>}
-          {openCount > 0 && <span>{openCount} open</span>}
-          {milestones.length > 0 && <span>{pct}% done</span>}
-          {project.target_date && <span>{fmtDate(project.target_date)}</span>}
+
+        {/* Row 2: health pill + owner + target */}
+        <div className="proj-ctrl-row2">
+          <span className="proj-health-pill" style={{ background: HEALTH_BG[project.health], color: HEALTH_COLOR[project.health] }}>
+            {healthIcon(project.health)} {HEALTH_LABEL[project.health]}
+            {project.health !== 'green' && healthReason !== HEALTH_LABEL[project.health] && (
+              <span className="proj-health-reason"> · {healthReason}</span>
+            )}
+          </span>
+          {project.owner && <span className="proj-ctrl-owner">👤 {project.owner}</span>}
+          {project.target_date && (
+            <span className={`proj-ctrl-date${isOverdue(project.target_date) ? ' proj-ctrl-overdue' : ''}`}>
+              📅 {fmtDate(project.target_date)}
+            </span>
+          )}
         </div>
+
+        {/* Next action */}
         {project.next_action && (
-          <div className="proj-card-next">→ {project.next_action}</div>
+          <div className="proj-ctrl-next">→ {project.next_action}</div>
+        )}
+
+        {/* Top 3 actions */}
+        {topActions.length > 0 && (
+          <div className="proj-ctrl-actions">
+            {topActions.map((w) => (
+              <div key={w.id} className="proj-ctrl-action-row">
+                <span className={`proj-ctrl-action-dot pri-${w.priority}`} />
+                <span className="proj-ctrl-action-title">{w.title}</span>
+                {w.due_date && (
+                  <span className={`proj-ctrl-action-due${isOverdue(w.due_date) ? ' overdue' : ''}`}>
+                    {fmtDate(w.due_date)}
+                  </span>
+                )}
+              </div>
+            ))}
+            {totalOpen > 3 && (
+              <span className="proj-ctrl-view-all">+ {totalOpen - 3} more →</span>
+            )}
+          </div>
         )}
       </div>
     </button>
@@ -784,22 +807,27 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
   const priorities = useMemo(() => priorityList(strategy), [strategy]);
 
   const [view, setView] = useState<'list' | 'scoreboard' | 'detail'>('list');
-  const [groupBy, setGroupBy] = useState<'priority' | 'status'>(() => priorities.length ? 'priority' : 'status');
+  const [groupBy, setGroupBy] = useState<'portfolio' | 'priority' | 'status'>('portfolio');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [editStrategy, setEditStrategy] = useState(false);
 
   useEffect(() => {
-    if (groupBy === 'priority' && !priorities.length) setGroupBy('status');
+    if (groupBy === 'priority' && !priorities.length) setGroupBy('portfolio');
   }, [priorities.length, groupBy]);
 
   const selected = selectedId ? (data.projects.find((p) => p.id === selectedId) || null) : null;
   const byName = (a: Project, b: Project) => a.name.localeCompare(b.name);
 
   const groups = useMemo(() => {
-    const all = [...data.projects];
+    if (groupBy === 'portfolio') {
+      return groupProjectsByPortfolio(data.projects).map((g) => ({
+        key: g.label, label: g.label, items: g.projects.sort(byName),
+      }));
+    }
     if (groupBy === 'priority' && priorities.length) {
+      const all = [...data.projects];
       const out = priorities.map((pr) => ({
         key: pr.id, label: pr.name, items: all.filter((p) => p.pillar_id === pr.id).sort(byName),
       }));
@@ -808,9 +836,9 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
       return out.filter((g) => g.items.length);
     }
     return STATUSES.map((s) => ({
-      key: s, label: STATUS_LABEL[s], items: all.filter((p) => p.status === s).sort(byName),
+      key: s, label: STATUS_LABEL[s], items: [...data.projects].filter((p) => p.status === s).sort(byName),
     })).filter((g) => g.items.length);
-  }, [data.projects, groupBy, priorities]);
+  }, [data.projects, groupBy, priorities]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Full-screen detail view — replaces the list entirely (push navigation)
   if (view === 'detail' && selected) {
@@ -840,7 +868,8 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {view === 'list' && (
               <div className="seg">
-                <button className={groupBy === 'priority' ? 'on' : ''} onClick={() => setGroupBy('priority')}>Priority</button>
+                <button className={groupBy === 'portfolio' ? 'on' : ''} onClick={() => setGroupBy('portfolio')}>Portfolio</button>
+                {priorities.length > 0 && <button className={groupBy === 'priority' ? 'on' : ''} onClick={() => setGroupBy('priority')}>Priority</button>}
                 <button className={groupBy === 'status' ? 'on' : ''} onClick={() => setGroupBy('status')}>Status</button>
               </div>
             )}
@@ -855,11 +884,6 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
               <ScoreboardView strategy={strategy} winState={winState} saveWinState={saveWinState} />
             ) : data.projects.length === 0 ? (
               <div className="proj-empty"><div className="icon">▤</div><p>No projects yet</p></div>
-            ) : groupBy === 'priority' && !priorities.length ? (
-              <div className="proj-empty">
-                <p>Add priorities to group projects by theme.</p>
-                <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setEditStrategy(true)}>Set up strategy</button>
-              </div>
             ) : (
               groups.map((g) => (
                 <React.Fragment key={g.key}>
