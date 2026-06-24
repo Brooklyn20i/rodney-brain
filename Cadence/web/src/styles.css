@@ -673,9 +673,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .mtg-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .mtg-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; text-align: left; cursor: pointer; width: 100%; font-family: inherit; transition: border-color 0.12s, box-shadow 0.12s; }
 .mtg-card:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--blue-bg); }
-.mtg-card-date { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+.mtg-card-date { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .mtg-card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .mtg-card-preview { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mtg-card-next { border-color: var(--accent); background: var(--blue-bg); }
+.mtg-card-next:hover { box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+.mtg-next-badge { font-size: 9px; font-weight: 800; letter-spacing: 0.8px; color: #fff; background: var(--accent); border-radius: 4px; padding: 1px 5px; text-transform: uppercase; flex-shrink: 0; }
 
 /* Meeting note full-screen overlay — always edge-to-edge for maximum writing room */
 .mtg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: stretch; justify-content: center; padding: 0; }

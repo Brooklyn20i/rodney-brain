@@ -36,6 +36,29 @@ export function readMeetingDates(
   return {};
 }
 
+// Returns the note ID of the nearest upcoming meeting for a person, i.e. the
+// note whose meeting date is the smallest date >= today. This is the correct
+// target for task routing — tasks/agenda items meant for "the next 1:1" should
+// go here, not into the most recently created or most recently dated note.
+export function getUpcomingNoteId(
+  personId: string,
+  allNotes: Note[],
+  dateMap: MeetingDates,
+): string | null {
+  const today = todayStr();
+  const folder = `__mtg__${personId}`;
+  let best: { date: string; id: string } | null = null;
+
+  for (const note of allNotes) {
+    if (note.folder !== folder) continue;
+    const d = dateMap[note.id];
+    if (!d || d < today) continue;
+    if (!best || d < best.date) best = { date: d, id: note.id };
+  }
+
+  return best?.id ?? null;
+}
+
 // Returns the earliest upcoming date for a person, considering only meeting
 // notes in that person's folder. Returns null when nothing is upcoming.
 export function getNextMeeting(

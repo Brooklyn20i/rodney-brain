@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
@@ -153,11 +153,29 @@ function MeetingNotes({ person }: { person: Person }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(person.id);
-  const meetings = useMemo(() =>
-    data.notes.filter((n) => n.folder === folder)
-      .sort((a, b) => (dates[b.id] || b.created_at).localeCompare(dates[a.id] || a.created_at)),
-    [data.notes, folder, dates]
-  );
+  const today = todayStr();
+
+  const meetings = useMemo(() => {
+    const dateOf = (n: Note) => (dates[n.id] || n.created_at).slice(0, 10);
+    return data.notes.filter((n) => n.folder === folder)
+      .sort((a, b) => {
+        const da = dateOf(a), db = dateOf(b);
+        const af = da >= today, bf = db >= today;
+        if (af && !bf) return -1;   // upcoming before past
+        if (!af && bf) return 1;
+        if (af && bf) return da.localeCompare(db);  // nearest upcoming first
+        return db.localeCompare(da); // most recent past first
+      });
+  }, [data.notes, folder, dates]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-open the nearest upcoming 1:1 when this person is first shown.
+  useEffect(() => {
+    if (openId) return;
+    const upcoming = meetings.find((n) => (dates[n.id] || n.created_at).slice(0, 10) >= today);
+    if (upcoming) setOpenId(upcoming.id);
+  }, [person.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nextId = meetings.find((n) => (dates[n.id] || n.created_at).slice(0, 10) >= today)?.id;
 
   const newMeeting = async () => {
     const todayDate = todayStr();
@@ -192,9 +210,13 @@ function MeetingNotes({ person }: { person: Person }) {
             const preview = n.body.startsWith('{')
               ? (() => { try { const p = JSON.parse(n.body); return (p.agenda?.[0]?.title || '') + (p.notes ? ' · ' + stripHtml(p.notes) : ''); } catch { return ''; } })()
               : stripHtml(n.body);
+            const isNext = n.id === nextId;
             return (
-              <button key={n.id} className="mtg-card" onClick={() => setOpenId(n.id)}>
-                <div className="mtg-card-date">{fmtDM(dates[n.id] || n.created_at)}</div>
+              <button key={n.id} className={`mtg-card${isNext ? ' mtg-card-next' : ''}`} onClick={() => setOpenId(n.id)}>
+                <div className="mtg-card-date">
+                  {fmtDM(dates[n.id] || n.created_at)}
+                  {isNext && <span className="mtg-next-badge">NEXT</span>}
+                </div>
                 <div className="mtg-card-title">{n.title}</div>
                 <div className="mtg-card-preview">{preview.slice(0, 100) || 'Empty note'}</div>
               </button>

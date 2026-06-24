@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal } from '../components/bits';
@@ -291,16 +291,32 @@ function GroupMeetingNotes({ group }: { group: Person }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   const folder = mtgFolder(group.id);
-  // Sort newest-first by meeting day. Normalise to a YYYY-MM-DD key so an
-  // explicit date (10 chars) and a created_at timestamp (24 chars) compare
-  // correctly instead of the timestamp always sorting after the bare date.
-  const dayKey = (n: Note) => (dates[n.id] || n.created_at).slice(0, 10);
+  const today = todayStr();
+  const dateKey = (n: Note) => (dates[n.id] || n.created_at).slice(0, 10);
+
+  // Upcoming meetings (date ≥ today) sorted ascending — nearest first.
+  // Past meetings sorted descending — most recent first below upcoming.
   const meetings = useMemo(() =>
     data.notes.filter((n) => n.folder === folder)
-      .sort((a, b) => dayKey(b).localeCompare(dayKey(a))),
-    // dayKey closes over `dates`; listed below.
+      .sort((a, b) => {
+        const da = dateKey(a), db = dateKey(b);
+        const af = da >= today, bf = db >= today;
+        if (af && !bf) return -1;
+        if (!af && bf) return 1;
+        if (af && bf) return da.localeCompare(db);
+        return db.localeCompare(da);
+      }),
     [data.notes, folder, dates] // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Auto-open the nearest upcoming meeting when a group is first selected.
+  useEffect(() => {
+    if (openId) return;
+    const upcoming = meetings.find((n) => dateKey(n) >= today);
+    if (upcoming) setOpenId(upcoming.id);
+  }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nextId = meetings.find((n) => dateKey(n) >= today)?.id;
 
   const newMeeting = async () => {
     const todayDate = todayStr();
@@ -342,9 +358,13 @@ function GroupMeetingNotes({ group }: { group: Person }) {
             const preview = n.body.startsWith('{')
               ? (() => { try { const p = JSON.parse(n.body); return (p.agenda?.[0]?.title || '') + (p.notes ? ' · ' + stripHtml(p.notes) : ''); } catch { return ''; } })()
               : stripHtml(n.body);
+            const isNext = n.id === nextId;
             return (
-              <button key={n.id} className="mtg-card" onClick={() => setOpenId(n.id)}>
-                <div className="mtg-card-date">{fmtDM(dates[n.id] || n.created_at)}</div>
+              <button key={n.id} className={`mtg-card${isNext ? ' mtg-card-next' : ''}`} onClick={() => setOpenId(n.id)}>
+                <div className="mtg-card-date">
+                  {fmtDM(dates[n.id] || n.created_at)}
+                  {isNext && <span className="mtg-next-badge">NEXT</span>}
+                </div>
                 <div className="mtg-card-title">{n.title}</div>
                 <div className="mtg-card-preview">{preview.slice(0, 100) || 'Empty note'}</div>
               </button>
