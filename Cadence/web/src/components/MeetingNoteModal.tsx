@@ -391,8 +391,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
-  const [mobileTab, setMobileTab] = useState<'agenda' | 'actions' | 'notes'>('agenda');
-  const [notesExpanded, setNotesExpanded] = useState(false);
   const [meetingDate, setLocalMeetingDate] = useState(
     dates[note.id] || ''
   );
@@ -475,7 +473,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
-  const setN = (n: string) => { setNotes(n); scheduleSave(); };
 
   // Carry-forward: uncompleted actions from the meeting immediately before this one
   const prevMeeting = useMemo(() => {
@@ -604,6 +601,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const covered = agenda.filter((a) => a.status === 'covered').length;
   const newActions = actions.filter((a) => !a.done).length;
 
+  const [actionsOpen, setActionsOpen] = useState(actions.length > 0 || carryForward.length > 0);
+
   // Filtered people and projects for the send picker
   const pickerPeople = data.people.filter((p) => !p.type || p.type === 'person');
   const pickerProjects = data.projects.filter((p) => !p.deleted_at);
@@ -611,7 +610,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   return createPortal(
     <>
     <div className="mtg-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className={`mtg-modal mtg-modal-structured${notesExpanded ? ' mtg-notes-focus' : ''}`}>
+      <div className="mtg-modal mtg-modal-structured">
 
         {/* Header */}
         <div className="mtg-hdr">
@@ -651,103 +650,95 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           </div>
         </div>
 
-        {/* Mobile tab bar — hidden on desktop via CSS */}
-        <div className="mtg-mobile-tabs">
-          <button className={`mtg-mobile-tab${mobileTab === 'agenda' ? ' active' : ''}`}
-            onClick={() => setMobileTab('agenda')}>
-            📋 Agenda{toCover > 0 ? ` (${toCover})` : ''}
-          </button>
-          <button className={`mtg-mobile-tab${mobileTab === 'actions' ? ' active' : ''}`}
-            onClick={() => setMobileTab('actions')}>
-            ✅ Actions{newActions > 0 ? ` (${newActions})` : ''}
-          </button>
-          <button className={`mtg-mobile-tab${mobileTab === 'notes' ? ' active' : ''}`}
-            onClick={() => setMobileTab('notes')}>
-            📝 Notes
-          </button>
-        </div>
-
-        {/* Two-column body */}
-        <div className={`mtg-cols${mobileTab === 'notes' ? ' mtg-hidden-mobile' : ''}`}>
-
-          {/* LEFT: Agenda */}
-          <div className={`mtg-col mtg-col-agenda${mobileTab === 'actions' ? ' mtg-hidden-mobile' : ''}`}>
-            <div className="mtg-col-hdr">
-              <span className="mtg-col-title">📋 Agenda</span>
-              {!isGroupMeeting && (
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
-                  Import Action Items ↓
-                </button>
-              )}
-            </div>
-
-            {!isGroupMeeting && showImport && (
-              <div className="mtg-import-panel">
-                {openTopics.length === 0
-                  ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open action items for {person.name.split(' ')[0]}.</p>
-                  : <>
-                    <div className="mtg-import-list">
-                      {openTopics.map((w) => (
-                        <label key={w.id} className="mtg-import-row">
-                          <input type="checkbox" checked={importSel.has(w.id)}
-                            disabled={alreadyInAgenda.has(w.title.toLowerCase())}
-                            onChange={() => setImportSel((s) => {
-                              const n = new Set(s);
-                              if (n.has(w.id)) { n.delete(w.id); } else { n.add(w.id); }
-                              return n;
-                            })} />
-                          <span style={{ fontSize: 13, opacity: alreadyInAgenda.has(w.title.toLowerCase()) ? 0.4 : 1 }}>
-                            {w.title}
-                            {alreadyInAgenda.has(w.title.toLowerCase()) && <em style={{ fontSize: 11, color: 'var(--text3)' }}> (already added)</em>}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, padding: '8px 12px', justifyContent: 'flex-end' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>Cancel</button>
-                      <button className="btn btn-primary btn-sm" onClick={doImport}
-                        disabled={importSel.size === 0}>Add {importSel.size} item{importSel.size !== 1 ? 's' : ''}</button>
-                    </div>
-                  </>}
-              </div>
+        {/* Full-width agenda */}
+        <div className="mtg-agenda-section">
+          <div className="mtg-col-hdr">
+            <span className="mtg-col-title">📋 Agenda</span>
+            {!isGroupMeeting && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport((s) => !s)}>
+                Import Topics ↓
+              </button>
             )}
-
-            <div className="mtg-col-body">
-              {agenda.length === 0 && deferredAgenda.length === 0 && !showImport && (
-                <p className="mtg-empty-hint">Add agenda items below, or import from Action Items ↑</p>
-              )}
-              {agenda.map((item, i) => (
-                <AgendaItemRow key={item.id} item={item}
-                  onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
-                  onDelete={() => setA(agenda.filter((_, j) => j !== i))} />
-              ))}
-
-              {deferredAgenda.length > 0 && (
-                <>
-                  <div className="mtg-section-sep">
-                    ⏭ Deferred from {prevMeeting ? fmtDM(dates[prevMeeting.id] || prevMeeting.created_at) : 'last meeting'}
-                  </div>
-                  {deferredAgenda.map((item) => (
-                    <DeferredAgendaRow
-                      key={item.id}
-                      item={item}
-                      alreadyAdded={agenda.some((a) => a.title.toLowerCase() === item.title.toLowerCase())}
-                      onAdd={() => addDeferredToAgenda(item)}
-                    />
-                  ))}
-                </>
-              )}
-
-              <button className="mtg-add-row" onClick={addAgendaItem}>+ Add agenda item</button>
-            </div>
           </div>
 
-          {/* RIGHT: Actions */}
-          <div className={`mtg-col mtg-col-actions${mobileTab === 'agenda' ? ' mtg-hidden-mobile' : ''}`}>
-            <div className="mtg-col-hdr">
-              <span className="mtg-col-title">✅ Action Items</span>
+          {!isGroupMeeting && showImport && (
+            <div className="mtg-import-panel">
+              {openTopics.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open action items for {person.name.split(' ')[0]}.</p>
+                : <>
+                  <div className="mtg-import-list">
+                    {openTopics.map((w) => (
+                      <label key={w.id} className="mtg-import-row">
+                        <input type="checkbox" checked={importSel.has(w.id)}
+                          disabled={alreadyInAgenda.has(w.title.toLowerCase())}
+                          onChange={() => setImportSel((s) => {
+                            const n = new Set(s);
+                            if (n.has(w.id)) { n.delete(w.id); } else { n.add(w.id); }
+                            return n;
+                          })} />
+                        <span style={{ fontSize: 13, opacity: alreadyInAgenda.has(w.title.toLowerCase()) ? 0.4 : 1 }}>
+                          {w.title}
+                          {alreadyInAgenda.has(w.title.toLowerCase()) && <em style={{ fontSize: 11, color: 'var(--text3)' }}> (already added)</em>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, padding: '8px 12px', justifyContent: 'flex-end' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>Cancel</button>
+                    <button className="btn btn-primary btn-sm" onClick={doImport}
+                      disabled={importSel.size === 0}>Add {importSel.size} item{importSel.size !== 1 ? 's' : ''}</button>
+                  </div>
+                </>}
             </div>
-            <div className="mtg-col-body">
+          )}
+
+          {agenda.length === 0 && deferredAgenda.length === 0 && !showImport && (
+            <p className="mtg-empty-hint">Add agenda items below, or import from Topics ↑</p>
+          )}
+          {agenda.map((item, i) => (
+            <AgendaItemRow key={item.id} item={item}
+              onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
+              onDelete={() => setA(agenda.filter((_, j) => j !== i))} />
+          ))}
+
+          {deferredAgenda.length > 0 && (
+            <>
+              <div className="mtg-section-sep">
+                ⏭ Deferred from {prevMeeting ? fmtDM(dates[prevMeeting.id] || prevMeeting.created_at) : 'last meeting'}
+              </div>
+              {deferredAgenda.map((item) => (
+                <DeferredAgendaRow
+                  key={item.id}
+                  item={item}
+                  alreadyAdded={agenda.some((a) => a.title.toLowerCase() === item.title.toLowerCase())}
+                  onAdd={() => addDeferredToAgenda(item)}
+                />
+              ))}
+            </>
+          )}
+
+          <button className="mtg-add-row" onClick={addAgendaItem}>+ Add agenda item</button>
+        </div>
+
+        {/* Collapsible actions panel */}
+        <div className="mtg-actions-panel">
+          <button className="mtg-actions-panel-hdr" onClick={() => setActionsOpen((v) => !v)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className={`mtg-actions-panel-chevron${actionsOpen ? ' open' : ''}`}>▼</span>
+              <span className="mtg-actions-panel-title">
+                ✅ Action Items{(actions.length + carryForward.length) > 0 ? ` (${actions.filter(a => !a.done).length + carryForward.length})` : ''}
+              </span>
+            </div>
+            <div className="mtg-action-add-row" onClick={(e) => e.stopPropagation()}>
+              <button className="mtg-add-row" onClick={() => { setActionsOpen(true); addAction('me'); }}>+ For me</button>
+              <button className="mtg-add-row" onClick={() => { setActionsOpen(true); addAction('them'); }}>
+                {isGroupMeeting ? '+ For others' : `+ For ${person.name.split(' ')[0]}`}
+              </button>
+            </div>
+          </button>
+
+          {actionsOpen && (
+            <div className="mtg-actions-panel-body">
               {actions.length === 0 && carryForward.length === 0 && (
                 <p className="mtg-empty-hint">Actions agreed in this meeting appear here.</p>
               )}
@@ -760,12 +751,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                   onChange={(updated) => setAc(actions.map((a, j) => j === i ? updated : a))}
                   onDelete={() => setAc(actions.filter((_, j) => j !== i))} />
               ))}
-              <div className="mtg-action-add-row">
-                <button className="mtg-add-row" onClick={() => addAction('me')}>+ For me</button>
-                <button className="mtg-add-row" onClick={() => addAction('them')}>
-                  {isGroupMeeting ? '+ For others' : `+ For ${person.name.split(' ')[0]}`}
-                </button>
-              </div>
 
               {carryForward.length > 0 && (
                 <>
@@ -779,19 +764,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 </>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Free notes */}
-        <div className={`mtg-notes-section${mobileTab !== 'notes' ? ' mtg-hidden-mobile' : ' mtg-notes-tab-active'}`}>
-          <div className="mtg-notes-label">
-            <span>📝 Meeting Notes</span>
-            <button className="mtg-notes-expand" onClick={() => setNotesExpanded((v) => !v)}>
-              {notesExpanded ? '⤡ Collapse' : '⤢ Expand'}
-            </button>
-          </div>
-          <RichEditor key={note.id} content={notes} onChange={setN}
-            placeholder="Key context, decisions, things to remember…" />
+          )}
         </div>
 
         {/* Footer */}
