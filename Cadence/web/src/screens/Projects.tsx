@@ -800,7 +800,7 @@ function HealthRoll({ items }: { items: Project[] }) {
 // ── Main screen ────────────────────────────────────────────────────────────
 const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', onHold: 'On Hold', completed: 'Completed' };
 
-export function Projects({ onMenu }: { onMenu?: () => void }) {
+export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; initialSelectedId?: string | null }) {
   const { data } = useCadence();
   const { strategy, save } = useStrategy();
   const { state: winState, save: saveWinState } = useWinState();
@@ -808,7 +808,11 @@ export function Projects({ onMenu }: { onMenu?: () => void }) {
 
   const [view, setView] = useState<'list' | 'scoreboard' | 'detail'>('list');
   const [groupBy, setGroupBy] = useState<'portfolio' | 'priority' | 'status'>('portfolio');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
+
+  useEffect(() => {
+    if (initialSelectedId) setSelectedId(initialSelectedId);
+  }, [initialSelectedId]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [editStrategy, setEditStrategy] = useState(false);

@@ -1143,3 +1143,51 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .metric-card.good strong { color: var(--green); } .metric-card.bad strong { color: var(--red); }
 .checklist { margin: 12px 0 0 20px; color: var(--text2); line-height: 1.8; }
 @media (max-width: 900px) { .split-screen, .two-col { grid-template-columns: 1fr; } }
+
+/* ── Dashboard screen ─────────────────────────────────────────────────────── */
+.dash-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 20px;
+  background: var(--surface); flex-shrink: 0; }
+.dash-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 11px 16px;
+  font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; font-family: inherit;
+  margin-bottom: -1px; }
+.dash-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.dash-tab:hover:not(.active) { color: var(--text); }
+
+.dash-section { padding: 20px; }
+.dash-group-hdr { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text3); margin: 16px 0 10px; }
+.dash-group-hdr:first-child { margin-top: 0; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 4px; }
+
+.dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; cursor: pointer; text-align: left; font-family: inherit; width: 100%;
+  transition: box-shadow 0.15s, border-color 0.15s; display: flex; flex-direction: column; gap: 10px; }
+.dash-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); border-color: var(--accent-lt, #93C5FD); }
+
+.dash-card-hdr { display: flex; align-items: center; gap: 10px; }
+.dash-health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dash-card-identity { min-width: 0; }
+.dash-card-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.dash-card-role { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+.dash-next-meeting { font-size: 12px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 5px; }
+.dash-meeting-icon { font-size: 13px; }
+.dash-no-meeting { color: var(--text3); font-weight: 400; }
+
+.dash-card-stats { display: flex; flex-wrap: wrap; gap: 5px; }
+.dash-stat-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: var(--surface2); color: var(--text2); }
+.dash-chip-red { background: var(--red-bg); color: var(--red); }
+.dash-chip-amber { background: var(--orange-bg); color: var(--orange); }
+.dash-chip-green { background: var(--green-bg); color: var(--green); }
+
+/* Project card extras */
+.dash-proj-card { border-left-width: 4px !important; }
+.dash-proj-hdr { display: flex; align-items: flex-start; gap: 8px; }
+.dash-health-pill { font-size: 11px; border-radius: 10px; padding: 2px 7px; font-weight: 600; flex-shrink: 0; }
+.dash-health-reason { font-size: 12px; color: var(--text2); line-height: 1.4; }
+.dash-actions-list { display: flex; flex-direction: column; gap: 3px; padding-top: 2px;
+  border-top: 1px solid var(--border); }
+.dash-action-item { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; line-height: 1.5; }

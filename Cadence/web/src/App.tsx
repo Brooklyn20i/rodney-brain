@@ -10,6 +10,7 @@ import { Today } from './screens/Today'; // eager — the default landing screen
 // Lazy-load the remaining screens so the initial bundle ships only Today plus
 // the shell. The per-screen chunks (vite manualChunks) are now actually
 // deferred instead of eagerly imported by this module.
+const Dashboard = lazy(() => import('./screens/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Tasks = lazy(() => import('./screens/Tasks').then((m) => ({ default: m.Tasks })));
 const Inbox = lazy(() => import('./screens/Inbox').then((m) => ({ default: m.Inbox })));
 const Projects = lazy(() => import('./screens/Projects').then((m) => ({ default: m.Projects })));
@@ -25,6 +26,7 @@ const Ace = lazy(() => import('./screens/Ace').then((m) => ({ default: m.Ace }))
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing, canEdit } = useCadence();
   const [screen, setScreen] = useState('today');
+  const [focusId, setFocusId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviteBanner, setInviteBanner] = useState<string | null>(null);
 
@@ -72,17 +74,22 @@ export function App() {
   if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} />;
   if (needsPasswordSet) return <SetPassword />;
 
-  const navigate = (id: string) => { setScreen(id); setMenuOpen(false); };
+  const navigate = (id: string, entityId?: string | null) => {
+    setFocusId(entityId ?? null);
+    setScreen(id);
+    setMenuOpen(false);
+  };
   const onMenu = () => setMenuOpen(true);
   const email = session.user.email ?? undefined;
 
   const render = () => {
     switch (screen) {
+      case 'dashboard': return <Dashboard onMenu={onMenu} onNavigate={navigate} />;
       case 'today': return <Today onMenu={onMenu} />;
       case 'tasks': return <Tasks onMenu={onMenu} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
-      case 'projects': return <Projects onMenu={onMenu} />;
-      case 'people': return <People onMenu={onMenu} />;
+      case 'projects': return <Projects onMenu={onMenu} initialSelectedId={focusId} />;
+      case 'people': return <People onMenu={onMenu} initialSelectedId={focusId} />;
       case 'meetings': return <Meetings onMenu={onMenu} />;
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'review': return <Review onMenu={onMenu} />;

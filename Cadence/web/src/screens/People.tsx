@@ -417,10 +417,14 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   );
 }
 
-export function People({ onMenu }: { onMenu?: () => void }) {
+export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; initialSelectedId?: string | null }) {
   const { data, update } = useCadence();
   const { dates } = useMeetingDates();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialSelectedId ?? null);
+
+  useEffect(() => {
+    if (initialSelectedId) setSelected(initialSelectedId);
+  }, [initialSelectedId]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
 
