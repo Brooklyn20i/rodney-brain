@@ -12,6 +12,7 @@ import type { AgendaItem, ActionItem } from '../lib/meetingData';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 import { sanitizeHtml } from '../lib/sanitize';
+import { PrepBriefPanel } from './PrepBriefPanel';
 
 // Data model + parser now live in lib/meetingData (React-free). Re-export here
 // so existing import sites (Meetings.tsx, SharePanel.tsx) keep working.
@@ -391,6 +392,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
+  const [showPrep, setShowPrep] = useState(false);
   const [meetingDate, setLocalMeetingDate] = useState(
     dates[note.id] || ''
   );
@@ -642,6 +644,8 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             </div>
           </div>
           <div className="mtg-hdr-right">
+            <button className={`btn btn-secondary btn-sm${showPrep ? ' btn-active' : ''}`}
+              onClick={() => setShowPrep((s) => !s)} title="Meeting prep brief">✦ Prep</button>
             <button className="btn btn-secondary btn-sm" onClick={pushAllToTasks}
               title="Create tasks in your system for all action items">→ Push to Tasks</button>
             <button className="btn btn-share btn-sm" onClick={() => setShowShare(true)}>📤 Share</button>
@@ -795,6 +799,19 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
       </div>
     </div>
 
+    {showPrep && (
+      <PrepBriefPanel
+        person={person}
+        agenda={agenda}
+        carryForward={carryForward}
+        deferredAgenda={deferredAgenda}
+        workItems={data.work_items}
+        projects={data.projects}
+        projectUpdates={data.project_updates}
+        onAddToAgenda={(items) => setA([...agenda, ...items])}
+        onClose={() => setShowPrep(false)}
+      />
+    )}
     {showShare && (
       <SharePanel
         note={note}
