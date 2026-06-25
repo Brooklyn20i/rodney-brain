@@ -3,7 +3,7 @@ import React from 'react';
 export interface NavItem { id: string; label: string; icon: string; }
 export const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Day', items: [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
     { id: 'today', label: 'Control', icon: '☀' },
     { id: 'tasks', label: 'Tasks', icon: '◎' },
     { id: 'inbox', label: 'Inbox', icon: '↓' },
