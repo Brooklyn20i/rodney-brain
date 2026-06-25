@@ -12,17 +12,16 @@ const initials = (name: string) =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const fmtNext = (iso: string) => {
-  const t = todayStr();
-  if (iso === t) return 'Today';
+  if (iso === todayStr()) return 'Today';
   if (iso === addDaysStr(1)) return 'Tomorrow';
   return fmtWeekDM(iso);
 };
 
-const HEALTH_COLOR: Record<string, string> = {
-  green: 'var(--green)', amber: 'var(--orange)', red: 'var(--red)',
+const HEALTH_LABEL: Record<string, string> = {
+  red: 'Off track', amber: 'At risk', green: 'On track',
 };
 
-// ── People tab ────────────────────────────────────────────────────────────────
+// ── Person card ───────────────────────────────────────────────────────────────
 function PersonCard({ person, openCount, overdueCount, hotCount, nextMeeting, onClick }: {
   person: { id: string; name: string; role?: string; color?: string };
   openCount: number; overdueCount: number; hotCount: number;
@@ -33,10 +32,13 @@ function PersonCard({ person, openCount, overdueCount, hotCount, nextMeeting, on
   const avatarBg = person.color || autoColor(person.id || person.name);
 
   return (
-    <button className="dash-card" onClick={onClick}>
+    <button className={`dash-card dash-card-${health}`} onClick={onClick}>
       <div className="dash-card-hdr">
-        <span className="dash-health-dot" style={{ background: HEALTH_COLOR[health] }} />
-        <span className="avatar" style={{ background: avatarBg, width: 36, height: 36, fontSize: 13, flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+        <span className="avatar" style={{
+          background: avatarBg, width: 36, height: 36, fontSize: 13, flexShrink: 0,
+          borderRadius: '50%', display: 'inline-flex', alignItems: 'center',
+          justifyContent: 'center', color: '#fff', fontWeight: 700,
+        }}>
           {initials(person.name)}
         </span>
         <div className="dash-card-identity">
@@ -47,27 +49,41 @@ function PersonCard({ person, openCount, overdueCount, hotCount, nextMeeting, on
 
       <div className="dash-next-meeting">
         {nextMeeting
-          ? <><span className="dash-meeting-icon">📅</span> {fmtNext(nextMeeting)}</>
+          ? <><span>📅</span> {fmtNext(nextMeeting)}</>
           : <span className="dash-no-meeting">No upcoming 1:1</span>}
       </div>
 
-      <div className="dash-card-stats">
+      <div className="dash-stats">
         {openCount > 0 && (
-          <span className="dash-stat-chip">{openCount} open</span>
+          <div className="dash-stat">
+            <span className="dash-stat-num">{openCount}</span>
+            <span className="dash-stat-lbl">Open</span>
+          </div>
         )}
         {overdueCount > 0 && (
-          <span className="dash-stat-chip dash-chip-red">{overdueCount} overdue</span>
+          <div className="dash-stat">
+            <span className="dash-stat-num red">{overdueCount}</span>
+            <span className="dash-stat-lbl">Overdue</span>
+          </div>
         )}
         {hotCount > 0 && overdueCount === 0 && (
-          <span className="dash-stat-chip dash-chip-amber">{hotCount} this week</span>
+          <div className="dash-stat">
+            <span className="dash-stat-num amber">{hotCount}</span>
+            <span className="dash-stat-lbl">This week</span>
+          </div>
         )}
-        {openCount === 0 && <span className="dash-stat-chip dash-chip-green">All clear</span>}
+        {openCount === 0 && (
+          <div className="dash-stat">
+            <span className="dash-stat-num green">✓</span>
+            <span className="dash-stat-lbl">All clear</span>
+          </div>
+        )}
       </div>
     </button>
   );
 }
 
-// ── Projects tab ──────────────────────────────────────────────────────────────
+// ── Project card ──────────────────────────────────────────────────────────────
 function ProjectCard({ project, openCount, overdueCount, topActions, healthReason, onClick }: {
   project: { id: string; name: string; health: string; color?: string; target_date?: string | null; owner?: string };
   openCount: number; overdueCount: number;
@@ -76,36 +92,60 @@ function ProjectCard({ project, openCount, overdueCount, topActions, healthReaso
   onClick: () => void;
 }) {
   const stripe = project.color || 'var(--accent)';
-  const healthColor = HEALTH_COLOR[project.health] || 'var(--text3)';
+  const health = project.health as 'red' | 'amber' | 'green';
+  // Only tint red and amber — green stays white to avoid noise
+  const tintClass = health === 'green' ? '' : ` dash-card-${health}`;
 
   return (
-    <button className="dash-card dash-proj-card" onClick={onClick} style={{ borderLeft: `4px solid ${stripe}` }}>
-      <div className="dash-proj-hdr">
-        <span className="dash-card-name" style={{ flex: 1 }}>{project.name}</span>
-        <span className="dash-health-pill" style={{ background: `${healthColor}22`, color: healthColor }}>
-          {project.health === 'green' ? '🟢' : project.health === 'red' ? '🔴' : '🟠'}
-        </span>
-      </div>
-      <div className="dash-health-reason">{healthReason}</div>
+    <button className={`dash-card dash-proj-card${tintClass}`} onClick={onClick}>
+      <span className="dash-proj-stripe" style={{ background: stripe }} />
+      <div className="dash-proj-body">
+        <div className="dash-proj-hdr">
+          <span className="dash-card-name">{project.name}</span>
+          <span className={`dash-health-badge ${health}`}>{HEALTH_LABEL[health] ?? health}</span>
+        </div>
 
-      <div className="dash-card-stats">
-        {openCount > 0 && <span className="dash-stat-chip">{openCount} open</span>}
-        {overdueCount > 0 && <span className="dash-stat-chip dash-chip-red">{overdueCount} overdue</span>}
-        {openCount === 0 && <span className="dash-stat-chip dash-chip-green">All clear</span>}
-        {project.target_date && (
-          <span className="dash-stat-chip" style={{ color: isOverdue(project.target_date) ? 'var(--red)' : 'var(--text2)' }}>
-            Due {fmtWeekDM(project.target_date)}
-          </span>
+        {healthReason && health !== 'green' && (
+          <div className="dash-health-reason">{healthReason}</div>
+        )}
+
+        <div className="dash-stats">
+          {openCount > 0 && (
+            <div className="dash-stat">
+              <span className="dash-stat-num">{openCount}</span>
+              <span className="dash-stat-lbl">Open</span>
+            </div>
+          )}
+          {overdueCount > 0 && (
+            <div className="dash-stat">
+              <span className="dash-stat-num red">{overdueCount}</span>
+              <span className="dash-stat-lbl">Overdue</span>
+            </div>
+          )}
+          {openCount === 0 && (
+            <div className="dash-stat">
+              <span className="dash-stat-num green">✓</span>
+              <span className="dash-stat-lbl">All clear</span>
+            </div>
+          )}
+          {project.target_date && (
+            <div className="dash-stat">
+              <span className={`dash-stat-num${isOverdue(project.target_date) ? ' red' : ''}`} style={{ fontSize: 13 }}>
+                {fmtWeekDM(project.target_date)}
+              </span>
+              <span className="dash-stat-lbl">Due</span>
+            </div>
+          )}
+        </div>
+
+        {topActions.length > 0 && (
+          <div className="dash-actions-list">
+            {topActions.map((a, i) => (
+              <div key={i} className="dash-action-item">● {a.title}</div>
+            ))}
+          </div>
         )}
       </div>
-
-      {topActions.length > 0 && (
-        <div className="dash-actions-list">
-          {topActions.map((a, i) => (
-            <div key={i} className="dash-action-item">● {a.title}</div>
-          ))}
-        </div>
-      )}
     </button>
   );
 }
@@ -133,12 +173,9 @@ export function Dashboard({ onMenu, onNavigate }: {
       const nextMeeting = getNextMeeting(p.id, data.notes, dates);
       return { person: p, openCount: userItems.length, overdueCount, hotCount, nextMeeting };
     }).sort((a, b) => {
-      // Sort: people with overdue first, then hot, then by next meeting date
       if (a.overdueCount !== b.overdueCount) return b.overdueCount - a.overdueCount;
       if (a.hotCount !== b.hotCount) return b.hotCount - a.hotCount;
-      const am = a.nextMeeting || '9999';
-      const bm = b.nextMeeting || '9999';
-      return am.localeCompare(bm);
+      return (a.nextMeeting || '9999').localeCompare(b.nextMeeting || '9999');
     });
   }, [people, data.work_items, data.notes, dates]);
 
@@ -159,9 +196,7 @@ export function Dashboard({ onMenu, onNavigate }: {
   return (
     <>
       <ScreenHeader title="Dashboard" onMenu={onMenu} />
-
       <div className="screen-content" style={{ paddingTop: 0 }}>
-        {/* Tab bar */}
         <div className="dash-tabs">
           <button className={`dash-tab${tab === 'people' ? ' active' : ''}`} onClick={() => setTab('people')}>
             ✦ People{personCards.length > 0 ? ` (${personCards.length})` : ''}
@@ -171,7 +206,6 @@ export function Dashboard({ onMenu, onNavigate }: {
           </button>
         </div>
 
-        {/* People tab */}
         {tab === 'people' && (
           <div className="dash-section">
             {personCards.length === 0
@@ -193,7 +227,6 @@ export function Dashboard({ onMenu, onNavigate }: {
           </div>
         )}
 
-        {/* Projects tab */}
         {tab === 'projects' && (
           <div className="dash-section">
             {projectGroups.length === 0

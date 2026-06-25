@@ -1155,39 +1155,57 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 .dash-section { padding: 20px; }
 .dash-group-hdr { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-  color: var(--text3); margin: 16px 0 10px; }
+  color: var(--text3); margin: 20px 0 10px; }
 .dash-group-hdr:first-child { margin-top: 0; }
-.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 4px; }
 
+/* Base card */
 .dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   padding: 14px; cursor: pointer; text-align: left; font-family: inherit; width: 100%;
   transition: box-shadow 0.15s, border-color 0.15s; display: flex; flex-direction: column; gap: 10px; }
-.dash-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); border-color: var(--accent-lt, #93C5FD); }
+.dash-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
 
+/* Health tinting — only red and amber get a background tint */
+.dash-card-red  { background: var(--red-bg);    border-left: 4px solid var(--red); }
+.dash-card-amber{ background: var(--orange-bg); border-left: 4px solid var(--orange); }
+.dash-card-green{ background: var(--surface);   border-left: 4px solid var(--green); }
+
+/* Card header */
 .dash-card-hdr { display: flex; align-items: center; gap: 10px; }
-.dash-health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dash-card-identity { min-width: 0; }
+.dash-card-identity { min-width: 0; flex: 1; }
 .dash-card-name { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
 .dash-card-role { font-size: 11px; color: var(--text3); margin-top: 1px; }
 
-.dash-next-meeting { font-size: 12px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 5px; }
-.dash-meeting-icon { font-size: 13px; }
-.dash-no-meeting { color: var(--text3); font-weight: 400; }
+/* Next 1:1 date line */
+.dash-next-meeting { font-size: 12px; font-weight: 600; color: var(--accent);
+  display: flex; align-items: center; gap: 5px; }
+.dash-no-meeting { color: var(--text3); font-weight: 400; font-style: italic; }
 
-.dash-card-stats { display: flex; flex-wrap: wrap; gap: 5px; }
-.dash-stat-chip { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-  background: var(--surface2); color: var(--text2); }
-.dash-chip-red { background: var(--red-bg); color: var(--red); }
-.dash-chip-amber { background: var(--orange-bg); color: var(--orange); }
-.dash-chip-green { background: var(--green-bg); color: var(--green); }
+/* Large stat numbers */
+.dash-stats { display: flex; gap: 20px; }
+.dash-stat { display: flex; flex-direction: column; align-items: center; }
+.dash-stat-num { font-size: 24px; font-weight: 800; line-height: 1; color: var(--text); }
+.dash-stat-num.red   { color: var(--red); }
+.dash-stat-num.amber { color: var(--orange); }
+.dash-stat-num.green { color: var(--green); }
+.dash-stat-lbl { font-size: 10px; color: var(--text2); text-transform: uppercase;
+  letter-spacing: 0.4px; margin-top: 3px; }
 
-/* Project card extras */
-.dash-proj-card { border-left-width: 4px !important; }
-.dash-proj-hdr { display: flex; align-items: flex-start; gap: 8px; }
-.dash-health-pill { font-size: 11px; border-radius: 10px; padding: 2px 7px; font-weight: 600; flex-shrink: 0; }
+/* Project card — stripe + body structure */
+.dash-proj-card { padding: 0; gap: 0; overflow: hidden; flex-direction: row; border-left: none; }
+.dash-proj-stripe { width: 5px; flex-shrink: 0; }
+.dash-proj-body { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dash-proj-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dash-health-badge { font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; flex-shrink: 0; padding-top: 2px; }
+.dash-health-badge.red   { color: var(--red); }
+.dash-health-badge.amber { color: var(--orange); }
+.dash-health-badge.green { color: var(--green); }
 .dash-health-reason { font-size: 12px; color: var(--text2); line-height: 1.4; }
-.dash-actions-list { display: flex; flex-direction: column; gap: 3px; padding-top: 2px;
-  border-top: 1px solid var(--border); }
+
+/* Top actions list */
+.dash-actions-list { display: flex; flex-direction: column; gap: 3px; padding-top: 6px;
+  border-top: 1px solid rgba(0,0,0,0.06); }
 .dash-action-item { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; line-height: 1.5; }
