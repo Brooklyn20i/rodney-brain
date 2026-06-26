@@ -8,6 +8,7 @@
 export interface AgendaItem {
   id: string; title: string; notes: string;
   status: 'discuss' | 'covered' | 'deferred';
+  source_item_id?: string; // set when imported from a work item; enables "Close task" inline
 }
 export interface ActionItem {
   id: string; title: string;

@@ -70,10 +70,12 @@ function AgendaNoteSheet({ title, initialHtml, onChange, onClose }: {
 
 
 // ── Agenda item row ───────────────────────────────────────────────────────────
-function AgendaItemRow({ item, onChange, onDelete }: {
+function AgendaItemRow({ item, onChange, onDelete, onCloseTask, taskDone }: {
   item: AgendaItem;
   onChange: (updated: AgendaItem) => void;
   onDelete: () => void;
+  onCloseTask?: () => void;
+  taskDone?: boolean;
 }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -147,6 +149,11 @@ function AgendaItemRow({ item, onChange, onDelete }: {
               {s === 'discuss' ? '💬 Discuss' : s === 'covered' ? '✅ Covered' : '⏭ Defer'}
             </button>
           ))}
+          {item.source_item_id && (
+            taskDone
+              ? <span className="agenda-task-closed">✓ Task closed</span>
+              : <button className="agenda-close-task-btn" onClick={onCloseTask} title="Mark the linked task as done">◎ Close task</button>
+          )}
         </div>
       </div>
     </div>
@@ -517,12 +524,16 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
       (w.related_entities || []).some((re) => re.type === 'person' && re.id === person.id)
     )
   );
+  // Track items already pulled into the agenda — by source ID (preferred) or title fallback.
+  const importedSourceIds = new Set(agenda.map((a) => a.source_item_id).filter(Boolean) as string[]);
   const alreadyInAgenda = new Set(agenda.map((a) => a.title.toLowerCase()));
+  const isAlreadyImported = (w: WorkItem) =>
+    importedSourceIds.has(w.id) || alreadyInAgenda.has(w.title.toLowerCase());
 
   const doImport = () => {
     const toAdd = openTopics
       .filter((w) => importSel.has(w.id))
-      .map((w) => ({ id: uid(), title: w.title, notes: w.notes || '', status: 'discuss' as const }));
+      .map((w) => ({ id: uid(), title: w.title, notes: w.notes || '', status: 'discuss' as const, source_item_id: w.id }));
     setA([...agenda, ...toAdd]);
     setShowImport(false);
     setImportSel(new Set());
@@ -677,21 +688,24 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 ? <p style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No open action items for {person.name.split(' ')[0]}.</p>
                 : <>
                   <div className="mtg-import-list">
-                    {openTopics.map((w) => (
-                      <label key={w.id} className="mtg-import-row">
-                        <input type="checkbox" checked={importSel.has(w.id)}
-                          disabled={alreadyInAgenda.has(w.title.toLowerCase())}
-                          onChange={() => setImportSel((s) => {
-                            const n = new Set(s);
-                            if (n.has(w.id)) { n.delete(w.id); } else { n.add(w.id); }
-                            return n;
-                          })} />
-                        <span style={{ fontSize: 13, opacity: alreadyInAgenda.has(w.title.toLowerCase()) ? 0.4 : 1 }}>
-                          {w.title}
-                          {alreadyInAgenda.has(w.title.toLowerCase()) && <em style={{ fontSize: 11, color: 'var(--text3)' }}> (already added)</em>}
-                        </span>
-                      </label>
-                    ))}
+                    {openTopics.map((w) => {
+                      const already = isAlreadyImported(w);
+                      return (
+                        <label key={w.id} className="mtg-import-row">
+                          <input type="checkbox" checked={importSel.has(w.id)}
+                            disabled={already}
+                            onChange={() => setImportSel((s) => {
+                              const n = new Set(s);
+                              if (n.has(w.id)) { n.delete(w.id); } else { n.add(w.id); }
+                              return n;
+                            })} />
+                          <span style={{ fontSize: 13, opacity: already ? 0.4 : 1 }}>
+                            {w.title}
+                            {already && <em style={{ fontSize: 11, color: 'var(--text3)' }}> (already in agenda)</em>}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                   <div style={{ display: 'flex', gap: 6, padding: '8px 12px', justifyContent: 'flex-end' }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>Cancel</button>
@@ -705,11 +719,21 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           {agenda.length === 0 && deferredAgenda.length === 0 && !showImport && (
             <p className="mtg-empty-hint">Add agenda items below, or import from Topics ↑</p>
           )}
-          {agenda.map((item, i) => (
-            <AgendaItemRow key={item.id} item={item}
-              onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
-              onDelete={() => setA(agenda.filter((_, j) => j !== i))} />
-          ))}
+          {agenda.map((item, i) => {
+            const srcTask = item.source_item_id
+              ? data.work_items.find((w) => w.id === item.source_item_id)
+              : undefined;
+            return (
+              <AgendaItemRow key={item.id} item={item}
+                onChange={(updated) => setA(agenda.map((a, j) => j === i ? updated : a))}
+                onDelete={() => setA(agenda.filter((_, j) => j !== i))}
+                taskDone={srcTask?.done}
+                onCloseTask={srcTask && !srcTask.done ? () => {
+                  update('work_items', srcTask.id, { done: true, completed_at: new Date().toISOString() } as Partial<WorkItem>);
+                } : undefined}
+              />
+            );
+          })}
 
           {deferredAgenda.length > 0 && (
             <>
