@@ -12,10 +12,13 @@ export default defineConfig({
       // Use the existing manifest.json from public/ rather than generating one.
       manifest: false,
       workbox: {
+        // Serve cached index.html for all navigation requests when offline.
+        // Without this, opening the URL offline fails at the network level
+        // before the service worker can intercept it.
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // With base './', workbox needs to know the relative path prefix.
-        // By default it caches from the root of the output dir — correct for gh-pages.
         runtimeCaching: [
           {
             // Supabase REST reads: network-first with a 5 s timeout.
