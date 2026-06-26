@@ -509,8 +509,14 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const prevNote = idx < allMeetings.length - 1 ? allMeetings[idx + 1] : null;
   const nextNote = idx > 0 ? allMeetings[idx - 1] : null;
 
-  // Import from Topics
-  const openTopics = data.work_items.filter((w) => w.person_id === person.id && !w.done);
+  // Import from Topics — includes tasks linked via related_entities so multi-person
+  // tasks appear in both people's meeting note import lists.
+  const openTopics = data.work_items.filter((w) =>
+    !w.done && (
+      w.person_id === person.id ||
+      (w.related_entities || []).some((re) => re.type === 'person' && re.id === person.id)
+    )
+  );
   const alreadyInAgenda = new Set(agenda.map((a) => a.title.toLowerCase()));
 
   const doImport = () => {

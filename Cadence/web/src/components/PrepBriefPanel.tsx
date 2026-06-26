@@ -8,6 +8,9 @@ import { sanitizeHtml } from '../lib/sanitize';
 import { isOverdue, fmtDM } from '../lib/util';
 import { supabase } from '../lib/supabase';
 
+const isPersonLinked = (w: { person_id: string | null; related_entities?: { type: string; id: string }[] }, id: string) =>
+  w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
+
 const HEALTH_COLOR: Record<string, string> = {
   green: 'var(--green)', amber: 'var(--orange)', red: 'var(--red)',
 };
@@ -46,7 +49,7 @@ export function PrepBriefPanel({
   const openItems = useMemo(() => {
     const PRI = { high: 0, medium: 1, low: 2 };
     return workItems
-      .filter((w) => w.person_id === person.id && !w.done)
+      .filter((w) => isPersonLinked(w, person.id) && !w.done)
       .sort((a, b) => {
         const dp = (PRI[a.priority as keyof typeof PRI] ?? 1) - (PRI[b.priority as keyof typeof PRI] ?? 1);
         if (dp !== 0) return dp;
@@ -60,7 +63,7 @@ export function PrepBriefPanel({
   const linkedProjects = useMemo(() => {
     const ids = new Set(
       workItems
-        .filter((w) => w.person_id === person.id && !w.done && w.project_id)
+        .filter((w) => isPersonLinked(w, person.id) && !w.done && w.project_id)
         .map((w) => w.project_id as string),
     );
     return projects
