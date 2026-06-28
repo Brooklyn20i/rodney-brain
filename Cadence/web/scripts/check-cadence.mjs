@@ -14,23 +14,20 @@ assert(login.includes('type="email"'), 'Login must expose an email field.');
 const css = read('src/styles.css');
 assert(css.includes('input[type=password]'), 'Password inputs must use the same field styling as other inputs.');
 
+// Screens currently wired into the app. Decisions/Outbox were consolidated into
+// other surfaces; Dashboard/Horizon/Board are the cockpit additions.
+const SCREENS = [
+  'Dashboard', 'Today', 'Horizon', 'Board', 'Tasks', 'Inbox',
+  'Projects', 'People', 'Meetings', 'Notes', 'Review',
+];
+
 const app = read('src/App.tsx');
-for (const screen of ['Inbox', 'Projects', 'People', 'Decisions', 'Outbox', 'Notes', 'Review', 'Meetings', 'Tasks', 'Today']) {
+for (const screen of SCREENS) {
   assert(app.includes(`<${screen}`), `App must route to ${screen}, not a placeholder.`);
 }
 
-for (const file of [
-  'src/screens/Inbox.tsx',
-  'src/screens/Projects.tsx',
-  'src/screens/People.tsx',
-  'src/screens/Decisions.tsx',
-  'src/screens/Outbox.tsx',
-  'src/screens/Notes.tsx',
-  'src/screens/Review.tsx',
-  'src/screens/Meetings.tsx',
-  'src/screens/Tasks.tsx',
-  'src/screens/Today.tsx',
-]) {
+for (const screen of SCREENS) {
+  const file = `src/screens/${screen}.tsx`;
   assert(existsSync(join(root, file)), `${file} must exist.`);
 }
 

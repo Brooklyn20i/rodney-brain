@@ -11,7 +11,7 @@ import {
   STRATEGY_NOTE_TITLE, uid, emptyWinState,
 } from '../lib/strategy';
 import type { StrategyContent, WinState } from '../lib/strategy';
-import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason } from '../lib/selectors';
+import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason, getHealthEvidence } from '../lib/selectors';
 
 const WIN_STATE_TITLE = '__win_state__';
 
@@ -656,6 +656,37 @@ const HEALTH_PILL: Record<Health, [string, string]> = {
   green: ['health-green', 'On track'], amber: ['health-amber', 'At risk'], red: ['health-red', 'Off track'],
 };
 
+// Analytical #9 — "prove it": the raw numbers behind a project's health,
+// revealed on demand so a status is never taken on trust.
+function HealthEvidence({ project }: { project: Project }) {
+  const { data } = useCadence();
+  const [open, setOpen] = useState(false);
+  const ev = useMemo(
+    () => getHealthEvidence(project, data.project_updates, data.work_items),
+    [project, data.project_updates, data.work_items],
+  );
+  return (
+    <div className="health-evidence">
+      <button className="health-evidence-toggle" onClick={() => setOpen((o) => !o)}>
+        {open ? 'Hide evidence' : 'Why?'}
+      </button>
+      {open && (
+        <div className="health-evidence-body">
+          <div className="health-evidence-stats">
+            <span className={ev.overdue > 0 ? 'he-stat he-red' : 'he-stat'}>{ev.overdue} overdue</span>
+            <span className="he-stat">{ev.highOpen} high-priority</span>
+            <span className="he-stat">{ev.openTotal} open total</span>
+            {ev.targetOverdue && <span className="he-stat he-red">past target date</span>}
+          </div>
+          {ev.latestUpdate
+            ? <div className="health-evidence-update">“{ev.latestUpdate.slice(0, 200)}{ev.latestUpdate.length > 200 ? '…' : ''}”</div>
+            : <div className="health-evidence-update he-muted">No project updates logged yet.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
   project: Project; strategy: StrategyContent;
   onBack: () => void; onEdit: () => void; onMenu?: () => void;
@@ -678,6 +709,7 @@ function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
         <div className="proj-detail-inner">
           <div className="proj-detail-top">
             <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
+            <HealthEvidence project={project} />
           </div>
           <div className="proj-detail-tabs">
             {(['update', 'plan', 'advanced'] as const).map((t) => (
@@ -842,7 +874,7 @@ export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; i
     return STATUSES.map((s) => ({
       key: s, label: STATUS_LABEL[s], items: [...data.projects].filter((p) => p.status === s).sort(byName),
     })).filter((g) => g.items.length);
-  }, [data.projects, groupBy, priorities]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data.projects, groupBy, priorities]);
 
   // Full-screen detail view — replaces the list entirely (push navigation)
   if (view === 'detail' && selected) {

@@ -267,3 +267,32 @@ export function inferHealthReason(
 
   return project.health === 'red' ? 'Off track' : 'At risk';
 }
+
+// ── Health evidence (Analytical #9) ───────────────────────────────────────────
+// The raw numbers behind a project's health, so a status can be "proven" on
+// demand rather than taken on trust. Same data inferHealthReason reads.
+export interface HealthEvidence {
+  latestUpdate: string | null;
+  openTotal: number;
+  overdue: number;
+  highOpen: number;
+  targetOverdue: boolean;
+}
+
+export function getHealthEvidence(
+  project: Project,
+  updates: ProjectUpdate[],
+  items: WorkItem[],
+): HealthEvidence {
+  const latest = updates
+    .filter((u) => u.project_id === project.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const open = items.filter((w) => w.project_id === project.id && !w.done);
+  return {
+    latestUpdate: latest?.text?.trim() || null,
+    openTotal: open.length,
+    overdue: open.filter((w) => isOverdue(w.due_date)).length,
+    highOpen: open.filter((w) => w.priority === 'high').length,
+    targetOverdue: isOverdue(project.target_date),
+  };
+}

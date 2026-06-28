@@ -69,8 +69,10 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
     () => data.people.filter((p) => !p.type || p.type === 'person'),
     [data.people],
   );
+  // All non-deleted projects can host a column — a task on an on-hold/completed
+  // project must still appear under it, never vanish. Empty columns are hidden.
   const projects = useMemo(
-    () => data.projects.filter((p) => p.status === 'active' && !p.deleted_at),
+    () => data.projects.filter((p) => !p.deleted_at),
     [data.projects],
   );
 
@@ -79,15 +81,22 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
   // Build the columns for the active mode. Only entities with ≥1 open task get a
   // column, plus a catch-all (Unassigned / No project) when there are loose tasks.
   const columns = useMemo<Column[]>(() => {
+    const source = mode === 'people' ? people : projects;
+    const known = new Set(source.map((e) => e.id));
+    // Group every open task. An owner id that isn't a known column (deleted/
+    // non-person, or a project no longer present) folds into the catch-all so
+    // nothing ever disappears — visible cards always reconcile with the count.
     const byKey = new Map<string, WorkItem[]>();
     for (const w of openTasks) {
-      const key = (mode === 'people' ? w.person_id : w.project_id) || UNASSIGNED;
+      const owner = mode === 'people' ? w.person_id : w.project_id;
+      const key = owner && known.has(owner) ? owner : UNASSIGNED;
       const arr = byKey.get(key) || [];
       arr.push(w);
       byKey.set(key, arr);
     }
+    const sortItems = (items: WorkItem[]) => items.sort((a, b) => priorityScore(b) - priorityScore(a));
     const cols: Column[] = [];
-    const source = mode === 'people' ? people : projects;
+    // Columns follow the source order (people groups / project order).
     for (const e of source) {
       const items = byKey.get(e.id);
       if (!items || items.length === 0) continue;
@@ -95,17 +104,16 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
         key: e.id,
         label: e.name,
         color: mode === 'people' ? ((e as any).color || autoColor(e.id || e.name)) : ((e as any).color || 'var(--accent)'),
-        items: items.sort((a, b) => priorityScore(b) - priorityScore(a)),
+        items: sortItems(items),
       });
     }
-    // Keep columns in the same order as the source list (people groups / project order).
     const loose = byKey.get(UNASSIGNED);
     if (loose && loose.length) {
       cols.push({
         key: UNASSIGNED,
         label: mode === 'people' ? 'Unassigned' : 'No project',
         color: 'var(--text3)',
-        items: loose.sort((a, b) => priorityScore(b) - priorityScore(a)),
+        items: sortItems(loose),
       });
     }
     return cols;
