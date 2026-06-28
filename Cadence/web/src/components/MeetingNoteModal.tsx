@@ -152,7 +152,9 @@ function AgendaItemRow({ item, onChange, onDelete, onCloseTask, taskDone }: {
           {item.source_item_id && (
             taskDone
               ? <span className="agenda-task-closed">✓ Task closed</span>
-              : <button className="agenda-close-task-btn" onClick={onCloseTask} title="Mark the linked task as done">◎ Close task</button>
+              : onCloseTask
+                ? <button className="agenda-close-task-btn" onClick={onCloseTask} title="Mark the linked task as done">◎ Close task</button>
+                : null
           )}
         </div>
       </div>

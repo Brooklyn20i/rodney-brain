@@ -1,7 +1,38 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskFromAction, isFiled, isAgentTask, isUserTask, collectOpenMeetingActions, MTG_FOLDER_PREFIX } from '../tasks';
+import { buildTaskFromAction, isFiled, isAgentTask, isUserTask, collectOpenMeetingActions, MTG_FOLDER_PREFIX, reassignPrimaryPerson } from '../tasks';
 import type { ActionItem } from '../meetingData';
-import type { Note } from '../types';
+import type { Note, RelatedEntity } from '../types';
+
+// ── reassignPrimaryPerson ──────────────────────────────────────────────────────
+
+describe('reassignPrimaryPerson', () => {
+  const personA: RelatedEntity = { type: 'person', id: 'A', name: 'Anna' };
+  const personC: RelatedEntity = { type: 'person', id: 'C', name: 'Cara' };
+  const projX: RelatedEntity = { type: 'project', id: 'X', name: 'Proj' };
+
+  it('swaps the previous primary person for the new one', () => {
+    const out = reassignPrimaryPerson([personA], 'A', { id: 'B', name: 'Bob' });
+    expect(out).toEqual([{ type: 'person', id: 'B', name: 'Bob' }]);
+  });
+
+  it('preserves other people and project links', () => {
+    const out = reassignPrimaryPerson([personA, personC, projX], 'A', { id: 'B', name: 'Bob' });
+    expect(out).toEqual([personC, projX, { type: 'person', id: 'B', name: 'Bob' }]);
+  });
+
+  it('moving to Unassigned drops the old primary and adds nothing', () => {
+    expect(reassignPrimaryPerson([personA, projX], 'A', null)).toEqual([projX]);
+  });
+
+  it('does not duplicate when the new person is already linked', () => {
+    const out = reassignPrimaryPerson([personA, personC], 'A', { id: 'C', name: 'Cara' });
+    expect(out).toEqual([personC]);
+  });
+
+  it('handles an empty/undefined link list', () => {
+    expect(reassignPrimaryPerson(undefined, null, { id: 'B', name: 'Bob' })).toEqual([{ type: 'person', id: 'B', name: 'Bob' }]);
+  });
+});
 
 // ── isFiled ──────────────────────────────────────────────────────────────────
 

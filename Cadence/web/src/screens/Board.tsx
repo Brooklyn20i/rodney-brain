@@ -3,7 +3,7 @@ import { useCadence } from '../lib/store';
 import type { WorkItem } from '../lib/types';
 import { PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { isUserTask } from '../lib/tasks';
+import { isUserTask, reassignPrimaryPerson } from '../lib/tasks';
 import { autoColor, priorityScore } from '../lib/util';
 
 type Mode = 'people' | 'projects';
@@ -130,8 +130,16 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
   };
 
   const onMove = (w: WorkItem, targetId: string | null) => {
-    const patch = mode === 'people' ? { person_id: targetId } : { project_id: targetId };
-    update('work_items', w.id, patch as Partial<WorkItem>);
+    if (mode === 'projects') {
+      update('work_items', w.id, { project_id: targetId } as Partial<WorkItem>);
+      return;
+    }
+    // People mode: also reconcile related_entities so the task doesn't linger
+    // under its old owner on the People screen (which matches person_id OR a
+    // related_entities person link).
+    const newPerson = targetId ? people.find((x) => x.id === targetId) ?? null : null;
+    const next = reassignPrimaryPerson(w.related_entities, w.person_id, newPerson);
+    update('work_items', w.id, { person_id: targetId, related_entities: next } as Partial<WorkItem>);
   };
 
   const subtitle = `${openTasks.length} open · drag-free reassign by tapping ⇄`;

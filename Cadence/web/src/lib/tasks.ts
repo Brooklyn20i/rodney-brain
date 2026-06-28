@@ -3,11 +3,27 @@
 // meeting action into a work_item always carries its due date and owner, and
 // that the "filed vs needs-triage" rule is applied consistently everywhere.
 
-import type { Note, WorkItem } from './types';
+import type { Note, WorkItem, RelatedEntity } from './types';
 import type { ActionItem } from './meetingData';
 import { parseMeeting } from './meetingData';
 
 export const MTG_FOLDER_PREFIX = '__mtg__';
+
+// Reassign a work item's primary person: drop the previous primary from
+// related_entities and add the new one, preserving every other link (extra
+// people, projects, notes). Keeps the Board's quick-move consistent with the
+// People screen, which matches on person_id OR a related_entities person link.
+export function reassignPrimaryPerson(
+  links: RelatedEntity[] | undefined,
+  oldPersonId: string | null,
+  newPerson: { id: string; name: string } | null,
+): RelatedEntity[] {
+  const next = (links || []).filter((e) => !(e.type === 'person' && e.id === oldPersonId));
+  if (newPerson && !next.some((e) => e.id === newPerson.id)) {
+    next.push({ type: 'person', id: newPerson.id, name: newPerson.name });
+  }
+  return next;
+}
 
 export interface PushTarget {
   id: string;
