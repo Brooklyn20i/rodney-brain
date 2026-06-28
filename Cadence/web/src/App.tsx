@@ -12,6 +12,7 @@ import { Today } from './screens/Today'; // eager — the default landing screen
 // deferred instead of eagerly imported by this module.
 const Dashboard = lazy(() => import('./screens/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Horizon = lazy(() => import('./screens/Horizon').then((m) => ({ default: m.Horizon })));
+const Board = lazy(() => import('./screens/Board').then((m) => ({ default: m.Board })));
 const Tasks = lazy(() => import('./screens/Tasks').then((m) => ({ default: m.Tasks })));
 const Inbox = lazy(() => import('./screens/Inbox').then((m) => ({ default: m.Inbox })));
 const Projects = lazy(() => import('./screens/Projects').then((m) => ({ default: m.Projects })));
@@ -90,6 +91,7 @@ export function App() {
       case 'horizon': return <Horizon onMenu={onMenu} onNavigate={navigate} />;
       case 'tasks': return <Tasks onMenu={onMenu} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
+      case 'board': return <Board onMenu={onMenu} />;
       case 'projects': return <Projects onMenu={onMenu} initialSelectedId={focusId} />;
       case 'people': return <People onMenu={onMenu} initialSelectedId={focusId} />;
       case 'meetings': return <Meetings onMenu={onMenu} />;
