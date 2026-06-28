@@ -9,9 +9,9 @@ import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isUserTask } from '../lib/tasks';
 import {
   getNeedsRodney, getHotThisWeek, getBlockedRisky,
-  getKobeHandling, getRecentlyChanged, controlWhy,
+  getKobeHandling, getRecentlyChanged, controlWhy, getLoadSummary,
 } from '../lib/selectors';
-import type { ControlBucket } from '../lib/selectors';
+import type { ControlBucket, LoadSummary } from '../lib/selectors';
 
 const initials = (name: string) =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -98,6 +98,36 @@ function ActivityRow({ a }: { a: Activity }) {
   );
 }
 
+// ── Active load strip (Responsibility #3) ─────────────────────────────────────
+// Quiet, factual read of how much is in Rodney's lane vs. offloaded. Informs,
+// never nags — the nudge only appears when active load is over the soft cap.
+function ControlLoadStrip({ load }: { load: LoadSummary }) {
+  if (load.active === 0 && load.waiting === 0 && load.kobe === 0) return null;
+  return (
+    <div className={`control-load${load.overCap ? ' warning' : ''}`}>
+      <div className="control-load-stats">
+        <div className="control-load-stat">
+          <span className={`control-load-num${load.overdue > 0 ? ' red' : ''}`}>{load.active}</span>
+          <span className="control-load-lbl">Owning{load.overdue > 0 ? ` · ${load.overdue} overdue` : ''}</span>
+        </div>
+        <div className="control-load-stat">
+          <span className="control-load-num">{load.waiting}</span>
+          <span className="control-load-lbl">Waiting on others</span>
+        </div>
+        <div className="control-load-stat">
+          <span className="control-load-num">{load.kobe}</span>
+          <span className="control-load-lbl">With Kobe</span>
+        </div>
+      </div>
+      {load.overCap && (
+        <div className="control-load-nudge">
+          You're actively holding {load.active} items — a few could move to Waiting or to Kobe.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Project pulse (compact amber/red summary) ─────────────────────────────────
 function ProjectPulse({ projects }: { projects: Project[] }) {
   const active = projects.filter((p) => p.status === 'active' && !p.deleted_at);
@@ -153,7 +183,9 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       }))
       .sort((a, b) => a.meeting.localeCompare(b.meeting));
 
-    return { needsRodney, hotThisWeek, blockedItems, blockedProjects, kobeHandling, recentActivity, oneOnOnes };
+    const load = getLoadSummary(items);
+
+    return { needsRodney, hotThisWeek, blockedItems, blockedProjects, kobeHandling, recentActivity, oneOnOnes, load };
   }, [data, dates, people]);
 
   return (
@@ -163,6 +195,9 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       </ScreenHeader>
 
       <div className="screen-content">
+
+        {/* Active-load strip — what's in Rodney's lane vs offloaded */}
+        <ControlLoadStrip load={view.load} />
 
         {/* Portfolio pulse bar */}
         <ProjectPulse projects={data.projects} />

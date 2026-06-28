@@ -50,6 +50,29 @@ export function getKobeHandling(items: WorkItem[]): WorkItem[] {
   return items.filter((w) => !w.done && w.source === 'for:kobe');
 }
 
+// ── Active load (Responsibility #3) ───────────────────────────────────────────
+// How much Rodney is personally carrying right now. "In your lane" = open,
+// non-agent tasks that aren't waitingFor (waiting = owed by others, not a burden)
+// and aren't delegated to Kobe. Surfaced so over-ownership is visible, not silent.
+export const ACTIVE_LOAD_CAP = 7; // soft threshold; tune in one line
+
+export interface LoadSummary {
+  active: number;   // open, in Rodney's lane
+  overdue: number;  // subset of active that is overdue
+  waiting: number;  // owed by others (waitingFor)
+  kobe: number;     // delegated to Kobe (for:kobe)
+  overCap: boolean; // active > ACTIVE_LOAD_CAP
+}
+
+export function getLoadSummary(items: WorkItem[]): LoadSummary {
+  const inLane = items.filter((w) => isUserTask(w) && w.type !== 'waitingFor');
+  const active = inLane.length;
+  const overdue = inLane.filter((w) => isOverdue(w.due_date)).length;
+  const waiting = items.filter((w) => isUserTask(w) && w.type === 'waitingFor').length;
+  const kobe = items.filter((w) => !w.done && w.source === 'for:kobe').length;
+  return { active, overdue, waiting, kobe, overCap: active > ACTIVE_LOAD_CAP };
+}
+
 // ── Why it matters ────────────────────────────────────────────────────────────
 // One-line control interpretation for a cockpit card. Deterministic, no AI.
 // Returns '' when the section label + chips already say it (hotThisWeek) — the
