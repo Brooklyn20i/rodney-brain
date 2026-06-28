@@ -50,6 +50,44 @@ export function getKobeHandling(items: WorkItem[]): WorkItem[] {
   return items.filter((w) => !w.done && w.source === 'for:kobe');
 }
 
+// ── Why it matters ────────────────────────────────────────────────────────────
+// One-line control interpretation for a cockpit card. Deterministic, no AI.
+// Returns '' when the section label + chips already say it (hotThisWeek) — the
+// caller renders nothing for empty strings, keeping the cockpit calm, not busier.
+export type ControlBucket = 'needsRodney' | 'hotThisWeek' | 'blockedRisky' | 'kobeHandling';
+
+const BLOCKING_LANG = /\b(blocked|blocking|stuck|depends on|dependency|escalat)\b/;
+
+export function controlWhy(w: WorkItem, bucket: ControlBucket, personName?: string): string {
+  switch (bucket) {
+    case 'needsRodney':
+      return w.type === 'decision'
+        ? 'Decision required from you'
+        : 'Your position needed before this moves';
+
+    case 'blockedRisky': {
+      if (w.type === 'waitingFor') {
+        const first = personName?.trim().split(/\s+/)[0];
+        return first
+          ? `Waiting on ${first} — not yours to own yet`
+          : 'Waiting on someone else — not yours to own yet';
+      }
+      if (w.type === 'risk') return 'Open risk, unresolved';
+      if (isOverdue(w.due_date)) return 'Overdue and unmoved';
+      const text = (w.title + ' ' + (w.notes || '')).toLowerCase();
+      if (BLOCKING_LANG.test(text)) return 'Blocked — needs unsticking';
+      return 'Flagged blocked or risky';
+    }
+
+    case 'kobeHandling':
+      return "Kobe's to handle — no action unless it's blocked";
+
+    case 'hotThisWeek':
+    default:
+      return '';
+  }
+}
+
 // ── Recently changed ──────────────────────────────────────────────────────────
 // Collapse routine noise; surface meaningful actions.
 const NOISE = /^(view|open|close|session|login)/i;

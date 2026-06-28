@@ -9,8 +9,9 @@ import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isUserTask } from '../lib/tasks';
 import {
   getNeedsRodney, getHotThisWeek, getBlockedRisky,
-  getKobeHandling, getRecentlyChanged,
+  getKobeHandling, getRecentlyChanged, controlWhy,
 } from '../lib/selectors';
+import type { ControlBucket } from '../lib/selectors';
 
 const initials = (name: string) =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -39,20 +40,24 @@ function CockpitSection({ label, count, accent, empty, children }: {
 }
 
 // ── Compact work item row for the cockpit ─────────────────────────────────────
-function CockpitRow({ w, people, projects, onEdit }: {
-  w: WorkItem; people: { id: string; name: string }[];
+function CockpitRow({ w, bucket, people, projects, onEdit }: {
+  w: WorkItem; bucket: ControlBucket; people: { id: string; name: string }[];
   projects: Project[]; onEdit: (w: WorkItem) => void;
 }) {
   const proj = projects.find((p) => p.id === w.project_id);
   const person = people.find((p) => p.id === w.person_id);
+  const why = controlWhy(w, bucket, person?.name);
   return (
     <button className="cockpit-row" onClick={() => onEdit(w)}>
       <PriTag priority={w.priority} />
-      <div className="cockpit-row-title">{w.title}</div>
-      <div className="cockpit-row-meta">
-        {proj && <span className="cockpit-meta-chip cockpit-chip-proj">▤ {proj.name}</span>}
-        {person && <span className="cockpit-meta-chip cockpit-chip-person">👤 {person.name.split(' ')[0]}</span>}
-        <Due date={w.due_date} />
+      <div className="cockpit-row-main">
+        <div className="cockpit-row-title">{w.title}</div>
+        {why && <div className="cockpit-row-why">{why}</div>}
+        <div className="cockpit-row-meta">
+          {proj && <span className="cockpit-meta-chip cockpit-chip-proj">▤ {proj.name}</span>}
+          {person && <span className="cockpit-meta-chip cockpit-chip-person">👤 {person.name.split(' ')[0]}</span>}
+          <Due date={w.due_date} />
+        </div>
       </div>
     </button>
   );
@@ -200,7 +205,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
           label="Needs Rodney" count={view.needsRodney.length}
           accent="var(--orange)" empty="No decisions or approvals pending">
           {view.needsRodney.map((w) => (
-            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+            <CockpitRow key={w.id} w={w} bucket="needsRodney" people={people} projects={data.projects} onEdit={setEditing} />
           ))}
         </CockpitSection>
 
@@ -209,7 +214,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
           label="Hot This Week" count={view.hotThisWeek.length}
           accent="var(--accent)" empty="Nothing due in the next 7 days">
           {view.hotThisWeek.map((w) => (
-            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+            <CockpitRow key={w.id} w={w} bucket="hotThisWeek" people={people} projects={data.projects} onEdit={setEditing} />
           ))}
         </CockpitSection>
 
@@ -222,7 +227,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
             <RiskyProjectChip key={p.id} project={p} />
           ))}
           {view.blockedItems.map((w) => (
-            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+            <CockpitRow key={w.id} w={w} bucket="blockedRisky" people={people} projects={data.projects} onEdit={setEditing} />
           ))}
         </CockpitSection>
 
@@ -231,7 +236,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
           label="Kobe Handling" count={view.kobeHandling.length}
           accent="var(--purple)" empty="Nothing delegated to Kobe">
           {view.kobeHandling.map((w) => (
-            <CockpitRow key={w.id} w={w} people={people} projects={data.projects} onEdit={setEditing} />
+            <CockpitRow key={w.id} w={w} bucket="kobeHandling" people={people} projects={data.projects} onEdit={setEditing} />
           ))}
         </CockpitSection>
 
