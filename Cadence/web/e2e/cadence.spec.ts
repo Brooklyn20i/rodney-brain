@@ -1,0 +1,84 @@
+import { test, expect, Page } from '@playwright/test';
+import { makeSeed } from './seed';
+
+test.beforeEach(async ({ page }) => {
+  const seed = makeSeed();
+  await page.addInitScript((s) => { (window as any).__CADENCE_E2E__ = s; }, seed);
+  await page.goto('/');
+});
+
+async function navTo(page: Page, label: string) {
+  // Word-boundary, case-sensitive match on the accessible name. Survives a
+  // badge count suffix ("◎ Tasks 1") and avoids "Board" matching "Dashboard".
+  await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+test('boots straight to Control (no login gate)', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Control' })).toBeVisible();
+  await expect(page.getByText('Owning')).toBeVisible();
+});
+
+// ── Navigation smoke: every screen renders a header in a real browser ───────────
+for (const label of ['Dashboard', 'Horizon', 'Board', 'Tasks', 'Inbox', 'Projects', 'People', 'Notes', 'Review']) {
+  test(`navigates to ${label} without crashing`, async ({ page }) => {
+    await navTo(page, label);
+    await expect(page.locator('.screen-header h1').first()).toBeVisible();
+  });
+}
+
+// ── Control: load strip + why-lines ─────────────────────────────────────────────
+test('control shows the active-load nudge and a why-line', async ({ page }) => {
+  await expect(page.getByText(/actively holding 8 items/)).toBeVisible();
+  await expect(page.getByText('Decision required from you')).toBeVisible();
+  await expect(page.getByText('Waiting on Bob — not yours to own yet')).toBeVisible();
+});
+
+// ── Board: reassign a task across columns (the Arranger core) ────────────────────
+test('board moves a task to another person and it leaves the old column', async ({ page }) => {
+  await navTo(page, 'Board');
+  await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
+  const annaCol = page.locator('.board-col', { hasText: 'Anna Lee' });
+  const bobCol = page.locator('.board-col', { hasText: 'Bob Ng' });
+  await expect(annaCol).toContainText('Overdue review');
+
+  const card = page.locator('.board-card', { hasText: 'Overdue review' });
+  await card.getByTitle(/Move to another person/).click();
+  await page.locator('.action-send-picker').getByText('Bob Ng').click();
+
+  await expect(bobCol).toContainText('Overdue review');
+  await expect(annaCol).not.toContainText('Overdue review');
+});
+
+// ── Tasks: create a task through Quick Add ───────────────────────────────────────
+test('creates a task via Quick Add and it appears in the list', async ({ page }) => {
+  await navTo(page, 'Tasks');
+  await page.getByRole('button', { name: 'Add Task' }).click();
+  const input = page.getByPlaceholder(/Try "Follow up/);
+  await input.fill('Zebra checkpoint');
+  await input.press('Enter');
+  await expect(page.getByText('Zebra checkpoint')).toBeVisible();
+});
+
+// ── Dashboard: a person card deep-links into People ──────────────────────────────
+test('dashboard person card navigates to People', async ({ page }) => {
+  await navTo(page, 'Dashboard');
+  await page.locator('.dash-card', { hasText: 'Anna Lee' }).first().click();
+  await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
+});
+
+// ── Horizon: forward markers render in their buckets ─────────────────────────────
+test('horizon shows milestones, targets and a 1:1', async ({ page }) => {
+  await navTo(page, 'Horizon');
+  await expect(page.getByText('Design freeze')).toBeVisible();
+  await expect(page.getByText('Beta launch')).toBeVisible();
+  await expect(page.getByText('This week')).toBeVisible();
+});
+
+// ── Projects: Analytical evidence-on-demand ──────────────────────────────────────
+test('project health evidence reveals raw numbers on demand', async ({ page }) => {
+  await navTo(page, 'Projects');
+  await page.getByText('Apollo', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Why?' }).click();
+  await expect(page.getByText(/open total/)).toBeVisible();
+});

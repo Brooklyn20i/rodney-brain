@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import { CadenceProvider } from './lib/store';
+import { E2EProvider } from './lib/e2eProvider';
 import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import './styles.css';
@@ -20,13 +21,18 @@ if (sentryDsn) {
   });
 }
 
+// E2E builds (VITE_E2E=1, Playwright only) swap in an in-memory provider so the
+// real app runs in a browser with no Supabase backend. Production never sets the
+// flag, so this branch is eliminated and CadenceProvider is used unchanged.
+const Provider = import.meta.env.VITE_E2E === '1' ? E2EProvider : CadenceProvider;
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <SaveErrorBanner />
-      <CadenceProvider>
+      <Provider>
         <App />
-      </CadenceProvider>
+      </Provider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

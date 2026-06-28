@@ -7,7 +7,7 @@ import { enqueue, dequeueAll, dropEntry, queueCount, isNetworkError } from './of
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
 
-interface Ctx {
+export interface Ctx {
   ready: boolean;
   configured: boolean;
   session: Session | null;
@@ -54,7 +54,7 @@ function dropMissingColumn(payload: any, error: any): any | null {
   return rest;
 }
 
-const CadenceCtx = createContext<Ctx | null>(null);
+export const CadenceCtx = createContext<Ctx | null>(null);
 
 export function useCadence(): Ctx {
   const c = useContext(CadenceCtx);

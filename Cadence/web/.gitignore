@@ -6,3 +6,8 @@ dist/
 .DS_Store
 
 *.tsbuildinfo
+
+# Playwright E2E artifacts
+test-results/
+playwright-report/
+.playwright/
