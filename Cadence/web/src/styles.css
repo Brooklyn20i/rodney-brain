@@ -183,6 +183,23 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 .control-load-lbl { font-size: 12px; color: var(--text3); }
 .control-load-nudge { font-size: 12px; color: var(--orange); margin-top: 8px; line-height: 1.35; }
 
+/* Horizon — forward timeline of milestones, targets and 1:1s */
+.horizon-bucket { margin-bottom: 18px; }
+.horizon-bucket-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.horizon-bucket-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); }
+.horizon-bucket.overdue .horizon-bucket-label { color: var(--red); }
+.horizon-bucket-count { font-size: 11px; font-weight: 700; color: var(--text3); background: var(--surface2); border-radius: 9px; padding: 1px 7px; }
+.horizon-bucket-body { display: flex; flex-direction: column; gap: 6px; }
+.horizon-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: inherit; cursor: pointer; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); transition: background 0.1s; }
+.horizon-row:hover { background: var(--surface2); }
+.horizon-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.horizon-kind { font-size: 13px; color: var(--text2); flex-shrink: 0; width: 16px; text-align: center; }
+.horizon-row-main { flex: 1; min-width: 0; }
+.horizon-row-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horizon-row-sub { font-size: 11px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.horizon-date { font-size: 12px; font-weight: 600; color: var(--text2); flex-shrink: 0; white-space: nowrap; }
+.horizon-date.red { color: var(--red); }
+
 /* ── Project control cards ── */
 .proj-ctrl-card { display: flex; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); width: 100%; text-align: left; cursor: pointer; font-family: inherit; transition: border-color 0.12s, box-shadow 0.12s; margin-bottom: 8px; overflow: hidden; }
 .proj-ctrl-card:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--blue-bg); }

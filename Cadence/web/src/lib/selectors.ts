@@ -1,7 +1,7 @@
 // Pure data selectors for the Executive Control Cockpit.
 // No React dependencies — data in, arrays out.
 
-import type { WorkItem, Project, Activity, ProjectUpdate } from './types';
+import type { WorkItem, Project, Activity, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue } from './util';
 import { isUserTask } from './tasks';
 
@@ -71,6 +71,75 @@ export function getLoadSummary(items: WorkItem[]): LoadSummary {
   const waiting = items.filter((w) => isUserTask(w) && w.type === 'waitingFor').length;
   const kobe = items.filter((w) => !w.done && w.source === 'for:kobe').length;
   return { active, overdue, waiting, kobe, overCap: active > ACTIVE_LOAD_CAP };
+}
+
+// ── Horizon (Futuristic #4) ───────────────────────────────────────────────────
+// Forward control points — milestones, project targets and upcoming 1:1s — on a
+// single timeline, so the future Rodney is pulled toward is visible, not just
+// today. Deliberately NOT every task due date (that's Hot This Week's job).
+export type HorizonKind = 'milestone' | 'target' | 'meeting';
+export type HorizonBucket = 'overdue' | 'week' | 'fortnight' | 'month' | 'later';
+
+export interface HorizonMarker {
+  id: string;
+  kind: HorizonKind;
+  title: string;
+  subtitle: string;
+  date: string;
+  severity: 'red' | 'amber' | 'green' | 'neutral';
+  refId: string;        // project id (milestone/target) or person id (meeting)
+  nav: 'projects' | 'people';
+}
+
+export interface HorizonMeetingInput { personId: string; name: string; date: string; }
+
+export function horizonBucket(date: string): HorizonBucket {
+  const today = todayStr();
+  if (date < today) return 'overdue';
+  if (date <= addDaysStr(7)) return 'week';
+  if (date <= addDaysStr(21)) return 'fortnight';
+  if (date <= addDaysStr(45)) return 'month';
+  return 'later';
+}
+
+export function getHorizonMarkers(
+  projects: Project[],
+  milestones: Milestone[],
+  meetings: HorizonMeetingInput[],
+): HorizonMarker[] {
+  const active = projects.filter((p) => p.status === 'active' && !p.deleted_at);
+  const projById = new Map(active.map((p) => [p.id, p]));
+  const markers: HorizonMarker[] = [];
+
+  for (const m of milestones) {
+    if (m.done || m.deleted_at || !m.due_date) continue;
+    const proj = projById.get(m.project_id);
+    if (!proj) continue; // only surface milestones on active projects
+    markers.push({
+      id: 'ms:' + m.id, kind: 'milestone', title: m.title, subtitle: proj.name,
+      date: m.due_date, severity: isOverdue(m.due_date) ? 'red' : 'neutral',
+      refId: proj.id, nav: 'projects',
+    });
+  }
+
+  for (const p of active) {
+    if (!p.target_date) continue;
+    markers.push({
+      id: 'tg:' + p.id, kind: 'target', title: p.name,
+      subtitle: p.next_action ? `Next: ${p.next_action}` : 'Project target',
+      date: p.target_date, severity: (p.health as HorizonMarker['severity']) || 'neutral',
+      refId: p.id, nav: 'projects',
+    });
+  }
+
+  for (const mt of meetings) {
+    markers.push({
+      id: 'mt:' + mt.personId, kind: 'meeting', title: mt.name, subtitle: '1:1',
+      date: mt.date, severity: 'neutral', refId: mt.personId, nav: 'people',
+    });
+  }
+
+  return markers.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ── Why it matters ────────────────────────────────────────────────────────────
