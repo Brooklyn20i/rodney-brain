@@ -242,17 +242,26 @@ describe('Gantt', () => {
     expect(onSelect).toHaveBeenCalledWith('pA');
   });
 
-  it('ProjectGantt renders phase bars and milestone markers', () => {
+  it('ProjectGantt renders phase bars, milestone markers and activity bars', () => {
     const phases = [{ id: 'ph1', project_id: 'pA', name: 'Build', start_date: addDaysStr(-5), end_date: addDaysStr(10), sort: 0 }] as any;
     const milestones = [{ id: 'm1', project_id: 'pA', title: 'MS', due_date: addDaysStr(3), done: false }] as any;
-    const { container } = render(<ProjectGantt phases={phases} milestones={milestones} targetDate={addDaysStr(20)} />);
-    expect(container.querySelector('.gantt-bar')).toBeTruthy();
-    expect(container.querySelector('.gantt-ms')).toBeTruthy();
+    const items = [wi({ id: 'w1', title: 'Do work', project_id: 'pA', due_date: addDaysStr(6) })] as any;
+    const { container } = render(<ProjectGantt phases={phases} milestones={milestones} items={items} targetDate={addDaysStr(20)} />);
+    expect(container.querySelector('.gantt-bar')).toBeTruthy();   // phase
+    expect(container.querySelector('.gantt-ms')).toBeTruthy();    // milestone
+    expect(container.querySelector('.gantt-abar')).toBeTruthy();  // activity (work item)
+    expect(screen.getByText('Do work')).toBeInTheDocument();
+  });
+
+  it('ProjectGantt plots a project that has only tasks (no phases or milestones)', () => {
+    const items = [wi({ id: 'w1', title: 'Lone task', project_id: 'pA', due_date: addDaysStr(8) })] as any;
+    const { container } = render(<ProjectGantt phases={[]} milestones={[]} items={items} targetDate={null} />);
+    expect(container.querySelector('.gantt-abar')).toBeTruthy();
   });
 
   it('ProjectGantt shows a hint when there are too few dates', () => {
-    render(<ProjectGantt phases={[]} milestones={[]} targetDate={null} />);
-    expect(screen.getByText(/Add start\/end dates/)).toBeInTheDocument();
+    render(<ProjectGantt phases={[]} milestones={[]} items={[]} targetDate={null} />);
+    expect(screen.getByText(/Add due dates/)).toBeInTheDocument();
   });
 });
 

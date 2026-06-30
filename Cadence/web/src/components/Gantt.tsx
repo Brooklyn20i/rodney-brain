@@ -2,7 +2,7 @@
 // ProjectGantt: phases as bars + milestones as markers for one project.
 // PortfolioTimeline: every active project as a bar on a shared time axis.
 import { useMemo } from 'react';
-import type { Project, Milestone, ProjectPhase } from '../lib/types';
+import type { Project, Milestone, ProjectPhase, WorkItem } from '../lib/types';
 import { todayStr, fmtDate, isOverdue } from '../lib/util';
 
 const MS_DAY = 86400000;
@@ -44,28 +44,37 @@ function Axis({ ticks }: { ticks: Scale['ticks'] }) {
 }
 
 // ── Per-project Gantt ────────────────────────────────────────────────────────
-export function ProjectGantt({ phases, milestones, targetDate }: {
-  phases: ProjectPhase[]; milestones: Milestone[]; targetDate: string | null;
+// Plots the whole project on one timeline: phase bars, milestone markers, and
+// every open work item as an activity bar (its runway from today to its due
+// date — or, if overdue, the stretch from due to today).
+export function ProjectGantt({ phases, milestones, items, targetDate }: {
+  phases: ProjectPhase[]; milestones: Milestone[]; items: WorkItem[]; targetDate: string | null;
 }) {
   const today = todayStr();
+  const activities = useMemo(() => items.filter((w) => !w.done && w.due_date), [items]);
+
   const scale = useMemo(() => {
     const dates = [
       ...phases.flatMap((p) => [p.start_date, p.end_date]),
       ...milestones.map((m) => m.due_date),
+      ...activities.map((w) => w.due_date),
       targetDate, today,
     ].filter(Boolean) as string[];
     return buildScale(dates);
-  }, [phases, milestones, targetDate, today]);
+  }, [phases, milestones, activities, targetDate, today]);
 
   if (!scale) {
     return (
       <div className="gantt-empty">
-        Add start/end dates to phases or due dates to milestones to see the timeline.
+        Add due dates to this project's tasks (or milestones / phase dates) to see the timeline.
       </div>
     );
   }
   const { pos, ticks } = scale;
-  const dated = milestones.filter((m) => m.due_date);
+  const datedMs = milestones.filter((m) => m.due_date);
+  const noDate = items.filter((w) => !w.done && !w.due_date).length;
+  const activityTone = (w: WorkItem) =>
+    isOverdue(w.due_date) ? 'overdue' : w.priority === 'high' ? 'high' : 'upcoming';
 
   return (
     <div className="gantt">
@@ -92,26 +101,46 @@ export function ProjectGantt({ phases, milestones, targetDate }: {
           </div>
         ))}
 
-        <div className="gantt-row">
-          <span className="gantt-row-label">Milestones</span>
-          <div className="gantt-track">
-            {dated.length === 0 && <span className="gantt-row-hint">none dated</span>}
-            {dated.map((m) => (
-              <span key={m.id}
-                className={`gantt-ms ${m.done ? 'done' : isOverdue(m.due_date) ? 'overdue' : 'upcoming'}`}
-                style={{ left: `${pos(m.due_date!)}%` }}
-                title={`${m.title} · ${fmtDate(m.due_date!)}${m.done ? ' ✓' : ''}`} />
-            ))}
+        {datedMs.length > 0 && (
+          <div className="gantt-row">
+            <span className="gantt-row-label">Milestones</span>
+            <div className="gantt-track">
+              {datedMs.map((m) => (
+                <span key={m.id}
+                  className={`gantt-ms ${m.done ? 'done' : isOverdue(m.due_date) ? 'overdue' : 'upcoming'}`}
+                  style={{ left: `${pos(m.due_date!)}%` }}
+                  title={`${m.title} · ${fmtDate(m.due_date!)}${m.done ? ' ✓' : ''}`} />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {activities.map((w) => {
+          const due = w.due_date!;
+          const a = pos(due < today ? due : today);
+          const b = pos(due < today ? today : due);
+          const tone = activityTone(w);
+          return (
+            <div className="gantt-row" key={w.id}>
+              <span className="gantt-row-label" title={w.title}>{w.title}</span>
+              <div className="gantt-track">
+                <div className={`gantt-abar ${tone}`}
+                  style={{ left: `${a}%`, width: `${Math.max(1.5, b - a)}%` }}
+                  title={`${w.title} · due ${fmtDate(due)}`} />
+                <span className={`gantt-ms ${tone}`} style={{ left: `${pos(due)}%` }} />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="gantt-legend">
         <span><i className="gantt-key today" /> Today</span>
         <span><i className="gantt-key target" /> Target</span>
-        <span><i className="gantt-key ms-upcoming" /> Milestone</span>
+        <span><i className="gantt-key ms-upcoming" /> Milestone / task</span>
         <span><i className="gantt-key ms-overdue" /> Overdue</span>
         <span><i className="gantt-key ms-done" /> Done</span>
+        {noDate > 0 && <span className="gantt-nodate">{noDate} task{noDate > 1 ? 's' : ''} with no date</span>}
       </div>
     </div>
   );

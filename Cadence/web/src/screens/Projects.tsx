@@ -391,7 +391,7 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
       {/* Visual timeline — phases as bars, milestones as markers */}
       <div style={{ marginBottom: 18 }}>
         <strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Timeline</strong>
-        <ProjectGantt phases={phases} milestones={milestones} targetDate={project.target_date} />
+        <ProjectGantt phases={phases} milestones={milestones} items={items} targetDate={project.target_date} />
       </div>
 
       {milestones.length > 0 && (
