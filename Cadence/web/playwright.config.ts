@@ -1,8 +1,17 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
 // Drives the real app in Chromium with the in-memory E2E provider (VITE_E2E=1),
-// so no Supabase backend is needed. Browser comes from the pre-installed
-// PLAYWRIGHT_BROWSERS_PATH (/opt/pw-browsers) — do NOT run `playwright install`.
+// so no Supabase backend is needed. Prefer an explicit env override, then the
+// CI/Linux browser cache, then the user's local macOS Chrome. If none exist,
+// let Playwright fall back to its own browser resolution.
+const executablePath = [
+  process.env.PLAYWRIGHT_CHROMIUM_PATH,
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+].find((candidate): candidate is string => Boolean(candidate) && existsSync(candidate));
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -13,11 +22,7 @@ export default defineConfig({
     baseURL: 'http://localhost:4173',
     headless: true,
     trace: 'retain-on-failure',
-    // Use the browser pre-installed in this environment rather than letting
-    // Playwright resolve a version it expects to download. Overridable per-env.
-    launchOptions: {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    },
+    launchOptions: executablePath ? { executablePath } : {},
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
