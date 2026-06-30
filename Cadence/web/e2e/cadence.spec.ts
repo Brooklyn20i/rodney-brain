@@ -16,7 +16,7 @@ async function navTo(page: Page, label: string) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 test('boots straight to Control (no login gate)', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Control' })).toBeVisible();
-  await expect(page.getByText('Owning')).toBeVisible();
+  await expect(page.getByText('To do')).toBeVisible();
 });
 
 // ── Navigation smoke: every screen renders a header in a real browser ───────────
@@ -27,11 +27,12 @@ for (const label of ['Dashboard', 'Horizon', 'Board', 'Tasks', 'Inbox', 'Project
   });
 }
 
-// ── Control: load strip + why-lines ─────────────────────────────────────────────
-test('control shows the active-load nudge and a why-line', async ({ page }) => {
-  await expect(page.getByText(/actively holding 8 items/)).toBeVisible();
-  await expect(page.getByText('Decision required from you')).toBeVisible();
-  await expect(page.getByText('Waiting on Bob — not yours to own yet')).toBeVisible();
+// ── Control: ranked to-do + waiting + Kobe ───────────────────────────────────────
+test('control shows the ranked to-do, plus waiting and Kobe sections', async ({ page }) => {
+  await expect(page.getByText(/holding 8 open items/)).toBeVisible();      // load nudge
+  await expect(page.getByText('Overdue review')).toBeVisible();            // in My To-Do
+  await expect(page.getByText('Awaiting legal sign-off')).toBeVisible();   // Waiting on others
+  await expect(page.getByText('Draft summary')).toBeVisible();             // With Kobe
 });
 
 // ── Board: reassign a task across columns (the Arranger core) ────────────────────

@@ -1,19 +1,53 @@
 // Pure data selectors for the Executive Control Cockpit.
 // No React dependencies — data in, arrays out.
 
-import type { WorkItem, Project, Activity, ProjectUpdate, Milestone } from './types';
+import type { WorkItem, Project, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue } from './util';
 import { isUserTask } from './tasks';
 
-// ── Needs Rodney ──────────────────────────────────────────────────────────────
-// Decisions + items explicitly needing Rodney's authority or input.
-export function getNeedsRodney(items: WorkItem[]): WorkItem[] {
-  return items.filter(isUserTask).filter((w) => {
-    if (w.type === 'decision') return true;
-    const text = (w.title + ' ' + (w.notes || '')).toLowerCase();
-    return /\b(approve|approval|sign.?off|authoris|authorize|decide|escalat|authority|budget|review and)\b/.test(text)
-      && w.priority !== 'low';
-  });
+// ── Rodney's to-do ────────────────────────────────────────────────────────────
+// The one clear list: Rodney's own open work, ranked by when it's due. Pure and
+// deterministic — grouped by date only, no keyword guessing. "In his lane" means
+// his own task (isUserTask excludes agent/Kobe items) that isn't a waitingFor
+// (those are owed by others and live in their own section).
+const PRI: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const byDueThenPri = (a: WorkItem, b: WorkItem) =>
+  (a.due_date || '').localeCompare(b.due_date || '') || (PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1);
+const byPriThenDue = (a: WorkItem, b: WorkItem) =>
+  ((PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1)) || (a.due_date || '9999').localeCompare(b.due_date || '9999');
+
+export interface TodoGroup {
+  key: 'overdue' | 'today' | 'week' | 'later';
+  label: string;
+  tone: 'red' | 'orange' | 'blue' | 'muted';
+  items: WorkItem[];
+}
+
+export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
+  const today = todayStr();
+  const weekEnd = addDaysStr(7);
+  const mine = items.filter((w) => isUserTask(w) && w.type !== 'waitingFor');
+  const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
+  for (const w of mine) {
+    if (w.due_date && w.due_date < today) overdue.push(w);
+    else if (w.due_date === today) dueToday.push(w);
+    else if (w.due_date && w.due_date <= weekEnd) week.push(w);
+    else later.push(w);
+  }
+  overdue.sort(byDueThenPri); dueToday.sort(byPriThenDue); week.sort(byDueThenPri); later.sort(byPriThenDue);
+  const out: TodoGroup[] = [];
+  if (overdue.length) out.push({ key: 'overdue', label: 'Overdue', tone: 'red', items: overdue });
+  if (dueToday.length) out.push({ key: 'today', label: 'Today', tone: 'orange', items: dueToday });
+  if (week.length) out.push({ key: 'week', label: 'This week', tone: 'blue', items: week });
+  if (later.length) out.push({ key: 'later', label: 'Later', tone: 'muted', items: later });
+  return out;
+}
+
+// Open items Rodney is waiting on someone else for — owed by others, not his to do.
+export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
+  return items
+    .filter((w) => isUserTask(w) && w.type === 'waitingFor')
+    .sort(byDueThenPri);
 }
 
 // ── Hot this week ─────────────────────────────────────────────────────────────
@@ -29,18 +63,6 @@ export function getHotThisWeek(items: WorkItem[]): WorkItem[] {
       const pri: Record<string, number> = { high: 0, medium: 1, low: 2 };
       return (pri[a.priority] ?? 1) - (pri[b.priority] ?? 1);
     });
-}
-
-// ── Blocked / risky ───────────────────────────────────────────────────────────
-// Overdue items, risk/waitingFor types, items with blocking language.
-export function getBlockedRisky(items: WorkItem[]): WorkItem[] {
-  return items.filter(isUserTask).filter((w) => {
-    if (w.type === 'risk') return true;
-    if (w.type === 'waitingFor') return true;
-    if (isOverdue(w.due_date)) return true;
-    const text = (w.title + ' ' + (w.notes || '')).toLowerCase();
-    return /\b(blocked|blocking|stuck|depends on|dependency|escalat)\b/.test(text);
-  });
 }
 
 // ── Kobe handling ─────────────────────────────────────────────────────────────
@@ -140,54 +162,6 @@ export function getHorizonMarkers(
   }
 
   return markers.sort((a, b) => a.date.localeCompare(b.date));
-}
-
-// ── Why it matters ────────────────────────────────────────────────────────────
-// One-line control interpretation for a cockpit card. Deterministic, no AI.
-// Returns '' when the section label + chips already say it (hotThisWeek) — the
-// caller renders nothing for empty strings, keeping the cockpit calm, not busier.
-export type ControlBucket = 'needsRodney' | 'hotThisWeek' | 'blockedRisky' | 'kobeHandling';
-
-const BLOCKING_LANG = /\b(blocked|blocking|stuck|depends on|dependency|escalat)\b/;
-
-export function controlWhy(w: WorkItem, bucket: ControlBucket, personName?: string): string {
-  switch (bucket) {
-    case 'needsRodney':
-      return w.type === 'decision'
-        ? 'Decision required from you'
-        : 'Your position needed before this moves';
-
-    case 'blockedRisky': {
-      if (w.type === 'waitingFor') {
-        const first = personName?.trim().split(/\s+/)[0];
-        return first
-          ? `Waiting on ${first} — not yours to own yet`
-          : 'Waiting on someone else — not yours to own yet';
-      }
-      if (w.type === 'risk') return 'Open risk, unresolved';
-      if (isOverdue(w.due_date)) return 'Overdue and unmoved';
-      const text = (w.title + ' ' + (w.notes || '')).toLowerCase();
-      if (BLOCKING_LANG.test(text)) return 'Blocked — needs unsticking';
-      return 'Flagged blocked or risky';
-    }
-
-    case 'kobeHandling':
-      return "Kobe's to handle — no action unless it's blocked";
-
-    case 'hotThisWeek':
-    default:
-      return '';
-  }
-}
-
-// ── Recently changed ──────────────────────────────────────────────────────────
-// Collapse routine noise; surface meaningful actions.
-const NOISE = /^(view|open|close|session|login)/i;
-export function getRecentlyChanged(activity: Activity[], limit = 8): Activity[] {
-  return [...activity]
-    .filter((a) => !NOISE.test(a.action))
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, limit);
 }
 
 // ── Project grouping ──────────────────────────────────────────────────────────

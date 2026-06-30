@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getNeedsRodney, getHotThisWeek, getBlockedRisky, getKobeHandling,
-  getRecentlyChanged, getLoadSummary, ACTIVE_LOAD_CAP, controlWhy,
+  getTodoGroups, getWaitingOnOthers, getHotThisWeek, getKobeHandling,
+  getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
 } from '../selectors';
 import { todayStr, addDaysStr } from '../util';
-import type { WorkItem, Project, Milestone, ProjectUpdate, Activity } from '../types';
+import type { WorkItem, Project, Milestone, ProjectUpdate } from '../types';
 
 // Deterministic clock so todayStr()/addDaysStr() are stable across runs.
 beforeEach(() => {
@@ -38,27 +38,48 @@ const upd = (o: Partial<ProjectUpdate>): ProjectUpdate => ({
   created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
 }) as ProjectUpdate;
 
-const act = (o: Partial<Activity>): Activity => ({
-  id: 'a1', owner_id: 'o', actor: 'you', action: 'add_item', detail: '', created_at: '2026-06-01', ...o,
-}) as Activity;
+// ── getTodoGroups ──────────────────────────────────────────────────────────────
+describe('getTodoGroups', () => {
+  it('buckets in-lane tasks into Overdue / Today / This week / Later in order', () => {
+    const items = [
+      wi({ id: 'over', due_date: addDaysStr(-1) }),
+      wi({ id: 'today', due_date: todayStr() }),
+      wi({ id: 'wk', due_date: addDaysStr(4) }),
+      wi({ id: 'later', due_date: addDaysStr(30) }),
+      wi({ id: 'nodue', due_date: null }),
+    ];
+    const g = getTodoGroups(items);
+    expect(g.map((x) => x.key)).toEqual(['overdue', 'today', 'week', 'later']);
+    expect(g.find((x) => x.key === 'overdue')!.items.map((w) => w.id)).toEqual(['over']);
+    // no-due items fall into Later alongside far-future ones
+    expect(g.find((x) => x.key === 'later')!.items.map((w) => w.id).sort()).toEqual(['later', 'nodue']);
+  });
 
-// ── getNeedsRodney ─────────────────────────────────────────────────────────────
-describe('getNeedsRodney', () => {
-  it('includes decision-type items', () => {
-    expect(getNeedsRodney([wi({ type: 'decision', title: 'pick one' })])).toHaveLength(1);
+  it('excludes waitingFor, agent tasks and done items', () => {
+    const items = [
+      wi({ id: 'wait', type: 'waitingFor' }),
+      wi({ id: 'kobe', source: 'for:kobe' }),
+      wi({ id: 'done', done: true }),
+      wi({ id: 'keep' }),
+    ];
+    const ids = getTodoGroups(items).flatMap((g) => g.items.map((w) => w.id));
+    expect(ids).toEqual(['keep']);
   });
-  it('includes authority-keyword items above low priority', () => {
-    expect(getNeedsRodney([wi({ title: 'approve the budget', priority: 'high' })])).toHaveLength(1);
+
+  it('omits empty groups', () => {
+    expect(getTodoGroups([wi({ due_date: todayStr() })]).map((g) => g.key)).toEqual(['today']);
   });
-  it('excludes authority items that are low priority', () => {
-    expect(getNeedsRodney([wi({ title: 'approve this', priority: 'low' })])).toHaveLength(0);
-  });
-  it('excludes plain tasks and agent tasks', () => {
-    expect(getNeedsRodney([wi({ title: 'do thing' })])).toHaveLength(0);
-    expect(getNeedsRodney([wi({ type: 'decision', source: 'for:kobe' })])).toHaveLength(0);
-  });
-  it('excludes done items', () => {
-    expect(getNeedsRodney([wi({ type: 'decision', done: true })])).toHaveLength(0);
+});
+
+// ── getWaitingOnOthers ─────────────────────────────────────────────────────────
+describe('getWaitingOnOthers', () => {
+  it('returns only open waitingFor items', () => {
+    const items = [
+      wi({ id: 'w', type: 'waitingFor' }),
+      wi({ id: 'wd', type: 'waitingFor', done: true }),
+      wi({ id: 'task' }),
+    ];
+    expect(getWaitingOnOthers(items).map((w) => w.id)).toEqual(['w']);
   });
 });
 
@@ -85,43 +106,12 @@ describe('getHotThisWeek', () => {
   });
 });
 
-// ── getBlockedRisky ────────────────────────────────────────────────────────────
-describe('getBlockedRisky', () => {
-  it('includes risk, waitingFor, overdue, and blocking language', () => {
-    expect(getBlockedRisky([wi({ type: 'risk' })])).toHaveLength(1);
-    expect(getBlockedRisky([wi({ type: 'waitingFor' })])).toHaveLength(1);
-    expect(getBlockedRisky([wi({ due_date: addDaysStr(-2) })])).toHaveLength(1);
-    expect(getBlockedRisky([wi({ title: 'this is blocked' })])).toHaveLength(1);
-  });
-  it('excludes plain on-track tasks and done items', () => {
-    expect(getBlockedRisky([wi({ title: 'normal task', due_date: addDaysStr(3) })])).toHaveLength(0);
-    expect(getBlockedRisky([wi({ type: 'risk', done: true })])).toHaveLength(0);
-  });
-});
-
 // ── getKobeHandling ────────────────────────────────────────────────────────────
 describe('getKobeHandling', () => {
   it('includes for:kobe, excludes agent:kobe and done', () => {
     expect(getKobeHandling([wi({ source: 'for:kobe' })])).toHaveLength(1);
     expect(getKobeHandling([wi({ source: 'agent:kobe' })])).toHaveLength(0);
     expect(getKobeHandling([wi({ source: 'for:kobe', done: true })])).toHaveLength(0);
-  });
-});
-
-// ── getRecentlyChanged ─────────────────────────────────────────────────────────
-describe('getRecentlyChanged', () => {
-  it('filters noise, sorts newest first, respects limit', () => {
-    const items = [
-      act({ id: '1', action: 'add_item', created_at: '2026-06-01' }),
-      act({ id: '2', action: 'login', created_at: '2026-06-02' }),
-      act({ id: '3', action: 'project_update', created_at: '2026-06-03' }),
-    ];
-    const out = getRecentlyChanged(items);
-    expect(out.map((a) => a.id)).toEqual(['3', '1']); // login filtered, newest first
-  });
-  it('respects the limit argument', () => {
-    const many = Array.from({ length: 12 }, (_, i) => act({ id: String(i), created_at: `2026-06-${String(i + 1).padStart(2, '0')}` }));
-    expect(getRecentlyChanged(many, 5)).toHaveLength(5);
   });
 });
 
@@ -146,24 +136,6 @@ describe('getLoadSummary', () => {
     const over = Array.from({ length: ACTIVE_LOAD_CAP + 1 }, () => wi({}));
     expect(getLoadSummary(under).overCap).toBe(false);
     expect(getLoadSummary(over).overCap).toBe(true);
-  });
-});
-
-// ── controlWhy ─────────────────────────────────────────────────────────────────
-describe('controlWhy', () => {
-  it('needsRodney distinguishes decisions', () => {
-    expect(controlWhy(wi({ type: 'decision' }), 'needsRodney')).toMatch(/Decision required/);
-    expect(controlWhy(wi({ type: 'task' }), 'needsRodney')).toMatch(/position needed/);
-  });
-  it('blockedRisky names the waiting person, else generic', () => {
-    expect(controlWhy(wi({ type: 'waitingFor' }), 'blockedRisky', 'Anna Smith')).toBe('Waiting on Anna — not yours to own yet');
-    expect(controlWhy(wi({ type: 'waitingFor' }), 'blockedRisky')).toMatch(/someone else/);
-    expect(controlWhy(wi({ type: 'risk' }), 'blockedRisky')).toMatch(/Open risk/);
-    expect(controlWhy(wi({ due_date: addDaysStr(-1) }), 'blockedRisky')).toMatch(/Overdue/);
-  });
-  it('kobeHandling and hotThisWeek', () => {
-    expect(controlWhy(wi({}), 'kobeHandling')).toMatch(/Kobe/);
-    expect(controlWhy(wi({}), 'hotThisWeek')).toBe('');
   });
 });
 

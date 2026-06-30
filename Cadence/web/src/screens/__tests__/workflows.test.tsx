@@ -164,34 +164,41 @@ describe('Horizon workflow', () => {
 
 // ── Control (Today) ──────────────────────────────────────────────────────────────
 describe('Control workflow', () => {
-  it('shows the active-load strip with an over-cap nudge', () => {
+  it('shows the load strip with an over-cap nudge', () => {
     setStore({ data: {
       work_items: Array.from({ length: 8 }, (_, i) => wi({ id: 't' + i, title: 'Task' + i })),
     }});
     render(<Today onMenu={() => {}} />);
-    expect(screen.getByText('Owning')).toBeInTheDocument();
-    expect(screen.getByText(/actively holding 8 items/)).toBeInTheDocument();
+    expect(screen.getByText('To do')).toBeInTheDocument();
+    expect(screen.getByText(/holding 8 open items/)).toBeInTheDocument();
   });
 
-  it('renders why-lines and opens the editor on a card click', () => {
+  it('ranks the to-do list by urgency, separates waiting, opens the editor', () => {
     setStore({ data: {
       people: [person({ id: 'pA', name: 'Anna' })],
       work_items: [
-        wi({ id: 'd1', title: 'Approve budget', type: 'decision' }),
+        wi({ id: 'o1', title: 'Overdue task', due_date: addDaysStr(-1) }),
+        wi({ id: 'w1', title: 'Week task', due_date: addDaysStr(3) }),
         wi({ id: 'wf', title: 'Vendor reply', type: 'waitingFor', person_id: 'pA' }),
+        wi({ id: 'k1', title: 'Kobe task', source: 'for:kobe' }),
       ],
     }});
     render(<Today onMenu={() => {}} />);
-    expect(screen.getByText('Decision required from you')).toBeInTheDocument();
-    expect(screen.getByText('Waiting on Anna — not yours to own yet')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Approve budget'));
-    expect(screen.getByText('Edit Item')).toBeInTheDocument(); // ItemModal opened
+    // urgency group headers
+    expect(screen.getByText(/Overdue · 1/)).toBeInTheDocument();
+    expect(screen.getByText(/This week · 1/)).toBeInTheDocument();
+    // waiting + kobe are their own sections, not in the to-do
+    expect(screen.getByText('Vendor reply')).toBeInTheDocument();
+    expect(screen.getByText('Kobe task')).toBeInTheDocument();
+    // tapping a task opens the editor
+    fireEvent.click(screen.getByText('Overdue task'));
+    expect(screen.getByText('Edit Item')).toBeInTheDocument();
   });
 
   it('hides the load strip entirely when there is nothing to show', () => {
     setStore({ data: { work_items: [] } });
     render(<Today onMenu={() => {}} />);
-    expect(screen.queryByText('Owning')).not.toBeInTheDocument();
+    expect(screen.queryByText('To do')).not.toBeInTheDocument();
   });
 });
 
