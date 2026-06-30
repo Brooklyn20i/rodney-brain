@@ -25,6 +25,7 @@ import { Tasks } from '../Tasks';
 import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
 import { Review } from '../Review';
+import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
 const person = (o: any) => ({ id: 'p', name: 'P', type: 'person', color: '#123', role: '', ...o });
@@ -225,6 +226,33 @@ describe('Tasks workflow', () => {
     // 'Anna' shows as both the group header and the task's person tag.
     expect(screen.getAllByText('Anna').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Hers')).toBeInTheDocument();
+  });
+});
+
+// ── Gantt ─────────────────────────────────────────────────────────────────────
+describe('Gantt', () => {
+  it('PortfolioTimeline renders a bar per active project and navigates on click', () => {
+    const onSelect = vi.fn();
+    const projects = [project({ id: 'pA', name: 'Apollo', status: 'active', health: 'red', target_date: addDaysStr(20) })] as any;
+    const milestones = [{ id: 'm1', project_id: 'pA', title: 'MS', due_date: addDaysStr(5), done: false, deleted_at: null }] as any;
+    const { container } = render(<PortfolioTimeline projects={projects} milestones={milestones} onSelect={onSelect} />);
+    expect(screen.getByText('Apollo')).toBeInTheDocument();
+    expect(container.querySelector('.gantt-bar')).toBeTruthy();
+    fireEvent.click(screen.getByText('Apollo'));
+    expect(onSelect).toHaveBeenCalledWith('pA');
+  });
+
+  it('ProjectGantt renders phase bars and milestone markers', () => {
+    const phases = [{ id: 'ph1', project_id: 'pA', name: 'Build', start_date: addDaysStr(-5), end_date: addDaysStr(10), sort: 0 }] as any;
+    const milestones = [{ id: 'm1', project_id: 'pA', title: 'MS', due_date: addDaysStr(3), done: false }] as any;
+    const { container } = render(<ProjectGantt phases={phases} milestones={milestones} targetDate={addDaysStr(20)} />);
+    expect(container.querySelector('.gantt-bar')).toBeTruthy();
+    expect(container.querySelector('.gantt-ms')).toBeTruthy();
+  });
+
+  it('ProjectGantt shows a hint when there are too few dates', () => {
+    render(<ProjectGantt phases={[]} milestones={[]} targetDate={null} />);
+    expect(screen.getByText(/Add start\/end dates/)).toBeInTheDocument();
   });
 });
 

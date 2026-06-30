@@ -12,6 +12,7 @@ import {
 } from '../lib/strategy';
 import type { StrategyContent, WinState } from '../lib/strategy';
 import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason, getHealthEvidence } from '../lib/selectors';
+import { ProjectGantt, PortfolioTimeline } from '../components/Gantt';
 
 const WIN_STATE_TITLE = '__win_state__';
 
@@ -387,6 +388,12 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
         />
       </div>
 
+      {/* Visual timeline — phases as bars, milestones as markers */}
+      <div style={{ marginBottom: 18 }}>
+        <strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Timeline</strong>
+        <ProjectGantt phases={phases} milestones={milestones} targetDate={project.target_date} />
+      </div>
+
       {milestones.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -589,32 +596,6 @@ function Raid({ project, rows }: { project: Project; rows: RaidItem[] }) {
   );
 }
 
-function Timeline({ project, phases, milestones }: { project: Project; phases: ProjectPhase[]; milestones: Milestone[] }) {
-  const events = useMemo(() => {
-    const ev: { date: string; label: string; kind: string; done?: boolean }[] = [];
-    phases.forEach((p) => {
-      if (p.start_date) ev.push({ date: p.start_date, label: `${p.name} starts`, kind: 'phase' });
-      if (p.end_date) ev.push({ date: p.end_date, label: `${p.name} ends`, kind: 'phase' });
-    });
-    milestones.forEach((m) => { if (m.due_date) ev.push({ date: m.due_date, label: m.title, kind: 'milestone', done: m.done }); });
-    if (project.target_date) ev.push({ date: project.target_date, label: 'Project target', kind: 'target' });
-    return ev.sort((a, b) => a.date.localeCompare(b.date));
-  }, [phases, milestones, project.target_date]);
-  if (!events.length) return null;
-  return (
-    <div className="detail-section">
-      <h3>Timeline</h3>
-      {events.map((e) => (
-        <div className="tl-row" key={`${e.date}-${e.label}`}>
-          <span className={`tl-dot ${e.kind}`} />
-          <span className={`tl-date ${isOverdue(e.date) && !e.done ? 'tl-overdue' : ''}`}>{fmtDate(e.date)}</span>
-          <span className={`tl-label ${e.done ? 'done' : ''}`}>{e.label}{e.done ? ' ✓' : ''}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void }) {
   const { data } = useCadence();
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
@@ -631,7 +612,6 @@ function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void
         <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit project</button>
       </div>
       <Phases project={project} phases={phases} milestones={milestones} />
-      <Timeline project={project} phases={phases} milestones={milestones} />
       <Stakeholders project={project} rows={stake} />
       <Raid project={project} rows={raid} />
       {(links.length > 0) && (
@@ -838,7 +818,7 @@ export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; i
   const { state: winState, save: saveWinState } = useWinState();
   const priorities = useMemo(() => priorityList(strategy), [strategy]);
 
-  const [view, setView] = useState<'list' | 'scoreboard' | 'detail'>('list');
+  const [view, setView] = useState<'list' | 'timeline' | 'scoreboard' | 'detail'>('list');
   const [groupBy, setGroupBy] = useState<'portfolio' | 'priority' | 'status'>('portfolio');
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
 
@@ -899,6 +879,7 @@ export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; i
         <div className="proj-toolbar">
           <div className="seg">
             <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}>Projects</button>
+            <button className={view === 'timeline' ? 'on' : ''} onClick={() => setView('timeline')}>Timeline</button>
             <button className={view === 'scoreboard' ? 'on' : ''} onClick={() => setView('scoreboard')}>Scoreboard</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -918,6 +899,12 @@ export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; i
           <div className="proj-content-wrap">
             {view === 'scoreboard' ? (
               <ScoreboardView strategy={strategy} winState={winState} saveWinState={saveWinState} />
+            ) : view === 'timeline' ? (
+              <PortfolioTimeline
+                projects={data.projects}
+                milestones={data.milestones}
+                onSelect={(id) => { setSelectedId(id); setView('detail'); }}
+              />
             ) : data.projects.length === 0 ? (
               <div className="proj-empty"><div className="icon">▤</div><p>No projects yet</p></div>
             ) : (

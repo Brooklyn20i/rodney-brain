@@ -83,3 +83,13 @@ test('project health evidence reveals raw numbers on demand', async ({ page }) =
   await page.getByRole('button', { name: 'Why?' }).click();
   await expect(page.getByText(/open total/)).toBeVisible();
 });
+
+// ── Projects: portfolio Gantt timeline ───────────────────────────────────────────
+test('projects Timeline view shows a portfolio Gantt and rows open the project', async ({ page }) => {
+  await navTo(page, 'Projects');
+  await page.getByRole('button', { name: 'Timeline', exact: true }).click();
+  // each active project is a labelled row with a bar
+  await expect(page.locator('.gantt-portfolio .gantt-bar').first()).toBeVisible();
+  await page.locator('.gantt-row-btn', { hasText: 'Apollo' }).click();
+  await expect(page.getByRole('heading', { name: 'Apollo' })).toBeVisible(); // detail opened
+});

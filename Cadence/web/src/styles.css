@@ -232,6 +232,40 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 .health-evidence-update { font-size: 12px; color: var(--text2); line-height: 1.4; font-style: italic; }
 .health-evidence-update.he-muted { color: var(--text3); }
 
+/* Gantt charts — dependency-free, %-positioned. --gl is the label-column width;
+   axis, gridlines and tracks all key off it so everything stays aligned. */
+.gantt { --gl: 104px; font-size: 12px; }
+@media (max-width: 520px) { .gantt { --gl: 78px; } }
+.gantt-axis { position: relative; height: 15px; margin-left: var(--gl); border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.gantt-tick { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; color: var(--text3); white-space: nowrap; }
+.gantt-grid { position: relative; }
+.gantt-lines { position: absolute; left: var(--gl); right: 0; top: 0; bottom: 0; pointer-events: none; }
+.gantt-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.7; }
+.gantt-target { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--red); opacity: 0.7; }
+.gantt-row { display: flex; align-items: center; height: 26px; }
+.gantt-row-btn { width: 100%; background: transparent; border: none; cursor: pointer; font-family: inherit; padding: 0; text-align: left; border-radius: 5px; }
+.gantt-row-btn:hover { background: var(--surface2); }
+.gantt-row-label { width: var(--gl); flex-shrink: 0; padding-right: 8px; font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.gantt-health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.gantt-track { position: relative; flex: 1; height: 22px; }
+.gantt-bar { position: absolute; top: 5px; height: 12px; border-radius: 6px; background: var(--accent); min-width: 4px; }
+.gantt-ms { position: absolute; top: 6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+.gantt-ms.upcoming { background: var(--accent); }
+.gantt-ms.overdue { background: var(--red); }
+.gantt-ms.done { background: var(--green); }
+.gantt-target-flag { position: absolute; top: 3px; height: 16px; border-left: 2px dashed var(--red); }
+.gantt-row-hint { position: absolute; left: 0; top: 4px; font-size: 10px; color: var(--text3); font-style: italic; }
+.gantt-empty { font-size: 12px; color: var(--text3); font-style: italic; padding: 10px 0; }
+.gantt-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 10px; color: var(--text3); align-items: center; }
+.gantt-legend span { display: inline-flex; align-items: center; }
+.gantt-key { display: inline-block; width: 9px; height: 9px; margin-right: 4px; }
+.gantt-key.today { width: 2px; height: 11px; background: var(--accent); }
+.gantt-key.target { width: 0; height: 11px; border-left: 2px dashed var(--red); }
+.gantt-key.ms-upcoming { background: var(--accent); transform: rotate(45deg); }
+.gantt-key.ms-overdue { background: var(--red); transform: rotate(45deg); }
+.gantt-key.ms-done { background: var(--green); transform: rotate(45deg); }
+.gantt-portfolio .gantt-row { height: 30px; }
+
 /* ── Project control cards ── */
 .proj-ctrl-card { display: flex; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); width: 100%; text-align: left; cursor: pointer; font-family: inherit; transition: border-color 0.12s, box-shadow 0.12s; margin-bottom: 8px; overflow: hidden; }
 .proj-ctrl-card:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--blue-bg); }
