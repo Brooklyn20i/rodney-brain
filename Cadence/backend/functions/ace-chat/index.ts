@@ -357,7 +357,7 @@ serve(async (req) => {
     while (iterations < MAX_ITERATIONS) {
       iterations++;
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-opus-4-8",
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
