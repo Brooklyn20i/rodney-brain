@@ -110,6 +110,17 @@ describe('mapShareTransactionsCsv', () => {
     expect(t.ticker).toBe('FAKE');
     expect(t.side).toBe('buy');
     expect(t.amount).toBe(255);
+    expect(t.amount_aud).toBe(255); // AUD currency -- native amount is already the AUD amount
+  });
+
+  it('uses an explicit Amount AUD column for foreign-currency rows when supplied', () => {
+    const rows = parseCsv(
+      'Date,Ticker,Side,Currency,Shares,Price,Amount / proceeds,Amount AUD,Source / caveat\n' +
+        '2020-02-10,FAKEUS,buy,USD,10,25.50,255.00,382.50,Fictional screenshot'
+    );
+    const [t] = mapShareTransactionsCsv(rows, 'owner-1');
+    expect(t.amount).toBe(255); // native USD amount preserved
+    expect(t.amount_aud).toBe(382.5); // AUD-equivalent from the supplied column
   });
 });
 

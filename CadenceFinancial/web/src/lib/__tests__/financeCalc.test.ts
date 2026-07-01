@@ -113,6 +113,19 @@ describe('investmentBuysSummary', () => {
     expect(summary.total).toBeCloseTo(2000, 2);
     expect(summary.activeMonths).toBe(3);
   });
+
+  it('sums the AUD-equivalent amount, not the native-currency amount, for foreign-currency buys', () => {
+    const mixedCurrency: InvestmentTransaction[] = [
+      tx({ date: '2025-02-01', ticker: 'AUDCO', side: 'buy', currency: 'AUD', amount: 100 }),
+      // A USD buy where the native amount (100) would silently equal the AUD
+      // one above if summed directly -- amount_aud is what must be used.
+      tx({ date: '2025-02-05', ticker: 'USDCO', side: 'buy', currency: 'USD', amount: 100, amount_aud: 150 }),
+    ];
+
+    const summary = investmentBuysSummary(mixedCurrency, '2025-02', '2025-02');
+
+    expect(summary.shares).toBeCloseTo(250, 2); // 100 (AUD) + 150 (USD converted), not 200
+  });
 });
 
 function tx(overrides: Partial<InvestmentTransaction> & Pick<InvestmentTransaction, 'date' | 'ticker' | 'side' | 'amount'>): InvestmentTransaction {
@@ -122,6 +135,7 @@ function tx(overrides: Partial<InvestmentTransaction> & Pick<InvestmentTransacti
     currency: 'AUD',
     units: 0,
     price: 0,
+    amount_aud: overrides.amount, // default: same currency, override to test FX conversion
     notes: '',
     created_at: '',
     updated_at: '',

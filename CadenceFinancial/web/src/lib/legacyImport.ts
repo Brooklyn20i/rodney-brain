@@ -232,20 +232,32 @@ export function mapLoanOffsetRegisterCsv(
 
 // ── share_transactions.csv ──────────────────────────────────────────────
 // Date,Australian FY,Market,Ticker,Side,Currency,Shares,Price,Amount / proceeds,...
+// An optional "Amount AUD" column carries the AUD-equivalent at purchase
+// date for foreign-currency rows -- required for an accurate multi-currency
+// total (see InvestmentTransaction.amount_aud). Without it, AUD-currency
+// rows are unaffected but foreign-currency rows fall back to their native
+// amount, which understates/overstates the AUD total and should be
+// corrected before trusting the aggregate "buys captured" figure.
 export function mapShareTransactionsCsv(rows: CsvRow[], owner_id: string): Omit<InvestmentTransaction, 'id'>[] {
   return rows
     .filter((r) => r.Date && r.Ticker)
-    .map((r) => ({
-      ...stub(owner_id),
-      date: r.Date,
-      ticker: r.Ticker,
-      side: (r.Side as InvestmentTransaction['side']) || 'buy',
-      currency: r.Currency || 'AUD',
-      units: num(r.Shares),
-      price: num(r.Price),
-      amount: num(r['Amount / proceeds']),
-      notes: r['Source / caveat'] || '',
-    }));
+    .map((r) => {
+      const currency = r.Currency || 'AUD';
+      const amount = num(r['Amount / proceeds']);
+      const amountAud = r['Amount AUD'] ? num(r['Amount AUD']) : currency === 'AUD' ? amount : amount;
+      return {
+        ...stub(owner_id),
+        date: r.Date,
+        ticker: r.Ticker,
+        side: (r.Side as InvestmentTransaction['side']) || 'buy',
+        currency,
+        units: num(r.Shares),
+        price: num(r.Price),
+        amount,
+        amount_aud: amountAud,
+        notes: r['Source / caveat'] || '',
+      };
+    });
 }
 
 // ── listed_share_snapshot.csv ───────────────────────────────────────────

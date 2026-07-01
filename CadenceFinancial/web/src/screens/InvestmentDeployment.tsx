@@ -68,7 +68,8 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   <th>Ticker</th>
                   <th>Units</th>
                   <th>Price</th>
-                  <th>Amount</th>
+                  <th>Amount (native)</th>
+                  <th>Amount (AUD)</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -81,8 +82,13 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                       <td>{t.date}</td>
                       <td>{t.ticker}</td>
                       <td>{t.units}</td>
-                      <td>{formatMoney(t.price)}</td>
-                      <td>{formatMoney(t.amount)}</td>
+                      <td>
+                        {t.currency} {t.price}
+                      </td>
+                      <td>
+                        {t.currency} {t.amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td>{formatMoney(t.amount_aud)}</td>
                       <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{t.notes}</td>
                     </tr>
                   ))}

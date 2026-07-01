@@ -101,7 +101,14 @@ export interface InvestmentTransaction {
   currency: string;
   units: number;
   price: number;
+  // Native-currency amount, exactly as evidenced (screenshot/statement).
   amount: number;
+  // AUD-equivalent amount at time of purchase. Equal to `amount` when
+  // currency is already AUD. Required (not derived) because there's no
+  // single "current" FX rate that correctly restates a historical foreign-
+  // currency purchase -- it must be captured at entry time. Aggregating
+  // `amount` directly across currencies would silently mix AUD and USD.
+  amount_aud: number;
   notes: string;
   created_at: string;
   updated_at: string;

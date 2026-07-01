@@ -180,10 +180,10 @@ const investmentHoldings: InvestmentHolding[] = [
 ];
 
 const investmentTransactions: InvestmentTransaction[] = [
-  { ...base, id: 't-1', date: '2025-01-10', ticker: 'MSFT', side: 'buy', currency: 'USD', units: 5, price: 380, amount: 1_900, notes: 'Screenshot visible' },
-  { ...base, id: 't-2', date: '2025-01-22', ticker: 'VOO', side: 'buy', currency: 'USD', units: 10, price: 520, amount: 5_200, notes: 'Screenshot visible' },
-  { ...base, id: 't-3', date: '2025-03-05', ticker: 'VOO', side: 'buy', currency: 'USD', units: 8, price: 530, amount: 4_240, notes: 'Screenshot visible' },
-  { ...base, id: 't-4', date: '2025-06-12', ticker: 'BTC', side: 'buy', currency: 'AUD', units: 0.018, price: 83_333, amount: 1_500, notes: 'Ledger purchase screenshot' },
+  { ...base, id: 't-1', date: '2025-01-10', ticker: 'MSFT', side: 'buy', currency: 'USD', units: 5, price: 380, amount: 1_900, amount_aud: 2_850, notes: 'Screenshot visible; USD converted at purchase-date FX' },
+  { ...base, id: 't-2', date: '2025-01-22', ticker: 'VOO', side: 'buy', currency: 'USD', units: 10, price: 520, amount: 5_200, amount_aud: 7_800, notes: 'Screenshot visible; USD converted at purchase-date FX' },
+  { ...base, id: 't-3', date: '2025-03-05', ticker: 'VOO', side: 'buy', currency: 'USD', units: 8, price: 530, amount: 4_240, amount_aud: 6_360, notes: 'Screenshot visible; USD converted at purchase-date FX' },
+  { ...base, id: 't-4', date: '2025-06-12', ticker: 'BTC', side: 'buy', currency: 'AUD', units: 0.018, price: 83_333, amount: 1_500, amount_aud: 1_500, notes: 'Ledger purchase screenshot' },
 ];
 
 // period, cash_saved, share_buys, btc_buys, debt_reduction, net_worth, cash_offsets,

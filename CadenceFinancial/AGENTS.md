@@ -79,6 +79,14 @@ See `web/src/lib/legacyImport.ts` for the exact column mapping and
 `web/scripts/import-legacy-csv.ts` for the CLI. Loan→property linkage is by
 address string match — review before trusting it.
 
+`share_transactions.csv` rows in a foreign currency need an **`Amount AUD`**
+column (the AUD-equivalent at purchase date) for an accurate multi-currency
+total — without it, foreign-currency amounts fall back to their native
+figure unconverted, which understates or overstates the "buys captured"
+aggregate. AUD-currency rows don't need it. There's no single "current" FX
+rate that can correct this after the fact; it has to be supplied per
+transaction.
+
 ---
 
 ## Demo mode

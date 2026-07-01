@@ -181,8 +181,10 @@ export function investmentBuysSummary(
   );
   const isBtc = (t: InvestmentTransaction) => t.ticker.toUpperCase() === 'BTC';
 
-  const sharesC = buys.filter((t) => !isBtc(t)).reduce((sum, t) => sum + toCents(t.amount), 0);
-  const btcC = buys.filter(isBtc).reduce((sum, t) => sum + toCents(t.amount), 0);
+  // Sum amount_aud, not amount -- amount is in the transaction's native
+  // currency and summing it directly would mix AUD and USD.
+  const sharesC = buys.filter((t) => !isBtc(t)).reduce((sum, t) => sum + toCents(t.amount_aud), 0);
+  const btcC = buys.filter(isBtc).reduce((sum, t) => sum + toCents(t.amount_aud), 0);
   const activeMonths = new Set(buys.map((t) => t.date.slice(0, 7))).size;
 
   return {
