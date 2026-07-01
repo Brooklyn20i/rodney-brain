@@ -18,6 +18,7 @@ import type {
   EvidenceItem,
   InvestmentHolding,
   InvestmentTransaction,
+  LiquidityBucket,
   Loan,
   LoanRateType,
   MonthlyMetric,
@@ -290,6 +291,22 @@ function inferOwnerLens(raw: string): OwnerLens {
     if (s.includes(key)) return OWNER_LENS_ALIASES[key];
   }
   return 'kobe';
+}
+
+// ── liquidity_buckets.csv ───────────────────────────────────────────────
+// Bucket,Amount / planning value,Protected minimum / target,
+// Available above minimum,Purpose,Source/evidence,Monthly review note
+export function mapLiquidityBucketsCsv(rows: CsvRow[], owner_id: string): Omit<LiquidityBucket, 'id'>[] {
+  return rows
+    .filter((r) => r.Bucket && !/^control (summary|note)$/i.test(r.Bucket))
+    .map((r) => ({
+      ...stub(owner_id),
+      label: r.Bucket,
+      amount: num(r['Amount / planning value']),
+      protected_minimum: num(r['Protected minimum / target']),
+      purpose: r.Purpose || '',
+      note: r['Monthly review note'] || r['Source/evidence'] || '',
+    }));
 }
 
 export function mapDecisionLogCsv(rows: CsvRow[], owner_id: string): Omit<Decision, 'id'>[] {

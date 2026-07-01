@@ -73,10 +73,11 @@ Supports either the new prototype's `monthly_metrics.csv` format (preferred,
 1:1 mapping) or the old Wealth Cockpit's `monthly_tracking.csv` +
 `investment_buys.csv` pair, plus `evidence_register.csv`,
 `property_register.csv`, `loan_offset_register.csv`,
-`share_transactions.csv`, `listed_share_snapshot.csv` and `decision_log.csv`
-— any subset may be present. See `web/src/lib/legacyImport.ts` for the exact
-column mapping and `web/scripts/import-legacy-csv.ts` for the CLI. Loan→
-property linkage is by address string match — review before trusting it.
+`share_transactions.csv`, `listed_share_snapshot.csv`,
+`liquidity_buckets.csv` and `decision_log.csv` — any subset may be present.
+See `web/src/lib/legacyImport.ts` for the exact column mapping and
+`web/scripts/import-legacy-csv.ts` for the CLI. Loan→property linkage is by
+address string match — review before trusting it.
 
 ---
 

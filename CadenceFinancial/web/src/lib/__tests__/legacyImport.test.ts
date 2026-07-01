@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mapDecisionLogCsv,
   mapEvidenceRegisterCsv,
+  mapLiquidityBucketsCsv,
   mapLoanOffsetRegisterCsv,
   mapMonthlyMetricsCsv,
   mapMonthlyTrackingCsv,
@@ -109,6 +110,22 @@ describe('mapShareTransactionsCsv', () => {
     expect(t.ticker).toBe('FAKE');
     expect(t.side).toBe('buy');
     expect(t.amount).toBe(255);
+  });
+});
+
+describe('mapLiquidityBucketsCsv', () => {
+  it('maps buckets and skips control-summary/control-note rows', () => {
+    const rows = parseCsv(
+      'Bucket,Amount / planning value,Protected minimum / target,Purpose,Monthly review note\n' +
+        'Protected cash,500000,450000,Protected liquidity,Above minimum\n' +
+        'Control summary,Some free text,,,\n' +
+        'Control note,More free text,,,'
+    );
+    const buckets = mapLiquidityBucketsCsv(rows, 'owner-1');
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].label).toBe('Protected cash');
+    expect(buckets[0].amount).toBe(500000);
+    expect(buckets[0].protected_minimum).toBe(450000);
   });
 });
 

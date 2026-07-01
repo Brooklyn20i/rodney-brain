@@ -40,6 +40,7 @@ import {
   mapLoanOffsetRegisterCsv,
   mapShareTransactionsCsv,
   mapListedShareSnapshotCsv,
+  mapLiquidityBucketsCsv,
   mapDecisionLogCsv,
 } from '../src/lib/legacyImport.ts';
 
@@ -109,6 +110,9 @@ async function main() {
 
   const shareSnapshot = readCsv('listed_share_snapshot.csv');
   if (shareSnapshot) results.investment_holdings = mapListedShareSnapshotCsv(shareSnapshot, owner);
+
+  const liquidityBuckets = readCsv('liquidity_buckets.csv');
+  if (liquidityBuckets) results.liquidity_buckets = mapLiquidityBucketsCsv(liquidityBuckets, owner);
 
   const decisions = readCsv('decision_log.csv');
   if (decisions) results.decisions = mapDecisionLogCsv(decisions, owner);
