@@ -13,6 +13,7 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
   // Per-row edit state: loan id -> { balance, offset }, bucket id -> { amount, min }
   const [loanEdit, setLoanEdit] = useState<Record<string, { balance: string; offset: string }>>({});
   const [bucketEdit, setBucketEdit] = useState<Record<string, { amount: string; min: string }>>({});
+  const [propertyEdit, setPropertyEdit] = useState<Record<string, string>>({});
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [newLoan, setNewLoan] = useState({ property_id: '', balance: '', offset: '', rate: '', repayment: '' });
 
@@ -33,6 +34,20 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
     if (!e) return;
     await update('liquidity_buckets', id, { amount: num(e.amount), protected_minimum: num(e.min) });
     setBucketEdit((p) => {
+      const { [id]: _drop, ...rest } = p;
+      return rest;
+    });
+  };
+
+  const saveProperty = async (id: string) => {
+    const v = propertyEdit[id];
+    if (v === undefined) return;
+    await update('properties', id, {
+      value: num(v),
+      valuation_basis: 'Portal-led repeatable estimate',
+      evidence_status: `Portal estimate entered ${new Date().toISOString().slice(0, 10)}`,
+    });
+    setPropertyEdit((p) => {
       const { [id]: _drop, ...rest } = p;
       return rest;
     });
@@ -104,6 +119,78 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
             <Metric label="Cash / offsets" value={formatMoney(current.cash_offsets, true)} />
           </div>
         )}
+
+        <Card title="Property values">
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>
+            realestate.com.au has no public data feed, so property stays a one-tap check:
+            open your{' '}
+            <a href="https://www.realestate.com.au/my-property/" target="_blank" rel="noreferrer">
+              realestate.com.au My Property
+            </a>{' '}
+            estimate, then type the number here. It's stamped as a portal-led estimate — the same
+            evidence grade the workbook always used.
+          </p>
+          <div className="cf-table-wrap">
+            <table className="cf-table">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Value</th>
+                  <th>Basis</th>
+                  <th>Evidence</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {data.properties.map((p) => {
+                  const editing = propertyEdit[p.id];
+                  return (
+                    <tr key={p.id}>
+                      <td style={{ textAlign: 'left' }}>{p.address}</td>
+                      <td>
+                        {editing !== undefined ? (
+                          <input
+                            type="text"
+                            style={{ width: 120 }}
+                            value={editing}
+                            onChange={(e) => setPropertyEdit((s) => ({ ...s, [p.id]: e.target.value }))}
+                          />
+                        ) : (
+                          formatMoney(p.value)
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{p.valuation_basis}</td>
+                      <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{p.evidence_status}</td>
+                      <td>
+                        {editing !== undefined ? (
+                          <button className="btn btn-primary btn-sm" onClick={() => saveProperty(p.id)}>
+                            Save
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setPropertyEdit((s) => ({ ...s, [p.id]: String(p.value) }))}
+                          >
+                            Reprice
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="cf-total">
+                  <td>Total</td>
+                  <td>{formatMoney(data.properties.reduce((s, p) => s + p.value, 0))}</td>
+                  <td />
+                  <td />
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
 
         <Card title="Loan & offset register">
           <div className="cf-table-wrap">

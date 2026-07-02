@@ -1,17 +1,71 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { investmentBuysSummary } from '../lib/financeCalc';
+import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
 import { formatMoney, formatPercent, periodRange } from '../lib/util';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
 
 export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
-  const { data, insert, update } = useCadenceFinancial();
+  const { data, demo, insert, update } = useCadenceFinancial();
   const [form, setForm] = useState<'holding' | 'buy' | null>(null);
   // Per-row reprice state: holding id -> { value, date }
   const [reprice, setReprice] = useState<Record<string, { value: string; date: string }>>({});
+
+  // ── Live quotes: display + reprice-assist. Nothing persists until Apply,
+  // which stamps as_of_date and (for Apply-all) logs a market_repriced
+  // evidence item -- same regime as any manual reprice. ──
+  const [quotes, setQuotes] = useState<QuoteMap>({});
+  const [quotesState, setQuotesState] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  const refreshQuotes = useCallback(async () => {
+    const symbols = [...new Set(data.investment_holdings.map(yahooSymbol))];
+    if (symbols.length === 0) return;
+    setQuotesState('loading');
+    try {
+      setQuotes(await fetchLiveQuotes(symbols, demo));
+      setQuotesState('idle');
+    } catch {
+      setQuotesState('error');
+    }
+  }, [data.investment_holdings, demo]);
+
+  useEffect(() => {
+    void refreshQuotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // on mount only; the Refresh button re-pulls on demand
+
+  const liveFor = (h: (typeof data.investment_holdings)[number]) => {
+    const q = quotes[yahooSymbol(h)];
+    return q ? liveNativeValue(h.units, q.price) : null;
+  };
+
+  const applyLive = async (id: string) => {
+    const h = data.investment_holdings.find((x) => x.id === id);
+    if (!h) return;
+    const live = liveFor(h);
+    if (live === null) return;
+    await update('investment_holdings', id, { native_value: live, as_of_date: today() });
+  };
+
+  const applyAllLive = async () => {
+    const applicable = data.investment_holdings.filter((h) => liveFor(h) !== null);
+    if (applicable.length === 0) return;
+    for (const h of applicable) {
+      await update('investment_holdings', h.id, { native_value: liveFor(h)!, as_of_date: today() });
+    }
+    // One evidence row for the batch: same regime as any other reprice.
+    await insert('evidence_items', {
+      item: 'Listed shares & BTC',
+      period: today().slice(0, 7),
+      grade: 'market_repriced',
+      status: 'accepted',
+      source: 'Live market quotes (via /api/quotes)',
+      notes: `${applicable.length} holding(s) repriced to market.`,
+    });
+  };
 
   const [holding, setHolding] = useState({ ticker: '', market: '', currency: 'AUD', units: '', native_value: '', cost_basis: '' });
   const [buy, setBuy] = useState({ date: today(), ticker: '', currency: 'AUD', units: '', price: '', amount: '', amount_aud: '', notes: '' });
@@ -138,6 +192,21 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
         )}
 
         <Card title="Current holdings">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary btn-sm" onClick={refreshQuotes} disabled={quotesState === 'loading'}>
+              {quotesState === 'loading' ? 'Fetching…' : '↻ Refresh live prices'}
+            </button>
+            {Object.keys(quotes).length > 0 && (
+              <button className="btn btn-primary btn-sm" onClick={applyAllLive}>
+                Apply all live prices
+              </button>
+            )}
+            {quotesState === 'error' && (
+              <span style={{ fontSize: 12, color: 'var(--red)' }}>
+                Live prices unavailable right now — stored values shown.
+              </span>
+            )}
+          </div>
           <div className="cf-table-wrap">
             <table className="cf-table">
               <thead>
@@ -147,6 +216,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   <th>Entity</th>
                   <th>Units</th>
                   <th>Value</th>
+                  <th>Live</th>
                   <th>Cost basis</th>
                   <th>Unrealised P/L</th>
                   <th>As of</th>
@@ -158,6 +228,8 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   const pl = h.native_value - h.cost_basis;
                   const plPct = h.cost_basis > 0 ? pl / h.cost_basis : 0;
                   const editing = reprice[h.id];
+                  const live = liveFor(h);
+                  const liveDelta = live !== null ? live - h.native_value : null;
                   return (
                     <tr key={h.id}>
                       <td>{h.ticker}</td>
@@ -176,6 +248,21 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                           formatMoney(h.native_value)
                         )}
                       </td>
+                      <td>
+                        {live === null ? (
+                          <span style={{ color: 'var(--text3)' }}>—</span>
+                        ) : (
+                          <>
+                            {formatMoney(live)}
+                            {liveDelta !== null && Math.abs(liveDelta) >= 0.005 && (
+                              <div style={{ fontSize: 11, color: liveDelta >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                                {liveDelta >= 0 ? '+' : ''}
+                                {formatMoney(liveDelta)}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
                       <td>{formatMoney(h.cost_basis)}</td>
                       <td style={{ color: pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
                         {formatMoney(pl)} ({formatPercent(plPct)})
@@ -185,6 +272,10 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                         {editing ? (
                           <button className="btn btn-primary btn-sm" onClick={() => saveReprice(h.id)}>
                             Save
+                          </button>
+                        ) : live !== null ? (
+                          <button className="btn btn-secondary btn-sm" onClick={() => applyLive(h.id)}>
+                            Apply live
                           </button>
                         ) : (
                           <button
@@ -203,6 +294,11 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
               </tbody>
             </table>
           </div>
+          <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
+            Live quotes are shown in each holding's native currency and refresh on demand; nothing
+            is saved until you apply, which stamps the as-of date. "Apply all" also logs a
+            market-repriced evidence item for the month.
+          </p>
         </Card>
 
         <Card title="Buy transactions">

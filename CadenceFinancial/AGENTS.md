@@ -149,6 +149,25 @@ checklist — record only, never product advice. Allocation band logic is
 shared via `lib/allocation.ts` so Overview and Asset Allocation can't
 disagree.
 
+## Live market prices
+
+`web/api/quotes.ts` is a Vercel serverless function that proxies Yahoo
+Finance quotes (the browser can't call it directly because of CORS; prices
+are public data, nothing personal transits the endpoint, responses are
+edge-cached 5 min). `web/src/lib/livePrices.ts` maps holdings to symbols
+(BTC → BTC-AUD, ASX-market rows → `.AX`, US listings as-is) and the
+Investments screen shows a live column with per-holding "Apply live" and an
+"Apply all" that stamps `as_of_date` and logs a `market_repriced` evidence
+item. Live quotes never write to the database on their own -- the owner
+applies them, keeping the evidence regime intact. In demo mode canned
+quotes are used (no network).
+
+**Property is deliberately not auto-priced**: realestate.com.au has no
+public API and scraping violates its terms. The Debt & Offset screen's
+"Property values" card links to the owner's My Property page for a one-tap
+check, then takes the number as a portal-led estimate -- the same evidence
+grade the workbook always used.
+
 ## Kobe integration
 
 `agent_messages` (migration `0003_agent_messages.sql`) is a message channel
