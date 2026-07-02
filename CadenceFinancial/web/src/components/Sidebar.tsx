@@ -33,7 +33,10 @@ export function Sidebar({ current, onNavigate, open, demo, onSignOut }: Props) {
     <nav id="sidebar" className={open ? 'open' : ''}>
       <div id="sidebar-title">
         <LogoMark size={24} />
-        Cadence Financial
+        <span id="sidebar-title-text">
+          Cadence
+          <span id="sidebar-title-sub">Financial</span>
+        </span>
       </div>
       {NAV.map((it) => (
         <button
