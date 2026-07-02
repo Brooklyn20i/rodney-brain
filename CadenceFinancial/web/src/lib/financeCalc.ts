@@ -107,6 +107,73 @@ export function summarizePeriod(
   };
 }
 
+// 'YYYY-MM' -> the following month's 'YYYY-MM'.
+export function nextPeriod(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  return `${ny}-${String(nm).padStart(2, '0')}`;
+}
+
+// What the Month Close wizard collects: closing balances as evidenced, plus
+// the purchases made during the month (which can't be derived from balances).
+export interface NewMonthInputs {
+  period: string;
+  cash_offsets: number;
+  total_debt: number;
+  shares: number;
+  btc_crypto: number;
+  super_balance: number;
+  property_value: number;
+  collectibles_value: number;
+  share_buys: number;
+  btc_buys: number;
+}
+
+// Derives a full MonthlyMetric row from closing balances + the prior month,
+// replacing the manual workbook-update ritual. Derivation rules match the
+// workbook's own conventions (verified against its recomputed figures):
+//   cash_saved      = Δ cash/offsets
+//   debt_reduction  = -Δ total debt (paying debt down is positive)
+//   net_debt        = total debt - cash/offsets
+//   property_equity = property value - total debt
+//   total_assets    = cash + property + shares + crypto + super + collectibles
+//   net_worth       = total assets - total debt
+// All arithmetic in integer cents (see module header).
+export function deriveNewMonth(
+  prior: MonthlyMetric,
+  inputs: NewMonthInputs
+): Omit<MonthlyMetric, 'id' | 'owner_id' | 'created_at' | 'updated_at' | 'deleted_at'> {
+  const cashC = toCents(inputs.cash_offsets);
+  const debtC = toCents(inputs.total_debt);
+  const sharesC = toCents(inputs.shares);
+  const btcC = toCents(inputs.btc_crypto);
+  const superC = toCents(inputs.super_balance);
+  const propertyC = toCents(inputs.property_value);
+  const collectiblesC = toCents(inputs.collectibles_value);
+
+  const totalAssetsC = cashC + propertyC + sharesC + btcC + superC + collectiblesC;
+
+  return {
+    period: inputs.period,
+    cash_saved: centsToDollars(cashC - toCents(prior.cash_offsets)),
+    share_buys: inputs.share_buys,
+    btc_buys: inputs.btc_buys,
+    debt_reduction: centsToDollars(toCents(prior.total_debt) - debtC),
+    net_worth: centsToDollars(totalAssetsC - debtC),
+    cash_offsets: inputs.cash_offsets,
+    total_debt: inputs.total_debt,
+    net_debt: centsToDollars(debtC - cashC),
+    shares: inputs.shares,
+    btc_crypto: inputs.btc_crypto,
+    super_balance: inputs.super_balance,
+    total_assets: centsToDollars(totalAssetsC),
+    property_value: inputs.property_value,
+    property_equity: centsToDollars(propertyC - debtC),
+    collectibles_value: inputs.collectibles_value,
+  };
+}
+
 export function latestMonth(months: MonthlyMetric[]): MonthlyMetric {
   if (months.length === 0) throw new Error('No monthly metrics loaded');
   return [...months].sort((a, b) => a.period.localeCompare(b.period))[months.length - 1];

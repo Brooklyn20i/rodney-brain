@@ -132,6 +132,12 @@ body {
 .cf-bar-fill.negative { background: var(--red); }
 .cf-bar-value { width: 90px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
 
+/* ── Month Close wizard ── */
+.wizard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; margin-bottom: 12px; }
+.wizard-grade { margin-top: 6px; font-size: 12px; color: var(--text2); }
+@media (max-width: 900px) { .wizard-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .wizard-grid { grid-template-columns: 1fr; } }
+
 /* ── Kobe message channel ── */
 .kobe-thread { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .kobe-msg { max-width: 72%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.5; box-shadow: var(--shadow); }

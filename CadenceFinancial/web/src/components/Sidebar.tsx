@@ -13,6 +13,8 @@ export const NAV: NavItem[] = [
   { id: 'debt-offset', label: 'Debt & Offset', icon: '⛁' },
   { id: 'investments', label: 'Investments', icon: '▲' },
   { id: 'allocation', label: 'Asset Allocation', icon: '◔' },
+  { id: 'risk', label: 'Risk Dashboard', icon: '▣' },
+  { id: 'stress', label: 'Stress Tests', icon: '≋' },
   { id: 'evidence', label: 'Evidence Register', icon: '☑' },
   { id: 'decisions', label: 'Needs Rodney', icon: '!' },
   { id: 'kobe', label: 'Kobe', icon: '⚡' },

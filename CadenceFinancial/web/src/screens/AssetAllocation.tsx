@@ -2,70 +2,94 @@ import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import { formatMoney, formatPercent } from '../lib/util';
+import type { AssetClass } from '../lib/types';
 
-// Default target allocation bands. These are generic financial-planning
-// defaults, not personal data -- Rodney can tune them once the app is wired
-// to a real Supabase project (a future settings screen), but v0 needs some
-// opinionated default rather than raw numbers with no read on them.
-const TARGET_BANDS: Record<string, { min: number; max: number }> = {
-  Property: { min: 0.35, max: 0.65 },
-  'Cash / offsets': { min: 0.1, max: 0.35 },
-  Shares: { min: 0.05, max: 0.3 },
-  'BTC / crypto': { min: 0.0, max: 0.1 },
-  Super: { min: 0.1, max: 0.25 },
-  Collectibles: { min: 0.0, max: 0.05 },
+// Fallback bands when no allocation_policies rows exist yet (fresh install).
+// Generic financial-planning defaults -- the real policy lives in the DB and
+// is editable there (allocation_policies table, migration 0004).
+const DEFAULT_BANDS: Record<AssetClass, { min: number; base: number; max: number }> = {
+  property: { min: 0.35, base: 0.5, max: 0.65 },
+  cash: { min: 0.1, base: 0.2, max: 0.35 },
+  shares: { min: 0.05, base: 0.15, max: 0.3 },
+  btc: { min: 0, base: 0.05, max: 0.1 },
+  super: { min: 0.1, base: 0.15, max: 0.25 },
+  collectibles: { min: 0, base: 0, max: 0.05 },
+};
+
+const LABELS: Record<AssetClass, string> = {
+  property: 'Property',
+  cash: 'Cash / offsets',
+  shares: 'Shares',
+  btc: 'BTC / crypto',
+  super: 'Super',
+  collectibles: 'Collectibles',
 };
 
 export function AssetAllocation({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
   const current = data.monthly_metrics.length ? latestMonth(data.monthly_metrics) : null;
 
+  const bandFor = (cls: AssetClass) => {
+    const policy = data.allocation_policies.find((p) => p.asset_class === cls);
+    return policy
+      ? { min: policy.target_min, base: policy.target_base, max: policy.target_max }
+      : DEFAULT_BANDS[cls];
+  };
+
   return (
     <>
-      <ScreenHeader title="Asset Allocation" subtitle="Where net worth actually sits, against target bands." onMenu={onMenu} />
+      <ScreenHeader
+        title="Asset Allocation"
+        subtitle="Where net worth actually sits, against your policy bands."
+        onMenu={onMenu}
+      />
       <div className="screen-content">
         {!current ? (
           <Card>No monthly metrics loaded yet.</Card>
         ) : (
           (() => {
-            const rows: { label: string; value: number }[] = [
-              { label: 'Property', value: current.property_value },
-              { label: 'Cash / offsets', value: current.cash_offsets },
-              { label: 'Shares', value: current.shares },
-              { label: 'BTC / crypto', value: current.btc_crypto },
-              { label: 'Super', value: current.super_balance },
-              { label: 'Collectibles', value: current.collectibles_value },
+            const rows: { cls: AssetClass; value: number }[] = [
+              { cls: 'property', value: current.property_value },
+              { cls: 'cash', value: current.cash_offsets },
+              { cls: 'shares', value: current.shares },
+              { cls: 'btc', value: current.btc_crypto },
+              { cls: 'super', value: current.super_balance },
+              { cls: 'collectibles', value: current.collectibles_value },
             ];
-            const total = rows.reduce((s, r) => s + r.value, 0);
+            // Band percentages are policy fractions of NET WORTH (matching the
+            // workbook's Balance Sheet "% net worth" targets), not gross assets.
+            const nw = current.net_worth;
+            const totalAssets = rows.reduce((s, r) => s + r.value, 0);
             return (
-              <Card title="Allocation vs. target bands">
+              <Card title="Allocation vs. policy bands (% of net worth)">
                 <div className="cf-table-wrap">
                   <table className="cf-table">
                     <thead>
                       <tr>
                         <th>Asset class</th>
                         <th>Value</th>
-                        <th>% of assets</th>
+                        <th>% of net worth</th>
                         <th>Target band</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((r) => {
-                        const pct = total > 0 ? r.value / total : 0;
-                        const band = TARGET_BANDS[r.label];
-                        const inBand = !band || (pct >= band.min && pct <= band.max);
+                        const pct = nw > 0 ? r.value / nw : 0;
+                        const band = bandFor(r.cls);
+                        const inBand = pct >= band.min && pct <= band.max;
                         return (
-                          <tr key={r.label}>
-                            <td>{r.label}</td>
+                          <tr key={r.cls}>
+                            <td>{LABELS[r.cls]}</td>
                             <td>{formatMoney(r.value)}</td>
                             <td>{formatPercent(pct)}</td>
                             <td>
-                              {band ? `${formatPercent(band.min, 0)}–${formatPercent(band.max, 0)}` : '—'}
+                              {formatPercent(band.min, 0)}–{formatPercent(band.max, 0)} (base{' '}
+                              {formatPercent(band.base, 0)})
                             </td>
                             <td>
                               <span className={`grade-tag ${inBand ? 'grade-strong' : 'grade-weak'}`}>
-                                {inBand ? 'In band' : 'Out of band'}
+                                {inBand ? 'In band' : pct < band.min ? 'Below band' : 'Above band'}
                               </span>
                             </td>
                           </tr>
@@ -75,14 +99,20 @@ export function AssetAllocation({ onMenu }: { onMenu: () => void }) {
                     <tfoot>
                       <tr className="cf-total">
                         <td>Total assets</td>
-                        <td>{formatMoney(total)}</td>
-                        <td>100%</td>
+                        <td>{formatMoney(totalAssets)}</td>
+                        <td />
                         <td />
                         <td />
                       </tr>
                     </tfoot>
                   </table>
                 </div>
+                {data.allocation_policies.length === 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
+                    Showing generic default bands — run the policy seed (see AGENTS.md) to load
+                    your own.
+                  </p>
+                )}
               </Card>
             );
           })()

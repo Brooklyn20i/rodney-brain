@@ -121,6 +121,15 @@ mckinsey | rodney`.
 
 ---
 
+## Policy tables (migration 0004)
+
+`allocation_policies` (target min/base/max bands per asset class, as
+fractions of net worth) and `risk_policies` (green/amber thresholds per risk
+metric with a `direction`) drive the Asset Allocation bands, Risk Dashboard
+colors, and band flags. The app falls back to generic built-in defaults when
+the tables are empty. Real policy values are seeded per-owner via SQL (same
+paste-into-SQL-Editor flow as the data seed) — never committed to this repo.
+
 ## Kobe integration
 
 `agent_messages` (migration `0003_agent_messages.sql`) is a message channel

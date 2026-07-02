@@ -9,6 +9,7 @@
 
 import type {
   AgentMessage,
+  AllocationPolicy,
   CadenceFinancialData,
   Decision,
   Entity,
@@ -19,6 +20,7 @@ import type {
   Loan,
   MonthlyMetric,
   Property,
+  RiskPolicy,
 } from './types';
 
 const OWNER = 'demo-owner';
@@ -295,6 +297,27 @@ const agentMessages: AgentMessage[] = [
   },
 ];
 
+// Generic default bands -- standard-looking policy percentages, not personal
+// figures. Same values the Asset Allocation screen previously hardcoded.
+const allocationPolicies: AllocationPolicy[] = [
+  { ...base, id: 'ap-property', asset_class: 'property', target_min: 0.35, target_base: 0.5, target_max: 0.65 },
+  { ...base, id: 'ap-cash', asset_class: 'cash', target_min: 0.1, target_base: 0.2, target_max: 0.35 },
+  { ...base, id: 'ap-shares', asset_class: 'shares', target_min: 0.05, target_base: 0.15, target_max: 0.3 },
+  { ...base, id: 'ap-btc', asset_class: 'btc', target_min: 0, target_base: 0.05, target_max: 0.1 },
+  { ...base, id: 'ap-super', asset_class: 'super', target_min: 0.1, target_base: 0.15, target_max: 0.25 },
+  { ...base, id: 'ap-collectibles', asset_class: 'collectibles', target_min: 0, target_base: 0, target_max: 0.05 },
+];
+
+const riskPolicies: RiskPolicy[] = [
+  { ...base, id: 'rp-debt-assets', metric_key: 'debt_assets', green_threshold: 0.4, amber_threshold: 0.5, direction: 'lower_better' },
+  { ...base, id: 'rp-netdebt-nw', metric_key: 'net_debt_nw', green_threshold: 0.2, amber_threshold: 0.3, direction: 'lower_better' },
+  { ...base, id: 'rp-property-nw', metric_key: 'property_equity_nw', green_threshold: 0.5, amber_threshold: 0.65, direction: 'lower_better' },
+  { ...base, id: 'rp-cash-nw', metric_key: 'cash_nw', green_threshold: 0.15, amber_threshold: 0.1, direction: 'higher_better' },
+  { ...base, id: 'rp-crypto-nw', metric_key: 'crypto_nw', green_threshold: 0.05, amber_threshold: 0.1, direction: 'lower_better' },
+  { ...base, id: 'rp-shares-nw', metric_key: 'shares_nw', green_threshold: 0.1, amber_threshold: 0.05, direction: 'higher_better' },
+  { ...base, id: 'rp-liquidity-coverage', metric_key: 'protected_liquidity_coverage', green_threshold: 1.0, amber_threshold: 0.95, direction: 'higher_better' },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -307,5 +330,7 @@ export function loadDemoData(): CadenceFinancialData {
     decisions,
     liquidity_buckets: liquidityBuckets,
     agent_messages: agentMessages,
+    allocation_policies: allocationPolicies,
+    risk_policies: riskPolicies,
   };
 }

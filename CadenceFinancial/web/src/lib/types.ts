@@ -187,6 +187,42 @@ export interface LiquidityBucket {
   deleted_at: string | null;
 }
 
+// Asset classes used by allocation policy + the Asset Allocation screen.
+// Keys are stable identifiers; display labels live in util.ts.
+export type AssetClass = 'property' | 'cash' | 'shares' | 'btc' | 'super' | 'collectibles';
+
+// Target allocation bands -- the workbook's Balance Sheet target min/base/max
+// columns, promoted from hardcoded UI constants to owner-editable policy.
+export interface AllocationPolicy {
+  id: string;
+  owner_id: string;
+  asset_class: AssetClass;
+  target_min: number; // fraction of net worth, e.g. 0.05
+  target_base: number;
+  target_max: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Risk metric thresholds -- the workbook's Risk Dashboard green/amber columns.
+// direction says which side of the threshold is healthy:
+//   lower_better:  green when value <= green_threshold, amber when <= amber_threshold
+//   higher_better: green when value >= green_threshold, amber when >= amber_threshold
+export type RiskDirection = 'lower_better' | 'higher_better';
+
+export interface RiskPolicy {
+  id: string;
+  owner_id: string;
+  metric_key: string;
+  green_threshold: number;
+  amber_threshold: number;
+  direction: RiskDirection;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 // A message channel between Rodney and his agents (Kobe/Warren/Dan, running
 // in his separate Hermes agent environment -- not part of this app). Mirrors
 // the pattern already used by the main Cadence app's `agent_messages` table.
@@ -221,6 +257,8 @@ export interface CadenceFinancialData {
   decisions: Decision[];
   liquidity_buckets: LiquidityBucket[];
   agent_messages: AgentMessage[];
+  allocation_policies: AllocationPolicy[];
+  risk_policies: RiskPolicy[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -234,6 +272,8 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'decisions',
   'liquidity_buckets',
   'agent_messages',
+  'allocation_policies',
+  'risk_policies',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -247,4 +287,6 @@ export const emptyData = (): CadenceFinancialData => ({
   decisions: [],
   liquidity_buckets: [],
   agent_messages: [],
+  allocation_policies: [],
+  risk_policies: [],
 });

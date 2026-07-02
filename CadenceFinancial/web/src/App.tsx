@@ -13,6 +13,8 @@ import { AssetAllocation } from './screens/AssetAllocation';
 import { EvidenceRegister } from './screens/EvidenceRegister';
 import { Decisions } from './screens/Decisions';
 import { Kobe } from './screens/Kobe';
+import { RiskDashboard } from './screens/RiskDashboard';
+import { StressTests } from './screens/StressTests';
 
 export function App() {
   const { ready, configured, demo, session, needsPasswordSet, signOut, syncError, clearSyncError } =
@@ -59,6 +61,10 @@ export function App() {
         return <Decisions onMenu={onMenu} />;
       case 'kobe':
         return <Kobe onMenu={onMenu} />;
+      case 'risk':
+        return <RiskDashboard onMenu={onMenu} />;
+      case 'stress':
+        return <StressTests onMenu={onMenu} />;
       default:
         return <MonthClose onMenu={onMenu} />;
     }

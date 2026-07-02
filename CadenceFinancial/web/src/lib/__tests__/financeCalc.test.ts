@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { investmentBuysSummary, latestMonth, netWorthBridge, summarizePeriod } from '../financeCalc';
+import {
+  deriveNewMonth,
+  investmentBuysSummary,
+  latestMonth,
+  netWorthBridge,
+  nextPeriod,
+  summarizePeriod,
+} from '../financeCalc';
 import type { InvestmentTransaction, MonthlyMetric } from '../types';
 
 // Fictional fixture data only -- see CadenceFinancial/AGENTS.md for why.
@@ -93,6 +100,75 @@ describe('netWorthBridge', () => {
       bridge.netWorthMovement,
       2
     );
+  });
+});
+
+describe('nextPeriod', () => {
+  it('advances within a year and across a year boundary', () => {
+    expect(nextPeriod('2025-07')).toBe('2025-08');
+    expect(nextPeriod('2025-09')).toBe('2025-10');
+    expect(nextPeriod('2025-12')).toBe('2026-01');
+  });
+});
+
+describe('deriveNewMonth', () => {
+  // Hand-computed fixture: fictional balances only.
+  const prior = month({
+    period: '2025-07',
+    cash_offsets: 620_000,
+    total_debt: 1_218_000,
+    net_worth: 2_631_580,
+  });
+
+  const inputs = {
+    period: '2025-08',
+    cash_offsets: 623_500, // +3,500 saved
+    total_debt: 1_216_800, // 1,200 principal paid down
+    shares: 40_000,
+    btc_crypto: 88_000,
+    super_balance: 210_000,
+    property_value: 2_885_000,
+    collectibles_value: 2_500,
+    share_buys: 1_000,
+    btc_buys: 0,
+  };
+
+  it('derives movement and balance-sheet fields from closing balances', () => {
+    const m = deriveNewMonth(prior, inputs);
+
+    expect(m.period).toBe('2025-08');
+    expect(m.cash_saved).toBeCloseTo(3_500, 2);
+    expect(m.debt_reduction).toBeCloseTo(1_200, 2);
+    expect(m.net_debt).toBeCloseTo(1_216_800 - 623_500, 2);
+    expect(m.property_equity).toBeCloseTo(2_885_000 - 1_216_800, 2);
+    // total assets = cash + property + shares + crypto + super + collectibles
+    const expectedAssets = 623_500 + 2_885_000 + 40_000 + 88_000 + 210_000 + 2_500;
+    expect(m.total_assets).toBeCloseTo(expectedAssets, 2);
+    expect(m.net_worth).toBeCloseTo(expectedAssets - 1_216_800, 2);
+    expect(m.share_buys).toBe(1_000);
+    expect(m.btc_buys).toBe(0);
+  });
+
+  it('produces a row whose bridge reconciles against the prior month', () => {
+    const derived = deriveNewMonth(prior, inputs);
+    const asMetric = month({ ...derived, period: derived.period });
+    const bridge = netWorthBridge(prior, asMetric);
+    expect(bridge.operatingCashAndDebt + bridge.marketAndOtherMovement).toBeCloseTo(
+      bridge.netWorthMovement,
+      2
+    );
+    // Operating = 3,500 saved + 1,200 debt + 1,000 share buys
+    expect(bridge.operatingCashAndDebt).toBeCloseTo(5_700, 2);
+  });
+
+  it('handles negative months (cash spent, debt drawn) with correct signs', () => {
+    const m = deriveNewMonth(prior, {
+      ...inputs,
+      cash_offsets: 615_000, // spent 5,000
+      total_debt: 1_220_000, // drew 2,000 more debt
+    });
+    expect(m.cash_saved).toBeCloseTo(-5_000, 2);
+    expect(m.debt_reduction).toBeCloseTo(-2_000, 2);
   });
 });
 

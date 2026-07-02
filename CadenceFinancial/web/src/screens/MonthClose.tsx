@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
-import { buildExecutiveSummary, latestMonth, netWorthBridge } from '../lib/financeCalc';
+import { MonthCloseWizard } from '../components/MonthCloseWizard';
+import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
 import { exportMonthlyAssessmentPdf } from '../lib/pdf';
 
 export function MonthClose({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
+  const [showWizard, setShowWizard] = useState(false);
   const months = data.monthly_metrics;
 
   if (months.length === 0) {
@@ -32,11 +35,15 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
   return (
     <>
       <ScreenHeader title="Month Close" subtitle={`${label} — financial control room`} onMenu={onMenu}>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowWizard((s) => !s)}>
+          {showWizard ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
+        </button>
         <button className="btn btn-primary btn-sm" onClick={() => exportMonthlyAssessmentPdf(data)}>
           Download monthly PDF
         </button>
       </ScreenHeader>
       <div className="screen-content">
+        {showWizard && <MonthCloseWizard prior={current} onDone={() => setShowWizard(false)} />}
         <div className="cf-callout">{buildExecutiveSummary(bridge, label)}</div>
 
         <div className="cf-metric-grid">
