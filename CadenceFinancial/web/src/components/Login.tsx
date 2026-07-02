@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
+import { LogoMark } from './LogoMark';
 
 const LAST_EMAIL_KEY = 'cadence-financial:last-email';
 
@@ -19,7 +20,7 @@ export function Login() {
     return (
       <div className="login-wrap">
         <div className="login-card">
-          <h1>Cadence Financial</h1>
+          <h1><LogoMark size={26} /> Cadence Financial</h1>
           <p>
             Not connected to a backend yet. Create a dedicated Supabase project for Cadence
             Financial, then set <code>VITE_SUPABASE_URL</code> and{' '}
@@ -64,7 +65,7 @@ export function Login() {
     return (
       <div className="login-wrap">
         <div className="login-card">
-          <h1>Cadence Financial</h1>
+          <h1><LogoMark size={26} /> Cadence Financial</h1>
           <p>
             Password reset email sent to <strong>{email}</strong>. Open the link in the same
             browser, set your password, then come back and sign in.
@@ -87,7 +88,7 @@ export function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Financial</h1>
+        <h1><LogoMark size={26} /> Cadence Financial</h1>
         <p>Private financial control room. Sign in to continue.</p>
         <form onSubmit={submit}>
           <div className="form-group">

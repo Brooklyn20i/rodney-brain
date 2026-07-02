@@ -121,6 +121,21 @@ mckinsey | rodney`.
 
 ---
 
+## Kobe integration
+
+`agent_messages` (migration `0003_agent_messages.sql`) is a message channel
+between Rodney and his agents (Kobe/Warren/Dan, running in his separate
+Hermes environment) — mirrors the pattern Cadence's own `agent_messages`
+table already uses. The **Kobe** screen in the app is the human-facing half
+of this; it reads and writes that table directly.
+
+This app does **not** run or connect to Kobe itself. For Kobe's side to
+actually read/post here, set up a scoped grant on this Supabase project —
+mirror `Cadence/backend/AGENT_ACCESS_RUNBOOK.md`: a dedicated non-owner
+Supabase auth account for the agent, with row access limited to this
+`owner_id` (an RLS policy analogous to Cadence's `cadence_agent_access`
+table). That grant is Kobe-environment configuration, done outside this repo.
+
 ## Authority boundary
 
 This is a management-grade operating tool, not regulated financial advice.

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
+import { LogoMark } from './LogoMark';
 
 export function SetPassword() {
   const { setPassword } = useCadenceFinancial();
@@ -28,7 +29,7 @@ export function SetPassword() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Financial</h1>
+        <h1><LogoMark size={26} /> Cadence Financial</h1>
         <p>Set your password to finish signing in.</p>
         <form onSubmit={submit}>
           <div className="form-group">

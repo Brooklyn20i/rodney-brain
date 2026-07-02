@@ -1,3 +1,5 @@
+import { LogoMark } from './LogoMark';
+
 export interface NavItem {
   id: string;
   label: string;
@@ -13,6 +15,7 @@ export const NAV: NavItem[] = [
   { id: 'allocation', label: 'Asset Allocation', icon: '◔' },
   { id: 'evidence', label: 'Evidence Register', icon: '☑' },
   { id: 'decisions', label: 'Needs Rodney', icon: '!' },
+  { id: 'kobe', label: 'Kobe', icon: '⚡' },
 ];
 
 interface Props {
@@ -26,7 +29,10 @@ interface Props {
 export function Sidebar({ current, onNavigate, open, demo, onSignOut }: Props) {
   return (
     <nav id="sidebar" className={open ? 'open' : ''}>
-      <div id="sidebar-title">Cadence Financial</div>
+      <div id="sidebar-title">
+        <LogoMark size={24} />
+        Cadence Financial
+      </div>
       {NAV.map((it) => (
         <button
           key={it.id}

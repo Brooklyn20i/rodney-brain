@@ -12,6 +12,7 @@ import { InvestmentDeployment } from './screens/InvestmentDeployment';
 import { AssetAllocation } from './screens/AssetAllocation';
 import { EvidenceRegister } from './screens/EvidenceRegister';
 import { Decisions } from './screens/Decisions';
+import { Kobe } from './screens/Kobe';
 
 export function App() {
   const { ready, configured, demo, session, needsPasswordSet, signOut, syncError, clearSyncError } =
@@ -56,6 +57,8 @@ export function App() {
         return <EvidenceRegister onMenu={onMenu} />;
       case 'decisions':
         return <Decisions onMenu={onMenu} />;
+      case 'kobe':
+        return <Kobe onMenu={onMenu} />;
       default:
         return <MonthClose onMenu={onMenu} />;
     }

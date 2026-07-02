@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type {
+  AgentMessage,
   CadenceFinancialData,
   Decision,
   Entity,
@@ -261,6 +262,39 @@ const liquidityBuckets: LiquidityBucket[] = [
   { ...base, id: 'lb-deployable-today', label: 'Deployable opportunity capital today', amount: 0, protected_minimum: 0, purpose: 'One-off deployable cash above the protected minimum.', note: 'Keep at zero until total cash exceeds the protected minimum.' },
 ];
 
+const agentMessages: AgentMessage[] = [
+  {
+    ...base,
+    id: 'am-1',
+    sender_type: 'agent',
+    sender_label: 'Kobe',
+    body: 'July month close is ready for review. Cash and debt evidence is screenshot-grade; super is still carry-forward from last month.',
+    status: 'unread',
+    linked_decision_id: null,
+    linked_period: '2025-07',
+  },
+  {
+    ...base,
+    id: 'am-2',
+    sender_type: 'user',
+    sender_label: 'Alex',
+    body: 'Noted. Chase the latest super statement when you get a chance.',
+    status: 'processed',
+    linked_decision_id: 'd-super',
+    linked_period: null,
+  },
+  {
+    ...base,
+    id: 'am-3',
+    sender_type: 'agent',
+    sender_label: 'Warren',
+    body: 'VOO position is now the largest single holding at 33.2k -- still inside the shares target band, flagging for visibility only.',
+    status: 'unread',
+    linked_decision_id: null,
+    linked_period: '2025-07',
+  },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -272,5 +306,6 @@ export function loadDemoData(): CadenceFinancialData {
     evidence_items: evidenceItems,
     decisions,
     liquidity_buckets: liquidityBuckets,
+    agent_messages: agentMessages,
   };
 }

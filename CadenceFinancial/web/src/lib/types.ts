@@ -187,6 +187,29 @@ export interface LiquidityBucket {
   deleted_at: string | null;
 }
 
+// A message channel between Rodney and his agents (Kobe/Warren/Dan, running
+// in his separate Hermes agent environment -- not part of this app). Mirrors
+// the pattern already used by the main Cadence app's `agent_messages` table.
+// This table is the *app-side* half of that integration: Kobe's own side
+// needs a scoped Supabase grant to read/write it, set up separately (see
+// AGENTS.md) -- this app doesn't attempt to run or connect to Kobe itself.
+export type MessageSenderType = 'user' | 'agent' | 'system';
+export type MessageStatus = 'unread' | 'processed';
+
+export interface AgentMessage {
+  id: string;
+  owner_id: string;
+  sender_type: MessageSenderType;
+  sender_label: string; // 'Kobe' | 'Warren' | 'Dan' | 'Rodney' | ...
+  body: string;
+  status: MessageStatus;
+  linked_decision_id: string | null;
+  linked_period: string | null; // 'YYYY-MM', if the message concerns a specific month
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -197,6 +220,7 @@ export interface CadenceFinancialData {
   evidence_items: EvidenceItem[];
   decisions: Decision[];
   liquidity_buckets: LiquidityBucket[];
+  agent_messages: AgentMessage[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -209,6 +233,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'evidence_items',
   'decisions',
   'liquidity_buckets',
+  'agent_messages',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -221,4 +246,5 @@ export const emptyData = (): CadenceFinancialData => ({
   evidence_items: [],
   decisions: [],
   liquidity_buckets: [],
+  agent_messages: [],
 });
