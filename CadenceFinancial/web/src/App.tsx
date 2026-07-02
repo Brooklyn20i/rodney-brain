@@ -3,7 +3,6 @@ import { useCadenceFinancial } from './lib/store';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar } from './components/Sidebar';
-import { AuthorityBanner } from './components/AuthorityBanner';
 import { MonthClose } from './screens/MonthClose';
 import { FreeCashEngine } from './screens/FreeCashEngine';
 import { NetWorthBridge } from './screens/NetWorthBridge';
@@ -82,10 +81,7 @@ export function App() {
       )}
       <Sidebar current={screen} onNavigate={navigate} open={menuOpen} demo={demo} onSignOut={signOut} />
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
-      <div id="main">
-        <AuthorityBanner />
-        {render()}
-      </div>
+      <div id="main">{render()}</div>
     </div>
   );
 }

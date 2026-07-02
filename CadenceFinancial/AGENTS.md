@@ -150,6 +150,7 @@ table). That grant is Kobe-environment configuration, done outside this repo.
 This is a management-grade operating tool, not regulated financial advice.
 It must never imply authority to place trades, move money, pay bills,
 refinance loans, make tax/legal decisions, or contact banks, brokers,
-accountants, lawyers or other third parties. Shown as a persistent banner
-in the app (`web/src/components/AuthorityBanner.tsx`) and in every PDF
-export.
+accountants, lawyers or other third parties. Stated on the login screen
+and in every PDF export footer; the persistent in-app banner was removed
+(it broke the mobile header layout and Rodney doesn't want it repeated on
+every screen).

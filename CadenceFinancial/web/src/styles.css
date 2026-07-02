@@ -67,7 +67,7 @@ body {
 
 /* ── Main content ── */
 #main { flex: 1; min-width: 0; background: var(--app-bg); display: flex; flex-direction: column; overflow: hidden; border-radius: 16px 0 0 16px; }
-.screen-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: var(--header-h); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+.screen-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; min-height: var(--header-h); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; flex-wrap: wrap; }
 .screen-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
 .screen-header .subtitle { font-size: 13px; color: var(--text2); margin-top: 1px; }
 .header-left { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -77,9 +77,6 @@ body {
 .screen-content::-webkit-scrollbar { width: 6px; }
 .screen-content::-webkit-scrollbar-track { background: transparent; }
 .screen-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
-
-/* ── Authority banner ── */
-.authority-banner { background: #FFF7E6; border-bottom: 1px solid #F0DDA6; color: #7A5A00; font-size: 12px; padding: 8px 24px; line-height: 1.4; }
 
 /* ── Buttons ── */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s, transform 0.1s; font-family: inherit; }
@@ -173,10 +170,13 @@ input[type="email"], input[type="password"], input[type="text"], textarea, selec
   .sidebar-backdrop { display: block; }
   #main { border-radius: 0; }
   .cf-metric-grid { grid-template-columns: 1fr 1fr; }
-  .screen-header { padding: 0 12px; }
+  .screen-header { padding: 10px 12px; }
+  .header-actions { width: 100%; flex-wrap: wrap; }
   .screen-content { padding: 14px; }
   .kobe-msg { max-width: 88%; }
 }
 @media (max-width: 480px) {
   .cf-metric-grid { grid-template-columns: 1fr; }
+  .screen-header h1 { font-size: 19px; }
+  .header-actions .btn { flex: 1; justify-content: center; }
 }
