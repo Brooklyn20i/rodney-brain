@@ -13,7 +13,10 @@ import type {
   CadenceFinancialData,
   Decision,
   Entity,
+  EstateItem,
   EvidenceItem,
+  Goal,
+  InsurancePolicy,
   InvestmentHolding,
   InvestmentTransaction,
   LiquidityBucket,
@@ -318,6 +321,31 @@ const riskPolicies: RiskPolicy[] = [
   { ...base, id: 'rp-liquidity-coverage', metric_key: 'protected_liquidity_coverage', green_threshold: 1.0, amber_threshold: 0.95, direction: 'higher_better' },
 ];
 
+const goals: Goal[] = [
+  {
+    ...base,
+    id: 'g-fi',
+    label: 'Financial independence',
+    target_net_worth: 4_000_000,
+    target_date: '2035-12-31',
+    assumed_growth_rate: 0.05,
+    notes: 'Illustrative target for the demo scenario; growth assumption is a planning input, not a forecast.',
+  },
+];
+
+const insurancePolicies: InsurancePolicy[] = [
+  { ...base, id: 'ip-life', category: 'life', insurer: 'Example Mutual', policy_label: 'Life cover — Alex', cover_amount: 1_000_000, premium_annual: 1_450, renewal_date: '2025-11-01', status: 'active', notes: 'Held inside super.' },
+  { ...base, id: 'ip-income', category: 'income_protection', insurer: 'Example Mutual', policy_label: 'Income protection — Alex', cover_amount: 120_000, premium_annual: 2_100, renewal_date: '2025-11-01', status: 'under_review', notes: 'Benefit period under review at renewal.' },
+  { ...base, id: 'ip-landlord', category: 'landlord', insurer: 'Sample Insurance Co', policy_label: 'Landlord cover — Coastal Bay pair', cover_amount: 850_000, premium_annual: 1_900, renewal_date: '2026-02-15', status: 'active', notes: 'Covers both Palmtree Rd properties.' },
+];
+
+const estateItems: EstateItem[] = [
+  { ...base, id: 'es-will', item_key: 'will', label: 'Will', status: 'executed', last_reviewed: '2023-08-10', notes: 'Review due after any major asset change.' },
+  { ...base, id: 'es-poa-fin', item_key: 'poa_financial', label: 'Power of attorney — financial', status: 'executed', last_reviewed: '2023-08-10', notes: '' },
+  { ...base, id: 'es-poa-med', item_key: 'poa_medical', label: 'Power of attorney — medical', status: 'missing', last_reviewed: null, notes: 'Not yet drafted.' },
+  { ...base, id: 'es-super-nom', item_key: 'super_binding_nomination', label: 'Super binding death nomination', status: 'review_due', last_reviewed: '2022-05-01', notes: 'Binding nominations lapse after 3 years.' },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -332,5 +360,8 @@ export function loadDemoData(): CadenceFinancialData {
     agent_messages: agentMessages,
     allocation_policies: allocationPolicies,
     risk_policies: riskPolicies,
+    goals,
+    insurance_policies: insurancePolicies,
+    estate_items: estateItems,
   };
 }

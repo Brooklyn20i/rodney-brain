@@ -1,3 +1,4 @@
+import React from 'react';
 import { LogoMark } from './LogoMark';
 
 export interface NavItem {
@@ -6,18 +7,55 @@ export interface NavItem {
   icon: string;
 }
 
-export const NAV: NavItem[] = [
-  { id: 'month-close', label: 'Month Close', icon: '●' },
-  { id: 'free-cash-engine', label: 'Free Cash Engine', icon: '$' },
-  { id: 'net-worth-bridge', label: 'Net Worth Bridge', icon: '⇌' },
-  { id: 'debt-offset', label: 'Debt & Offset', icon: '⛁' },
-  { id: 'investments', label: 'Investments', icon: '▲' },
-  { id: 'allocation', label: 'Asset Allocation', icon: '◔' },
-  { id: 'risk', label: 'Risk Dashboard', icon: '▣' },
-  { id: 'stress', label: 'Stress Tests', icon: '≋' },
-  { id: 'evidence', label: 'Evidence Register', icon: '☑' },
-  { id: 'decisions', label: 'Needs Rodney', icon: '!' },
-  { id: 'kobe', label: 'Kobe', icon: '⚡' },
+interface NavGroup {
+  section: string; // '' = no header (top group)
+  items: NavItem[];
+}
+
+// Grouped like the main Cadence app's sidebar: a flat 15-item list is
+// exactly the "complicated" feeling Rodney flagged; four labeled lanes
+// mirror how a family office actually thinks about the work.
+export const NAV: NavGroup[] = [
+  {
+    section: '',
+    items: [
+      { id: 'overview', label: 'Overview', icon: '◎' },
+      { id: 'goals', label: 'Goals & Runway', icon: '⚑' },
+    ],
+  },
+  {
+    section: 'Operate',
+    items: [
+      { id: 'month-close', label: 'Month Close', icon: '●' },
+      { id: 'free-cash-engine', label: 'Free Cash Engine', icon: '$' },
+      { id: 'net-worth-bridge', label: 'Net Worth Bridge', icon: '⇌' },
+      { id: 'debt-offset', label: 'Debt & Offset', icon: '⛁' },
+    ],
+  },
+  {
+    section: 'Invest',
+    items: [
+      { id: 'investments', label: 'Investments', icon: '▲' },
+      { id: 'allocation', label: 'Asset Allocation', icon: '◔' },
+      { id: 'performance', label: 'Performance', icon: '↗' },
+    ],
+  },
+  {
+    section: 'Risk',
+    items: [
+      { id: 'risk', label: 'Risk Dashboard', icon: '▣' },
+      { id: 'stress', label: 'Stress Tests', icon: '≋' },
+      { id: 'protection', label: 'Protection', icon: '⛨' },
+    ],
+  },
+  {
+    section: 'Govern',
+    items: [
+      { id: 'evidence', label: 'Evidence Register', icon: '☑' },
+      { id: 'decisions', label: 'Needs Rodney', icon: '!' },
+      { id: 'kobe', label: 'Kobe', icon: '⚡' },
+    ],
+  },
 ];
 
 interface Props {
@@ -38,14 +76,19 @@ export function Sidebar({ current, onNavigate, open, demo, onSignOut }: Props) {
           <span id="sidebar-title-sub">Financial</span>
         </span>
       </div>
-      {NAV.map((it) => (
-        <button
-          key={it.id}
-          className={`nav-item ${current === it.id ? 'active' : ''}`}
-          onClick={() => onNavigate(it.id)}
-        >
-          <span className="nav-icon">{it.icon}</span> {it.label}
-        </button>
+      {NAV.map((grp) => (
+        <React.Fragment key={grp.section || 'top'}>
+          {grp.section && <div className="nav-section-label">{grp.section}</div>}
+          {grp.items.map((it) => (
+            <button
+              key={it.id}
+              className={`nav-item ${current === it.id ? 'active' : ''}`}
+              onClick={() => onNavigate(it.id)}
+            >
+              <span className="nav-icon">{it.icon}</span> {it.label}
+            </button>
+          ))}
+        </React.Fragment>
       ))}
       <div id="sidebar-footer">
         <div id="sync-status">

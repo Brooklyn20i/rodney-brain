@@ -5,6 +5,7 @@ import {
   latestMonth,
   netWorthBridge,
   nextPeriod,
+  performanceHistory,
   summarizePeriod,
 } from '../financeCalc';
 import type { InvestmentTransaction, MonthlyMetric } from '../types';
@@ -219,3 +220,29 @@ function tx(overrides: Partial<InvestmentTransaction> & Pick<InvestmentTransacti
     ...overrides,
   };
 }
+
+describe('performanceHistory', () => {
+  it('attributes each month and reconciles cumulatively: operating + market = total', () => {
+    const history = performanceHistory(months)!;
+
+    // 5 bridge rows for 6 months of data.
+    expect(history.rows).toHaveLength(5);
+    history.rows.forEach((r) => expect(r.operating + r.market).toBeCloseTo(r.total, 2));
+
+    // Cumulative totals reconcile with the end-to-end net worth movement.
+    expect(history.openingNetWorth).toBeCloseTo(500000, 2);
+    expect(history.closingNetWorth).toBeCloseTo(506000, 2);
+    expect(history.totalMovement).toBeCloseTo(6000, 2);
+    expect(history.operatingTotal + history.marketTotal).toBeCloseTo(history.totalMovement, 2);
+
+    // Hand-computed: operating Mar..Jul = (2000+200)+(-500+200)+(1500+200)+(-300+1000+200)+(2000+200) = 6700.
+    expect(history.operatingTotal).toBeCloseTo(6700, 2);
+    expect(history.marketTotal).toBeCloseTo(-700, 2);
+    expect(history.operatingShare).toBeCloseTo(6700 / 6000, 4);
+  });
+
+  it('returns null with fewer than two months', () => {
+    expect(performanceHistory(months.slice(0, 1))).toBeNull();
+    expect(performanceHistory([])).toBeNull();
+  });
+});

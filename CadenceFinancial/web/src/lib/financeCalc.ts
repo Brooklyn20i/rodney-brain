@@ -228,6 +228,62 @@ export function buildExecutiveSummary(bridge: NetWorthBridge, periodLabel: strin
   );
 }
 
+// ── Performance attribution ────────────────────────────────────────────
+// "How much of the wealth movement did the owner earn (operating) vs the
+// market hand over (marks)?" -- the contribution-vs-return split a family
+// office reports monthly. Reuses netWorthBridge per consecutive month pair,
+// so each row reconciles by construction: operating + market = total.
+
+export interface PerformanceRow {
+  period: string;
+  operating: number; // cash saved + investment buys + debt principal reduction
+  market: number; // residual: marks, FX, everything the owner didn't do
+  total: number; // net worth movement for the month
+}
+
+export interface PerformanceHistory {
+  rows: PerformanceRow[];
+  openingNetWorth: number;
+  closingNetWorth: number;
+  operatingTotal: number;
+  marketTotal: number;
+  totalMovement: number;
+  // Fraction of the cumulative movement attributable to operating activity.
+  // null when the total movement is zero (nothing to attribute).
+  operatingShare: number | null;
+}
+
+export function performanceHistory(months: MonthlyMetric[]): PerformanceHistory | null {
+  if (months.length < 2) return null;
+  const sorted = [...months].sort((a, b) => a.period.localeCompare(b.period));
+
+  let operatingC = 0;
+  let marketC = 0;
+  const rows: PerformanceRow[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const bridge = netWorthBridge(sorted[i - 1], sorted[i]);
+    operatingC += toCents(bridge.operatingCashAndDebt);
+    marketC += toCents(bridge.marketAndOtherMovement);
+    rows.push({
+      period: sorted[i].period,
+      operating: bridge.operatingCashAndDebt,
+      market: bridge.marketAndOtherMovement,
+      total: bridge.netWorthMovement,
+    });
+  }
+
+  const totalC = operatingC + marketC;
+  return {
+    rows,
+    openingNetWorth: sorted[0].net_worth,
+    closingNetWorth: sorted[sorted.length - 1].net_worth,
+    operatingTotal: centsToDollars(operatingC),
+    marketTotal: centsToDollars(marketC),
+    totalMovement: centsToDollars(totalC),
+    operatingShare: totalC === 0 ? null : operatingC / totalC,
+  };
+}
+
 export interface InvestmentBuysSummary {
   shares: number;
   btc: number;

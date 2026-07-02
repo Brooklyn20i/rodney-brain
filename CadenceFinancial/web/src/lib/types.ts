@@ -246,6 +246,77 @@ export interface AgentMessage {
   deleted_at: string | null;
 }
 
+// The owner's stated objective -- the number the whole app steers toward.
+// The workbook's own strategy lane flagged "no defined objective" as its
+// top governance gap; a goal row is what turns the monthly close from
+// bookkeeping into navigation. Runway math lives in lib/goalCalc.ts and is
+// computed from *actual trailing operating performance*, never stored.
+export interface Goal {
+  id: string;
+  owner_id: string;
+  label: string;
+  target_net_worth: number;
+  target_date: string | null; // 'YYYY-MM-DD', optional
+  // Annual growth assumption applied to existing net worth in the "with
+  // growth" runway scenario. 0 = operating-only (no market assumption).
+  assumed_growth_rate: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Personal insurance register -- the protection layer the workbook had no
+// row for at all. Management-grade record only: what exists, how much cover,
+// when it renews. Never advice about what cover to buy.
+export type InsuranceCategory =
+  | 'life'
+  | 'tpd'
+  | 'income_protection'
+  | 'trauma'
+  | 'health'
+  | 'home_contents'
+  | 'landlord'
+  | 'motor'
+  | 'liability'
+  | 'other';
+
+export type InsuranceStatus = 'active' | 'lapsed' | 'under_review';
+
+export interface InsurancePolicy {
+  id: string;
+  owner_id: string;
+  category: InsuranceCategory;
+  insurer: string;
+  policy_label: string; // e.g. "Life cover — Alex", never a policy number
+  cover_amount: number;
+  premium_annual: number;
+  renewal_date: string | null;
+  status: InsuranceStatus;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Estate-readiness checklist: wills, powers of attorney, binding super
+// nominations. Status tracking only -- the documents themselves live with
+// the lawyer, not in this app.
+export type EstateItemStatus = 'missing' | 'in_progress' | 'executed' | 'review_due';
+
+export interface EstateItem {
+  id: string;
+  owner_id: string;
+  item_key: string; // 'will' | 'poa_financial' | 'poa_medical' | 'super_binding_nomination' | ...
+  label: string;
+  status: EstateItemStatus;
+  last_reviewed: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -259,6 +330,9 @@ export interface CadenceFinancialData {
   agent_messages: AgentMessage[];
   allocation_policies: AllocationPolicy[];
   risk_policies: RiskPolicy[];
+  goals: Goal[];
+  insurance_policies: InsurancePolicy[];
+  estate_items: EstateItem[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -274,6 +348,9 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'agent_messages',
   'allocation_policies',
   'risk_policies',
+  'goals',
+  'insurance_policies',
+  'estate_items',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -289,4 +366,7 @@ export const emptyData = (): CadenceFinancialData => ({
   agent_messages: [],
   allocation_policies: [],
   risk_policies: [],
+  goals: [],
+  insurance_policies: [],
+  estate_items: [],
 });

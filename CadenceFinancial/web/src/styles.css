@@ -56,6 +56,7 @@ body {
 #sidebar-title .logo-mark { flex-shrink: 0; }
 #sidebar-title-text { display: flex; flex-direction: column; line-height: 1.2; font-size: 20px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.3px; }
 #sidebar-title-sub { font-size: 10px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+.nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 12px 8px 4px; }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; margin-bottom: 2px; color: var(--sidebar-text); font-size: 14px; font-weight: 500; transition: background 0.15s, color 0.15s; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
 .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }
 .nav-item.active { background: var(--sidebar-active); color: var(--sidebar-active-text); }
@@ -79,6 +80,15 @@ body {
 .screen-content::-webkit-scrollbar { width: 6px; }
 .screen-content::-webkit-scrollbar-track { background: transparent; }
 .screen-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+
+/* ── Overview flash report ── */
+.flag-list { display: flex; flex-direction: column; }
+.flag-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.flag-row:last-child { border-bottom: none; }
+.flag-row .flag-text { flex: 1; min-width: 0; }
+.flag-row .grade-tag { flex-shrink: 0; }
+.progress-track { height: 8px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); overflow: hidden; margin: 10px 0 6px; }
+.progress-fill { height: 100%; border-radius: 4px; background: var(--accent); }
 
 /* ── Buttons ── */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s, transform 0.1s; font-family: inherit; }

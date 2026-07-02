@@ -3,6 +3,10 @@ import { useCadenceFinancial } from './lib/store';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar } from './components/Sidebar';
+import { Overview } from './screens/Overview';
+import { Goals } from './screens/Goals';
+import { Performance } from './screens/Performance';
+import { Protection } from './screens/Protection';
 import { MonthClose } from './screens/MonthClose';
 import { FreeCashEngine } from './screens/FreeCashEngine';
 import { NetWorthBridge } from './screens/NetWorthBridge';
@@ -18,7 +22,7 @@ import { StressTests } from './screens/StressTests';
 export function App() {
   const { ready, configured, demo, session, needsPasswordSet, signOut, syncError, clearSyncError } =
     useCadenceFinancial();
-  const [screen, setScreen] = useState('month-close');
+  const [screen, setScreen] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
 
   if (!ready) {
@@ -42,6 +46,14 @@ export function App() {
 
   const render = () => {
     switch (screen) {
+      case 'overview':
+        return <Overview onMenu={onMenu} onNavigate={navigate} />;
+      case 'goals':
+        return <Goals onMenu={onMenu} />;
+      case 'performance':
+        return <Performance onMenu={onMenu} />;
+      case 'protection':
+        return <Protection onMenu={onMenu} />;
       case 'month-close':
         return <MonthClose onMenu={onMenu} />;
       case 'free-cash-engine':
@@ -65,7 +77,7 @@ export function App() {
       case 'stress':
         return <StressTests onMenu={onMenu} />;
       default:
-        return <MonthClose onMenu={onMenu} />;
+        return <Overview onMenu={onMenu} onNavigate={navigate} />;
     }
   };
 

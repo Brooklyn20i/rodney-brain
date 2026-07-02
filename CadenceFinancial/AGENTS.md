@@ -104,7 +104,9 @@ See `backend/migrations/0001_init.sql` for the full schema and
 
 Key tables: `entities`, `properties`, `loans`, `investment_holdings`,
 `investment_transactions`, `monthly_metrics`, `evidence_items`, `decisions`,
-`liquidity_buckets`.
+`liquidity_buckets`, plus Phase B (`0005_phase_b.sql`): `goals`,
+`insurance_policies`, `estate_items` — all entered in-app (no CSV importer;
+rows land straight in the private Supabase project).
 
 Derived figures (free cash generated, all-in surplus, net worth bridge
 movements, asset-allocation target-band flags) are **never stored** — they
@@ -129,6 +131,23 @@ metric with a `direction`) drive the Asset Allocation bands, Risk Dashboard
 colors, and band flags. The app falls back to generic built-in defaults when
 the tables are empty. Real policy values are seeded per-owner via SQL (same
 paste-into-SQL-Editor flow as the data seed) — never committed to this repo.
+
+## Phase B screens (Overview, Goals, Performance, Protection)
+
+The **Overview** screen is the landing page: a monthly flash report
+(executive summary, operating-vs-market tiles, goal progress, and a
+"needs attention" list of allocation-band breaches, red/amber risk
+metrics, weak evidence, open decisions, protection gaps and unread agent
+messages — each deep-linking to its owning screen). **Goals & Runway**
+computes time-to-target from the actual trailing 6-month operating pace
+(`lib/goalCalc.ts` — operating-only floor plus an optional stated growth
+assumption; both pure and unit-tested). **Performance** is the
+contribution-vs-return split per month (`performanceHistory` in
+`lib/financeCalc.ts`, reconciles with the Net Worth Bridge by
+construction). **Protection** is the insurance register + estate-readiness
+checklist — record only, never product advice. Allocation band logic is
+shared via `lib/allocation.ts` so Overview and Asset Allocation can't
+disagree.
 
 ## Kobe integration
 

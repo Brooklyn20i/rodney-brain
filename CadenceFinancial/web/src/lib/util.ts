@@ -65,3 +65,40 @@ export const APPROVAL_STATUS_LABEL: Record<string, string> = {
   blocked: 'Blocked',
   implemented: 'Implemented',
 };
+
+export const INSURANCE_CATEGORY_LABEL: Record<string, string> = {
+  life: 'Life',
+  tpd: 'TPD',
+  income_protection: 'Income protection',
+  trauma: 'Trauma',
+  health: 'Health',
+  home_contents: 'Home & contents',
+  landlord: 'Landlord',
+  motor: 'Motor',
+  liability: 'Liability / umbrella',
+  other: 'Other',
+};
+
+export const INSURANCE_STATUS_LABEL: Record<string, string> = {
+  active: 'Active',
+  lapsed: 'Lapsed',
+  under_review: 'Under review',
+};
+
+export const ESTATE_STATUS_LABEL: Record<string, string> = {
+  missing: 'Missing',
+  in_progress: 'In progress',
+  executed: 'Executed',
+  review_due: 'Review due',
+};
+
+// The standard estate-readiness checklist offered when adding an item.
+export const ESTATE_ITEM_PRESETS: { key: string; label: string }[] = [
+  { key: 'will', label: 'Will' },
+  { key: 'poa_financial', label: 'Power of attorney — financial' },
+  { key: 'poa_medical', label: 'Power of attorney — medical' },
+  { key: 'super_binding_nomination', label: 'Super binding death nomination' },
+  { key: 'beneficiary_review', label: 'Beneficiary review' },
+  { key: 'emergency_file', label: 'Emergency file / key contacts' },
+  { key: 'other', label: 'Other' },
+];
