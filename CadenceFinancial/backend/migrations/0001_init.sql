@@ -117,7 +117,13 @@ create table if not exists investment_transactions (
   currency   text not null default 'AUD',
   units      numeric(18,8) not null default 0,
   price      numeric(14,4) not null default 0,
+  -- Native-currency amount, exactly as evidenced.
   amount     numeric(14,2) not null default 0,
+  -- AUD-equivalent at purchase date. Required (not derived): there's no
+  -- single "current" FX rate that correctly restates a historical
+  -- foreign-currency purchase, so this must be captured at entry time.
+  -- Equal to `amount` when currency is already AUD.
+  amount_aud numeric(14,2) not null default 0,
   notes      text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
