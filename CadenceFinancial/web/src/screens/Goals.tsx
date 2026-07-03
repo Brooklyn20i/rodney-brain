@@ -15,6 +15,8 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ label: '', target: '', date: '', growth: '', notes: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const startEdit = (id: string) => {
     const g = data.goals.find((x) => x.id === id);
@@ -27,11 +29,20 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
       notes: g.notes,
     });
     setEditingId(id);
+    setFormError(null);
     setShowForm(true);
   };
 
   const save = async () => {
-    if (!form.label.trim() || num(form.target) <= 0) return;
+    setFormError(null);
+    if (!form.label.trim()) {
+      setFormError('Goal name is required.');
+      return;
+    }
+    if (num(form.target) <= 0) {
+      setFormError('Target net worth must be a number greater than zero (e.g. 4000000).');
+      return;
+    }
     const row = {
       label: form.label.trim(),
       target_net_worth: num(form.target),
@@ -39,8 +50,20 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
       assumed_growth_rate: num(form.growth) / 100,
       notes: form.notes.trim(),
     };
-    if (editingId) await update('goals', editingId, row);
-    else await insert('goals', row);
+    setSaving(true);
+    try {
+      if (editingId) await update('goals', editingId, row);
+      else await insert('goals', row);
+    } catch (e) {
+      setSaving(false);
+      setFormError(
+        e instanceof Error
+          ? `Save failed: ${e.message}`
+          : 'Save failed. If you haven\'t run the goals/insurance/estate SQL migration in Supabase yet, that\'s almost certainly why.'
+      );
+      return;
+    }
+    setSaving(false);
     setForm({ label: '', target: '', date: '', growth: '', notes: '' });
     setEditingId(null);
     setShowForm(false);
@@ -58,6 +81,7 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
           onClick={() => {
             setEditingId(null);
             setForm({ label: '', target: '', date: '', growth: '', notes: '' });
+            setFormError(null);
             setShowForm((s) => !s);
           }}
         >
@@ -87,8 +111,11 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
                 </div>
               ))}
             </div>
-            <button className="btn btn-primary" onClick={save}>
-              {editingId ? 'Save changes' : 'Add goal'}
+            {formError && (
+              <p style={{ fontSize: 13, color: 'var(--red)', margin: '0 0 10px' }}>{formError}</p>
+            )}
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add goal'}
             </button>
           </Card>
         )}

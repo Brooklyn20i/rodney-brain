@@ -39,36 +39,62 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
     renewal_date: '',
   });
   const [estate, setEstate] = useState({ item_key: 'will', status: 'missing' as EstateItemStatus, notes: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Per-row edit state
   const [policyEdit, setPolicyEdit] = useState<Record<string, { cover: string; premium: string; renewal: string; status: InsuranceStatus }>>({});
   const [estateEdit, setEstateEdit] = useState<Record<string, { status: EstateItemStatus; last_reviewed: string }>>({});
 
+  const missingTableHint =
+    "Save failed. If you haven't run the goals/insurance/estate SQL migration in Supabase yet, that's almost certainly why.";
+
   const addPolicy = async () => {
-    if (!policy.policy_label.trim()) return;
-    await insert('insurance_policies', {
-      category: policy.category,
-      insurer: policy.insurer.trim(),
-      policy_label: policy.policy_label.trim(),
-      cover_amount: num(policy.cover_amount),
-      premium_annual: num(policy.premium_annual),
-      renewal_date: policy.renewal_date || null,
-      status: 'active',
-      notes: '',
-    });
+    setFormError(null);
+    if (!policy.policy_label.trim()) {
+      setFormError('A policy label is required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await insert('insurance_policies', {
+        category: policy.category,
+        insurer: policy.insurer.trim(),
+        policy_label: policy.policy_label.trim(),
+        cover_amount: num(policy.cover_amount),
+        premium_annual: num(policy.premium_annual),
+        renewal_date: policy.renewal_date || null,
+        status: 'active',
+        notes: '',
+      });
+    } catch (e) {
+      setSaving(false);
+      setFormError(e instanceof Error ? `Save failed: ${e.message}` : missingTableHint);
+      return;
+    }
+    setSaving(false);
     setPolicy({ category: 'life', insurer: '', policy_label: '', cover_amount: '', premium_annual: '', renewal_date: '' });
     setForm(null);
   };
 
   const addEstate = async () => {
+    setFormError(null);
     const preset = ESTATE_ITEM_PRESETS.find((p) => p.key === estate.item_key);
-    await insert('estate_items', {
-      item_key: estate.item_key,
-      label: preset?.label ?? estate.item_key,
-      status: estate.status,
-      last_reviewed: null,
-      notes: estate.notes.trim(),
-    });
+    setSaving(true);
+    try {
+      await insert('estate_items', {
+        item_key: estate.item_key,
+        label: preset?.label ?? estate.item_key,
+        status: estate.status,
+        last_reviewed: null,
+        notes: estate.notes.trim(),
+      });
+    } catch (e) {
+      setSaving(false);
+      setFormError(e instanceof Error ? `Save failed: ${e.message}` : missingTableHint);
+      return;
+    }
+    setSaving(false);
     setEstate({ item_key: 'will', status: 'missing', notes: '' });
     setForm(null);
   };
@@ -109,10 +135,22 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
         subtitle="Insurance register and estate readiness — record only, never advice."
         onMenu={onMenu}
       >
-        <button className="btn btn-secondary btn-sm" onClick={() => setForm(form === 'estate' ? null : 'estate')}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => {
+            setFormError(null);
+            setForm(form === 'estate' ? null : 'estate');
+          }}
+        >
           {form === 'estate' ? 'Cancel' : '+ Estate item'}
         </button>
-        <button className="btn btn-primary btn-sm" onClick={() => setForm(form === 'policy' ? null : 'policy')}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => {
+            setFormError(null);
+            setForm(form === 'policy' ? null : 'policy');
+          }}
+        >
           {form === 'policy' ? 'Cancel' : '+ Policy'}
         </button>
       </ScreenHeader>
@@ -148,8 +186,11 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
                 </div>
               ))}
             </div>
-            <button className="btn btn-primary" onClick={addPolicy}>
-              Add policy
+            {formError && (
+              <p style={{ fontSize: 13, color: 'var(--red)', margin: '0 0 10px' }}>{formError}</p>
+            )}
+            <button className="btn btn-primary" onClick={addPolicy} disabled={saving}>
+              {saving ? 'Saving…' : 'Add policy'}
             </button>
           </Card>
         )}
@@ -181,8 +222,11 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
                 <input type="text" value={estate.notes} onChange={(e) => setEstate((s) => ({ ...s, notes: e.target.value }))} />
               </div>
             </div>
-            <button className="btn btn-primary" onClick={addEstate}>
-              Add item
+            {formError && (
+              <p style={{ fontSize: 13, color: 'var(--red)', margin: '0 0 10px' }}>{formError}</p>
+            )}
+            <button className="btn btn-primary" onClick={addEstate} disabled={saving}>
+              {saving ? 'Saving…' : 'Add item'}
             </button>
           </Card>
         )}
