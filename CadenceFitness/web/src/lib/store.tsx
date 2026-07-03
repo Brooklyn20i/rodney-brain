@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { isConfigured, supabase } from './supabase';
 import { CadenceFitnessData, TABLES, emptyData } from './types';
 import { loadDemoData } from './demoData';
+import { EXERCISE_CATALOG } from './exerciseCatalog';
 
 type Table = keyof CadenceFitnessData;
 type Row<K extends Table> = CadenceFitnessData[K][number];
@@ -105,6 +106,46 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     ch.subscribe();
     return () => {
       supabase.removeChannel(ch);
+    };
+  }, [session, needsPasswordSet, reload]);
+
+  // One-time seed of the common-movement library on first sign-in, so every
+  // everyday lift is available without any manual setup. Guarded by a
+  // per-device flag and only runs when the library is genuinely empty (so it
+  // never fights data that already synced from another device).
+  useEffect(() => {
+    if (DEMO_MODE || !session || needsPasswordSet) return;
+    const FLAG = 'cadence-fitness:seeded-exercises';
+    if (localStorage.getItem(FLAG)) return;
+    let cancelled = false;
+    (async () => {
+      const { data: existing, error } = await supabase.from('exercises').select('id').limit(1);
+      if (cancelled || error) return; // table not ready / offline -> retry next load
+      if (existing && existing.length > 0) {
+        localStorage.setItem(FLAG, '1');
+        return;
+      }
+      const now = new Date().toISOString();
+      const rows = EXERCISE_CATALOG.map((e) => ({
+        id: crypto.randomUUID(),
+        owner_id: session.user.id,
+        name: e.name,
+        muscle_group: e.muscle_group,
+        secondary_muscles: '',
+        equipment: e.equipment,
+        notes: '',
+        created_at: now,
+        updated_at: now,
+        deleted_at: null,
+      }));
+      const { error: insErr } = await supabase.from('exercises').insert(rows);
+      if (!cancelled && !insErr) {
+        localStorage.setItem(FLAG, '1');
+        reload('exercises');
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, [session, needsPasswordSet, reload]);
 

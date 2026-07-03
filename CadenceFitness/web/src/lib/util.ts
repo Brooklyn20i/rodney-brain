@@ -105,33 +105,5 @@ export const SOURCE_LABEL: Record<MetricSource, string> = {
 
 export const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell', 'other'];
 
-// One-tap starter library offered on the Exercises screen when the library is
-// empty -- saves typing in the obvious lifts on day one. Rows are inserted as
-// normal owner rows; edit or delete them freely afterwards.
-export const STARTER_EXERCISES: { name: string; muscle_group: MuscleGroup; equipment: string }[] = [
-  { name: 'Barbell Bench Press', muscle_group: 'chest', equipment: 'barbell' },
-  { name: 'Incline Dumbbell Press', muscle_group: 'chest', equipment: 'dumbbell' },
-  { name: 'Cable Fly', muscle_group: 'chest', equipment: 'cable' },
-  { name: 'Overhead Press', muscle_group: 'shoulders', equipment: 'barbell' },
-  { name: 'Dumbbell Lateral Raise', muscle_group: 'shoulders', equipment: 'dumbbell' },
-  { name: 'Rear Delt Fly', muscle_group: 'shoulders', equipment: 'dumbbell' },
-  { name: 'Deadlift', muscle_group: 'back', equipment: 'barbell' },
-  { name: 'Barbell Row', muscle_group: 'back', equipment: 'barbell' },
-  { name: 'Lat Pulldown', muscle_group: 'back', equipment: 'cable' },
-  { name: 'Seated Cable Row', muscle_group: 'back', equipment: 'cable' },
-  { name: 'Pull-Up', muscle_group: 'back', equipment: 'bodyweight' },
-  { name: 'Barbell Squat', muscle_group: 'quads', equipment: 'barbell' },
-  { name: 'Leg Press', muscle_group: 'quads', equipment: 'machine' },
-  { name: 'Leg Extension', muscle_group: 'quads', equipment: 'machine' },
-  { name: 'Romanian Deadlift', muscle_group: 'hamstrings', equipment: 'barbell' },
-  { name: 'Lying Leg Curl', muscle_group: 'hamstrings', equipment: 'machine' },
-  { name: 'Hip Thrust', muscle_group: 'glutes', equipment: 'barbell' },
-  { name: 'Walking Lunge', muscle_group: 'glutes', equipment: 'dumbbell' },
-  { name: 'Standing Calf Raise', muscle_group: 'calves', equipment: 'machine' },
-  { name: 'Barbell Curl', muscle_group: 'biceps', equipment: 'barbell' },
-  { name: 'Incline Dumbbell Curl', muscle_group: 'biceps', equipment: 'dumbbell' },
-  { name: 'Cable Triceps Pushdown', muscle_group: 'triceps', equipment: 'cable' },
-  { name: 'Skull Crusher', muscle_group: 'triceps', equipment: 'barbell' },
-  { name: 'Cable Crunch', muscle_group: 'core', equipment: 'cable' },
-  { name: 'Plank', muscle_group: 'core', equipment: 'bodyweight' },
-];
+// The full common-movement library lives in lib/exerciseCatalog.ts and is
+// auto-seeded on first sign-in (see lib/store.tsx).

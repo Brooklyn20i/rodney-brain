@@ -163,7 +163,28 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const [addExId, setAddExId] = useState('');
   const addExercise = async () => {
     if (!addExId || !active) return;
-    await addSet(addExId);
+    // Already in the session -> just tack on another set. New to the session ->
+    // seed it from the last time this movement was trained, so the weights (and
+    // set count) carry forward, exactly like program-day sessions prefill.
+    if (sessionSets.some((s) => s.exercise_id === addExId)) {
+      await addSet(addExId);
+    } else {
+      const last = lastSetsForExercise(data.workout_sets, data.workouts, addExId, active.id);
+      const count = last?.sets.length || 1;
+      for (let n = 1; n <= count; n++) {
+        const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
+        await insert('workout_sets', {
+          workout_id: active.id,
+          exercise_id: addExId,
+          set_number: n,
+          weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
+          reps: 0,
+          rpe: null,
+          is_warmup: false,
+          done: false,
+        });
+      }
+    }
     setAddExId('');
   };
 

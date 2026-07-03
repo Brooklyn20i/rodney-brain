@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Tag, SparkBars } from '../components/bits';
 import { epley1RM, prsByExercise, workingSets } from '../lib/fitnessCalc';
-import { EQUIPMENT_OPTIONS, fmtDMY, fmtKg, MUSCLE_GROUP_LABEL, MUSCLE_GROUPS, STARTER_EXERCISES } from '../lib/util';
+import { EQUIPMENT_OPTIONS, fmtDMY, fmtKg, MUSCLE_GROUP_LABEL, MUSCLE_GROUPS } from '../lib/util';
+import { EXERCISE_CATALOG } from '../lib/exerciseCatalog';
 import type { MuscleGroup } from '../lib/types';
 
 // Exercise library + per-lift history: PRs (best e1RM), and an e1RM-over-time
@@ -34,7 +35,9 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
   };
 
   const seedStarter = async () => {
-    for (const e of STARTER_EXERCISES) {
+    const have = new Set(data.exercises.map((e) => e.name.toLowerCase()));
+    for (const e of EXERCISE_CATALOG) {
+      if (have.has(e.name.toLowerCase())) continue;
       await insert('exercises', { ...e, secondary_muscles: '', notes: '' });
     }
   };
@@ -56,9 +59,10 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
       <div className="screen-content">
         {data.exercises.length === 0 && (
           <div className="cf-callout">
-            Empty library.{' '}
+            Your library is empty — the common movements normally load automatically on first
+            sign-in.{' '}
             <button className="btn btn-primary btn-sm" onClick={seedStarter}>
-              Add the starter library ({STARTER_EXERCISES.length} lifts)
+              Load common movements ({EXERCISE_CATALOG.length})
             </button>
           </div>
         )}
