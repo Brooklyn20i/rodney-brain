@@ -195,10 +195,20 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
                       label="Gap to target"
                       value={formatMoney(Math.max(0, goal.target_net_worth - current.net_worth), true)}
                     />
+                    <Metric
+                      label="Already-managed assets"
+                      value={formatMoney(runway.managedAssets, true)}
+                      delta="shares + BTC + super"
+                    />
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
                     Operating-only is the honest floor: your actual trailing pace, zero market
-                    assumption. The growth scenario is a planning input, not a forecast.
+                    assumption anywhere. The growth scenario compounds only your{' '}
+                    {formatMoney(runway.managedAssets, true)} of already-managed assets (shares,
+                    BTC, super) at {formatPercent(goal.assumed_growth_rate, 0)}/yr — cash and
+                    property are still carried flat, since cash doesn't compound and property
+                    appreciation is a separate, uncertain assumption tracked as market movement in
+                    Performance, not folded into runway math. Planning input, not a forecast.
                     {goal.notes && <> {goal.notes}</>}
                   </p>
                 </>

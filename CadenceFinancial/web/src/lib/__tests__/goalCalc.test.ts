@@ -46,10 +46,22 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 }
 
 // Six months, each contributing an all-in surplus of exactly 10,000
-// (8,000 saved + 2,000 debt reduction), ending at NW 500,000.
+// (8,000 saved + 2,000 debt reduction), ending at NW 500,000. 200,000 of
+// that is already-managed assets (100k shares + 50k BTC + 50k super); the
+// rest (300,000) is cash/property/collectibles, which the runway model
+// never assumes growth on.
+const MANAGED = 100_000 + 50_000 + 50_000;
 const months: MonthlyMetric[] = ['2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07'].map(
   (period, i) =>
-    month({ period, cash_saved: 8_000, debt_reduction: 2_000, net_worth: 450_000 + i * 10_000 })
+    month({
+      period,
+      cash_saved: 8_000,
+      debt_reduction: 2_000,
+      net_worth: 450_000 + i * 10_000,
+      shares: 100_000,
+      btc_crypto: 50_000,
+      super_balance: 50_000,
+    })
 );
 
 describe('computeRunway', () => {
@@ -60,20 +72,29 @@ describe('computeRunway', () => {
     expect(r.monthsOperatingOnly).toBe(50);
     expect(r.progressFraction).toBeCloseTo(0.5, 4);
     expect(r.trailingMonths).toBe(6);
+    expect(r.managedAssets).toBeCloseTo(MANAGED, 2);
   });
 
-  it('growth assumption shortens the runway and never lengthens it', () => {
+  it('growth assumption compounds only the managed-assets pool, never cash/property, and never lengthens the runway', () => {
     const withGrowth = computeRunway(goal({ assumed_growth_rate: 0.06 }), months)!;
     expect(withGrowth.monthsWithGrowth).not.toBeNull();
     expect(withGrowth.monthsWithGrowth!).toBeLessThan(withGrowth.monthsOperatingOnly!);
-    // Cross-check against an independent closed-form annuity future value:
-    // FV = P(1+r)^n + C[((1+r)^n - 1)/r] with r = monthly rate. The iterative
-    // month count must be the first n where FV >= target.
+    // Cross-check against an independent closed-form projection where only
+    // the managed pool compounds and the rest grows linearly via
+    // contributions: FV(n) = managed*(1+r)^n + other + contribution*n.
     const r = annualToMonthlyRate(0.06);
-    const fv = (n: number) => 500_000 * (1 + r) ** n + 10_000 * (((1 + r) ** n - 1) / r);
+    const other = 500_000 - MANAGED;
+    const fv = (n: number) => MANAGED * (1 + r) ** n + other + 10_000 * n;
     const n = withGrowth.monthsWithGrowth!;
     expect(fv(n)).toBeGreaterThanOrEqual(1_000_000);
     expect(fv(n - 1)).toBeLessThan(1_000_000);
+  });
+
+  it('a zero managed-assets pool means growth has no effect (nothing to compound)', () => {
+    const noManagedAssets = months.map((m) => ({ ...m, shares: 0, btc_crypto: 0, super_balance: 0 }));
+    const r = computeRunway(goal({ assumed_growth_rate: 0.06 }), noManagedAssets)!;
+    expect(r.managedAssets).toBe(0);
+    expect(r.monthsWithGrowth).toBe(r.monthsOperatingOnly);
   });
 
   it('already-reached target reports zero months and progress >= 1', () => {

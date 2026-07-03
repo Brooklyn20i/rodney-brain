@@ -141,7 +141,11 @@ metrics, weak evidence, open decisions, protection gaps and unread agent
 messages — each deep-linking to its owning screen). **Goals & Runway**
 computes time-to-target from the actual trailing 6-month operating pace
 (`lib/goalCalc.ts` — operating-only floor plus an optional stated growth
-assumption; both pure and unit-tested). **Performance** is the
+assumption that compounds *only* the already-managed pool (shares + BTC +
+super); cash and property are always carried flat, since cash doesn't
+compound and property appreciation is tracked separately as market
+movement in Performance rather than folded into runway math; both
+scenarios pure and unit-tested). **Performance** is the
 contribution-vs-return split per month (`performanceHistory` in
 `lib/financeCalc.ts`, reconciles with the Net Worth Bridge by
 construction). **Protection** is the insurance register + estate-readiness

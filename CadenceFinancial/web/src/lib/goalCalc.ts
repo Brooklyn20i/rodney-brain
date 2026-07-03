@@ -8,16 +8,22 @@
 // Two scenarios, deliberately kept separate so the honest one is never
 // hidden behind an assumption:
 //   operating-only  -- contributions at the actual trailing monthly pace,
-//                      zero market assumption. This is the floor.
-//   with growth     -- the same contributions plus the goal's stated annual
-//                      growth assumption compounding on the balance. This is
-//                      a planning input, not a forecast.
+//                      zero market assumption anywhere. This is the floor.
+//   with growth     -- the same contributions, PLUS the goal's stated
+//                      annual growth assumption compounding on the assets
+//                      already actively managed (shares, BTC, super). Cash
+//                      and property equity are carried flat in both
+//                      scenarios: cash doesn't compound, and property
+//                      appreciation is a separate, uncertain assumption
+//                      this app deliberately doesn't fold into runway math
+//                      (it shows up as market movement in Performance
+//                      instead). This is a planning input, not a forecast.
 //
 // Pure functions, integer-cents arithmetic (see financeCalc.ts). Nothing
 // here is ever stored back to a row.
 
 import type { Goal, MonthlyMetric } from './types';
-import { summarizePeriod, toCents } from './financeCalc';
+import { centsToDollars, summarizePeriod, toCents } from './financeCalc';
 
 const MAX_MONTHS = 1200; // 100 years; beyond this we report "not on current pace"
 
@@ -27,30 +33,39 @@ export interface RunwayResult {
   // Months until the target is reached at trailing operating pace, no growth.
   // null = never reaches on current pace (or already reached => 0).
   monthsOperatingOnly: number | null;
-  // Months until the target is reached with the goal's growth assumption.
+  // Months until the target is reached with the goal's growth assumption
+  // applied to already-managed assets (shares + BTC + super) only.
   monthsWithGrowth: number | null;
   // The trailing all-in monthly operating average used for the projection.
   monthlyOperatingAverage: number;
   // How many trailing months the average was taken over.
   trailingMonths: number;
+  // Current value of shares + BTC + super -- the pool the growth assumption
+  // actually compounds. Shown so the split is never a black box.
+  managedAssets: number;
 }
 
-// Months for balanceC to reach targetC with a fixed monthly contribution and
-// a monthly compounding rate. Iterative on purpose: an explicit month loop in
-// cents is auditable against a spreadsheet, unlike a closed-form log() whose
-// rounding can differ. Contribution is credited after growth each month.
+// Months for the target to be reached, where only managedC compounds at
+// monthlyRate and otherC (cash, property equity, collectibles) is carried
+// flat -- new contributions land in otherC each month. Iterative on
+// purpose: an explicit month loop in cents is auditable against a
+// spreadsheet, unlike a closed-form log() whose rounding can differ.
 function monthsToTarget(
-  balanceC: number,
+  managedC: number,
+  otherC: number,
   targetC: number,
   monthlyContributionC: number,
   monthlyRate: number
 ): number | null {
-  if (balanceC >= targetC) return 0;
-  let bal = balanceC;
+  let managed = managedC;
+  let other = otherC;
+  if (managed + other >= targetC) return 0;
   for (let month = 1; month <= MAX_MONTHS; month++) {
-    bal = Math.round(bal * (1 + monthlyRate)) + monthlyContributionC;
-    if (bal >= targetC) return month;
-    // A shrinking balance with non-positive contributions can never recover.
+    managed = Math.round(managed * (1 + monthlyRate));
+    other += monthlyContributionC;
+    if (managed + other >= targetC) return month;
+    // A shrinking total with no growth and no positive contribution can
+    // never recover.
     if (monthlyRate <= 0 && monthlyContributionC <= 0) return null;
   }
   return null;
@@ -81,18 +96,22 @@ export function computeRunway(
   const nwC = toCents(latest.net_worth);
   const targetC = toCents(goal.target_net_worth);
   const contributionC = toCents(summary.allInMonthlyAverage);
+  const managedC = toCents(latest.shares) + toCents(latest.btc_crypto) + toCents(latest.super_balance);
+  const otherC = nwC - managedC;
 
   return {
     progressFraction: targetC > 0 ? nwC / targetC : 0,
-    monthsOperatingOnly: monthsToTarget(nwC, targetC, contributionC, 0),
+    monthsOperatingOnly: monthsToTarget(managedC, otherC, targetC, contributionC, 0),
     monthsWithGrowth: monthsToTarget(
-      nwC,
+      managedC,
+      otherC,
       targetC,
       contributionC,
       annualToMonthlyRate(goal.assumed_growth_rate)
     ),
     monthlyOperatingAverage: summary.allInMonthlyAverage,
     trailingMonths: trailing.length,
+    managedAssets: centsToDollars(managedC),
   };
 }
 
