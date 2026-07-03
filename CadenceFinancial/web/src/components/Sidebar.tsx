@@ -36,6 +36,7 @@ export const NAV: NavGroup[] = [
     section: 'Invest',
     items: [
       { id: 'investments', label: 'Investments', icon: '▲' },
+      { id: 'property', label: 'Property Portfolio', icon: '⌂' },
       { id: 'allocation', label: 'Asset Allocation', icon: '◔' },
       { id: 'performance', label: 'Performance', icon: '↗' },
     ],

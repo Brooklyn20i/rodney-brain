@@ -317,6 +317,43 @@ export interface EstateItem {
   deleted_at: string | null;
 }
 
+// Per-property monthly ledger: one row per line item on a rent statement or
+// cost. This is the source of truth for property P&L. Income vs expense is
+// derived from the category (see propertyCalc.ts INCOME_CATEGORIES), and
+// `amount` is always stored positive. Interest is treated as an expense
+// category (entered from the loan statement) so the P&L captures the real
+// financing cost; loan principal is NOT a P&L line (it's a balance-sheet
+// transfer), which is why net cashflow here is an interest-only P&L figure.
+export type PropertyLedgerCategory =
+  | 'rent'
+  | 'other_income'
+  | 'interest'
+  | 'insurance'
+  | 'strata'
+  | 'water'
+  | 'council_rates'
+  | 'land_tax'
+  | 'management_fees'
+  | 'repairs_maintenance'
+  | 'utilities'
+  | 'other_expense';
+
+export interface PropertyLedgerEntry {
+  id: string;
+  owner_id: string;
+  property_id: string;
+  period: string; // 'YYYY-MM'
+  entry_date: string | null; // 'YYYY-MM-DD', optional actual date on the statement
+  category: PropertyLedgerCategory;
+  amount: number; // always positive; category determines income vs expense
+  grade: EvidenceGrade;
+  source: string; // e.g. "May agent rent statement", "Q2 council rates notice"
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -333,6 +370,7 @@ export interface CadenceFinancialData {
   goals: Goal[];
   insurance_policies: InsurancePolicy[];
   estate_items: EstateItem[];
+  property_ledger: PropertyLedgerEntry[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -351,6 +389,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'goals',
   'insurance_policies',
   'estate_items',
+  'property_ledger',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -369,4 +408,5 @@ export const emptyData = (): CadenceFinancialData => ({
   goals: [],
   insurance_policies: [],
   estate_items: [],
+  property_ledger: [],
 });

@@ -12,6 +12,7 @@ import { FreeCashEngine } from './screens/FreeCashEngine';
 import { NetWorthBridge } from './screens/NetWorthBridge';
 import { DebtOffsetControl } from './screens/DebtOffsetControl';
 import { InvestmentDeployment } from './screens/InvestmentDeployment';
+import { PropertyPortfolio } from './screens/PropertyPortfolio';
 import { AssetAllocation } from './screens/AssetAllocation';
 import { EvidenceRegister } from './screens/EvidenceRegister';
 import { Decisions } from './screens/Decisions';
@@ -64,6 +65,8 @@ export function App() {
         return <DebtOffsetControl onMenu={onMenu} />;
       case 'investments':
         return <InvestmentDeployment onMenu={onMenu} />;
+      case 'property':
+        return <PropertyPortfolio onMenu={onMenu} />;
       case 'allocation':
         return <AssetAllocation onMenu={onMenu} />;
       case 'evidence':

@@ -7,6 +7,7 @@ import {
 } from '../lib/financeCalc';
 import { computeRiskMetrics } from '../lib/riskCalc';
 import { allocationRows } from '../lib/allocation';
+import { availablePeriods as propertyPeriods, portfolioMonth } from '../lib/propertyCalc';
 import { computeRunway, periodAfterMonths } from '../lib/goalCalc';
 import { formatMoney, formatPercent, monthLabel, STRONG_EVIDENCE_GRADES } from '../lib/util';
 
@@ -83,6 +84,23 @@ export function Overview({ onMenu, onNavigate }: { onMenu: () => void; onNavigat
       screen: 'decisions',
       screenLabel: 'Decisions',
     });
+  }
+
+  // Property portfolio: flag any property running at a monthly cash loss in
+  // the latest period with statements on file.
+  const propPeriods = propertyPeriods(data.property_ledger);
+  if (propPeriods.length > 0) {
+    const latestPropPeriod = propPeriods[propPeriods.length - 1];
+    const pm = portfolioMonth(data.property_ledger, data.properties, latestPropPeriod);
+    const losers = pm.rows.filter((r) => (r.totalIncome > 0 || r.totalExpenses > 0) && r.netCashflow < 0);
+    for (const r of losers) {
+      flags.push({
+        tone: 'amber',
+        text: `${r.address} ran at a cash loss in ${monthLabel(latestPropPeriod)} — ${formatMoney(r.netCashflow)} net.`,
+        screen: 'property',
+        screenLabel: 'Property',
+      });
+    }
   }
 
   if (data.insurance_policies.length === 0) {

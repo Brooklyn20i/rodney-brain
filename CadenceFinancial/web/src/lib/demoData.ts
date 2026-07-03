@@ -23,6 +23,7 @@ import type {
   Loan,
   MonthlyMetric,
   Property,
+  PropertyLedgerEntry,
   RiskPolicy,
 } from './types';
 
@@ -346,6 +347,46 @@ const estateItems: EstateItem[] = [
   { ...base, id: 'es-super-nom', item_key: 'super_binding_nomination', label: 'Super binding death nomination', status: 'review_due', last_reviewed: '2022-05-01', notes: 'Binding nominations lapse after 3 years.' },
 ];
 
+// Per-property monthly ledger. Built with a small generator so three months
+// of realistic statements don't take 150 hand-written lines. Grandview is
+// owner-occupied (no rent) so it isn't tenanted here. All fictional.
+const propertyLedger: PropertyLedgerEntry[] = (() => {
+  const rows: PropertyLedgerEntry[] = [];
+  let n = 0;
+  const add = (
+    property_id: string,
+    period: string,
+    category: PropertyLedgerEntry['category'],
+    amount: number,
+    grade: PropertyLedgerEntry['grade'] = 'statement',
+    source = ''
+  ) => {
+    rows.push({ ...base, id: `pl-${++n}`, property_id, period, entry_date: `${period}-05`, category, amount, grade, source, notes: '' });
+  };
+
+  const months = ['2025-05', '2025-06', '2025-07'];
+  // [property, monthly rent, interest, insurance, strata, water, council, mgmt%]
+  const specs: [string, number, number, number, number, number, number, number][] = [
+    ['p-bellview', 3_500, 870, 150, 0, 42, 180, 0.05],
+    ['p-palmtree-3', 1_500, 0, 90, 320, 35, 140, 0.05],
+    ['p-palmtree-5', 1_458, 0, 90, 310, 35, 135, 0.05],
+  ];
+  for (const [pid, rent, interest, insurance, strata, water, council, mgmtPct] of specs) {
+    for (const period of months) {
+      add(pid, period, 'rent', rent, 'statement', 'Managing agent rent statement');
+      if (interest > 0) add(pid, period, 'interest', interest, 'statement', 'Loan interest (offset-reduced)');
+      add(pid, period, 'insurance', insurance, 'statement', 'Landlord policy monthly accrual');
+      if (strata > 0) add(pid, period, 'strata', strata, 'statement', 'Quarterly strata levy / 3');
+      add(pid, period, 'water', water, 'statement', 'Water usage + service');
+      add(pid, period, 'council_rates', council, 'statement', 'Council rates / 12');
+      add(pid, period, 'management_fees', Math.round(rent * mgmtPct), 'statement', 'Agent management fee');
+    }
+  }
+  // A one-off repair pushes Palmtree #3 to a monthly loss in July.
+  add('p-palmtree-3', '2025-07', 'repairs_maintenance', 3_500, 'statement', 'Hot water system replacement');
+  return rows;
+})();
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -363,5 +404,6 @@ export function loadDemoData(): CadenceFinancialData {
     goals,
     insurance_policies: insurancePolicies,
     estate_items: estateItems,
+    property_ledger: propertyLedger,
   };
 }

@@ -118,8 +118,9 @@ See `backend/migrations/0001_init.sql` for the full schema and
 Key tables: `entities`, `properties`, `loans`, `investment_holdings`,
 `investment_transactions`, `monthly_metrics`, `evidence_items`, `decisions`,
 `liquidity_buckets`, plus Phase B (`0005_phase_b.sql`): `goals`,
-`insurance_policies`, `estate_items` — all entered in-app (no CSV importer;
-rows land straight in the private Supabase project).
+`insurance_policies`, `estate_items`, plus the property portfolio
+(`0006_property_ledger.sql`): `property_ledger` — all entered in-app (no CSV
+importer; rows land straight in the private Supabase project).
 
 Derived figures (free cash generated, all-in surplus, net worth bridge
 movements, asset-allocation target-band flags) are **never stored** — they
@@ -184,6 +185,21 @@ public API and scraping violates its terms. The Debt & Offset screen's
 "Property values" card links to the owner's My Property page for a one-tap
 check, then takes the number as a portal-led estimate -- the same evidence
 grade the workbook always used.
+
+## Property portfolio (migration 0006)
+
+`property_ledger` holds one row per line item on a monthly rent statement or
+cost bill (`web/src/lib/propertyCalc.ts` turns it into P&L). Income
+categories are `rent`/`other_income`; everything else is an expense.
+**Interest is a ledger expense line** (entered from the loan statement) so
+the P&L reflects the real financing cost, but **loan principal is never a
+ledger line** — it's a balance-sheet transfer, so the screen's "net
+cashflow" is an interest-only P&L figure. The **Property Portfolio** screen
+(under Invest) shows portfolio tiles, a "where the costs come from" category
+breakdown, a per-property table with gross/net yields and cashflow status, a
+per-property drill-in with the itemised statement + trailing averages, and a
+"Log statement" form that writes one ledger row per non-zero line. Overview
+flags any property running at a monthly cash loss in the latest period.
 
 ## Kobe integration
 
