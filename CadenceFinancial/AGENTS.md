@@ -30,6 +30,19 @@ Supabase (cadence-financial project — SEPARATE from Cadence's project)
   Web PWA (CadenceFinancial/web/)
 ```
 
+### URL / base path
+
+The app is served at **cadence-agent.com/financial** by a proxy rewrite in
+the *main* Cadence project's `Cadence/web/vercel.json` (`/financial/*` →
+this project's Vercel deployment). To make that work, this app canonically
+lives under the `/financial/` base path everywhere: `vite.config.ts` sets
+`base: '/financial/'`, its own `vercel.json` maps `/financial/*` back onto
+the filesystem and `/financial/api/*` onto the serverless functions, and
+`manifest.json`/quote fetches use the prefix. Its bare `.vercel.app` root
+URL still loads the app too. Requirement: the Financial project's Vercel
+Deployment Protection must not cover production, or the proxy from the
+main domain gets blocked (Supabase auth + RLS are the real access control).
+
 Single-user app: no multi-tenant workspace layer (unlike Cadence). RLS
 scopes every row to `owner_id = auth.uid()`.
 

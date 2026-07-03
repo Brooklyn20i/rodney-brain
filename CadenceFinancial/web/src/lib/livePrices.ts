@@ -53,7 +53,10 @@ export async function fetchLiveQuotes(symbols: string[], demo: boolean): Promise
     for (const s of symbols) if (DEMO_QUOTES[s]) out[s] = DEMO_QUOTES[s];
     return out;
   }
-  const r = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
+  // BASE_URL is '/financial/' -- the quotes function is reachable at
+  // <base>api/quotes both on the app's own domain and when proxied from
+  // cadence-agent.com/financial.
+  const r = await fetch(`${import.meta.env.BASE_URL}api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
   if (!r.ok) throw new Error(`Quote service returned ${r.status}`);
   const j = (await r.json()) as { quotes?: QuoteMap };
   return j.quotes ?? {};
