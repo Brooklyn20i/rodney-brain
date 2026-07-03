@@ -1,0 +1,374 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCadenceFitness } from '../lib/store';
+import { ScreenHeader, Card, Tag } from '../components/bits';
+import { cyclePosition, lastSetsForExercise, nextProgramDay } from '../lib/fitnessCalc';
+import { fmtDayShort, fmtKg, todayISO } from '../lib/util';
+import type { ProgramDay, WorkoutSet } from '../lib/types';
+
+// Guided gym mode: start today's program day (or an ad-hoc session), tick off
+// sets with weight/reps, see what you did last time, and run a rest timer.
+// Built for one-handed phone/iPad use mid-workout.
+export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
+  const { data, insert, update, remove } = useCadenceFitness();
+  const today = todayISO();
+
+  const active = data.workouts.find((w) => w.status === 'in_progress');
+  const activeProgram = data.programs.find((p) => p.status === 'active');
+
+  // ── Rest timer ──────────────────────────────────────────────────────────
+  const [restLeft, setRestLeft] = useState<number | null>(null);
+  const restEndsAt = useRef<number | null>(null);
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => {
+      forceTick((x) => x + 1); // drives the elapsed-time display too
+      if (restEndsAt.current !== null) {
+        const left = Math.round((restEndsAt.current - Date.now()) / 1000);
+        setRestLeft(left);
+        if (left <= -30) {
+          restEndsAt.current = null;
+          setRestLeft(null);
+        }
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  const startRest = (seconds: number) => {
+    restEndsAt.current = Date.now() + seconds * 1000;
+    setRestLeft(seconds);
+  };
+  const stopRest = () => {
+    restEndsAt.current = null;
+    setRestLeft(null);
+  };
+
+  // Local input drafts so typing doesn't hit Supabase per keystroke.
+  const [drafts, setDrafts] = useState<Record<string, { weight?: string; reps?: string }>>({});
+
+  const exName = (exerciseId: string) => data.exercises.find((e) => e.id === exerciseId)?.name || 'Exercise';
+
+  // ── Start a session ─────────────────────────────────────────────────────
+  const startSession = async (day: ProgramDay | null) => {
+    const pos = activeProgram ? cyclePosition(activeProgram, today) : null;
+    const workout = await insert('workouts', {
+      date: today,
+      program_id: day ? day.program_id : null,
+      program_day_id: day ? day.id : null,
+      week_number: pos?.week ?? null,
+      name: day ? day.name : 'Ad-hoc session',
+      status: 'in_progress',
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      notes: '',
+    });
+    if (day) {
+      const slots = data.program_exercises
+        .filter((s) => s.program_day_id === day.id)
+        .sort((a, b) => a.ex_order - b.ex_order);
+      for (const slot of slots) {
+        const last = lastSetsForExercise(data.workout_sets, data.workouts, slot.exercise_id, workout.id);
+        for (let n = 1; n <= slot.target_sets; n++) {
+          const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
+          await insert('workout_sets', {
+            workout_id: workout.id,
+            exercise_id: slot.exercise_id,
+            set_number: n,
+            weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
+            reps: 0,
+            rpe: null,
+            is_warmup: false,
+            done: false,
+          });
+        }
+      }
+    }
+  };
+
+  // ── Session actions ─────────────────────────────────────────────────────
+  const sessionSets = useMemo(
+    () => (active ? data.workout_sets.filter((s) => s.workout_id === active.id) : []),
+    [data.workout_sets, active]
+  );
+
+  const daySlots = useMemo(
+    () =>
+      active?.program_day_id
+        ? data.program_exercises
+            .filter((s) => s.program_day_id === active.program_day_id)
+            .sort((a, b) => a.ex_order - b.ex_order)
+        : [],
+    [data.program_exercises, active]
+  );
+
+  // Exercise order: program-day slot order first, then extras by first log.
+  const exerciseIds = useMemo(() => {
+    const ordered: string[] = daySlots.map((s) => s.exercise_id);
+    for (const s of [...sessionSets].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+      if (!ordered.includes(s.exercise_id)) ordered.push(s.exercise_id);
+    }
+    return ordered.filter((id) => sessionSets.some((s) => s.exercise_id === id));
+  }, [daySlots, sessionSets]);
+
+  const commitSet = async (set: WorkoutSet, extra?: Partial<WorkoutSet>) => {
+    const d = drafts[set.id] || {};
+    const patch: Partial<WorkoutSet> = { ...extra };
+    if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
+    if (d.reps !== undefined) patch.reps = Math.max(0, Math.round(Number(d.reps) || 0));
+    if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
+  };
+
+  const toggleSet = async (set: WorkoutSet) => {
+    const done = !set.done;
+    await commitSet(set, { done });
+    if (done) {
+      const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
+      startRest(slot?.rest_seconds ?? 120);
+    }
+  };
+
+  const addSet = async (exerciseId: string) => {
+    const existing = sessionSets.filter((s) => s.exercise_id === exerciseId);
+    const lastRow = existing.sort((a, b) => a.set_number - b.set_number)[existing.length - 1];
+    await insert('workout_sets', {
+      workout_id: active!.id,
+      exercise_id: exerciseId,
+      set_number: (lastRow?.set_number ?? 0) + 1,
+      weight_kg: lastRow ? Number(lastRow.weight_kg) : 0,
+      reps: 0,
+      rpe: null,
+      is_warmup: false,
+      done: false,
+    });
+  };
+
+  const [addExId, setAddExId] = useState('');
+  const addExercise = async () => {
+    if (!addExId || !active) return;
+    await addSet(addExId);
+    setAddExId('');
+  };
+
+  const finishSession = async () => {
+    if (!active) return;
+    // Untouched target rows don't count as training -- drop them.
+    for (const s of sessionSets.filter((x) => !x.done)) await remove('workout_sets', s.id);
+    await update('workouts', active.id, { status: 'completed', completed_at: new Date().toISOString() });
+    stopRest();
+    setDrafts({});
+    onNavigate('history');
+  };
+
+  const discardSession = async () => {
+    if (!active) return;
+    if (!window.confirm('Discard this session and all its sets?')) return;
+    for (const s of sessionSets) await remove('workout_sets', s.id);
+    await remove('workouts', active.id);
+    stopRest();
+    setDrafts({});
+  };
+
+  // ── Render: no active session -> start view ─────────────────────────────
+  if (!active) {
+    const days = activeProgram
+      ? data.program_days
+          .filter((d) => d.program_id === activeProgram.id)
+          .sort((a, b) => a.day_order - b.day_order)
+      : [];
+    const suggested = activeProgram ? nextProgramDay(days, data.workouts, activeProgram.id) : null;
+    const pos = activeProgram ? cyclePosition(activeProgram, today) : null;
+
+    return (
+      <>
+        <ScreenHeader title="Workout" subtitle="Start today's session." onMenu={onMenu} />
+        <div className="screen-content">
+          {activeProgram ? (
+            <>
+              <Card
+                title={activeProgram.name}
+                actions={pos ? <Tag label={`Cycle ${pos.cycle} · Week ${pos.week}/${activeProgram.weeks}`} tone="info" /> : undefined}
+              >
+                {suggested && (
+                  <div className="cf-callout">
+                    Up next: <strong>{suggested.name}</strong>
+                    {suggested.focus ? ` — ${suggested.focus}` : ''}
+                    <div style={{ marginTop: 10 }}>
+                      <button className="btn btn-primary" onClick={() => startSession(suggested)}>
+                        ▶ Start {suggested.name}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {days.map((d) => (
+                  <div key={d.id} className="pick-row">
+                    <div className="pick-main">
+                      <div className="pick-title">{d.name}</div>
+                      {d.focus && <div className="pick-sub">{d.focus}</div>}
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)}>
+                      Start
+                    </button>
+                  </div>
+                ))}
+              </Card>
+            </>
+          ) : (
+            <div className="cf-callout cf-callout-warn">
+              No active program. Build one under <strong>Programs</strong> (and set it active) to get
+              guided sessions with targets and cycle tracking — or just start an empty session below.
+            </div>
+          )}
+          <Card title="Ad-hoc">
+            <button className="btn btn-secondary" onClick={() => startSession(null)}>
+              Start empty session
+            </button>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  // ── Render: active session ───────────────────────────────────────────────
+  const elapsedMin = active.started_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(active.started_at).getTime()) / 60000))
+    : 0;
+  const doneCount = sessionSets.filter((s) => s.done).length;
+
+  return (
+    <>
+      <ScreenHeader title={active.name || 'Session'} subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets`} onMenu={onMenu}>
+        <button className="btn btn-danger btn-sm" onClick={discardSession}>
+          Discard
+        </button>
+        <button className="btn btn-primary" onClick={finishSession}>
+          Finish
+        </button>
+      </ScreenHeader>
+      <div className="screen-content">
+        {restLeft !== null && (
+          <div className={`rest-timer ${restLeft <= 0 ? 'done' : ''}`}>
+            <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>
+              {restLeft <= 0 ? 'Rest done — go' : 'Rest'}
+            </span>
+            <span className="rest-timer-time">
+              {restLeft <= 0
+                ? 'GO'
+                : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
+            </span>
+            <button className="btn btn-sm" onClick={stopRest}>
+              Skip
+            </button>
+          </div>
+        )}
+
+        {exerciseIds.map((exerciseId) => {
+          const rows = sessionSets
+            .filter((s) => s.exercise_id === exerciseId)
+            .sort((a, b) => a.set_number - b.set_number);
+          const slot = daySlots.find((s) => s.exercise_id === exerciseId);
+          const last = lastSetsForExercise(data.workout_sets, data.workouts, exerciseId, active.id);
+          return (
+            <div key={exerciseId} className="wo-exercise">
+              <div className="wo-exercise-head">
+                <span className="wo-exercise-name">{exName(exerciseId)}</span>
+                {slot && (
+                  <span className="wo-exercise-target">
+                    {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
+                    {slot.target_rpe ? ` @ RPE ${slot.target_rpe}` : ''} · rest {Math.round(slot.rest_seconds / 60)}m
+                  </span>
+                )}
+              </div>
+              {slot?.notes && <div className="wo-lasttime">{slot.notes}</div>}
+              <div className="wo-lasttime">
+                {last
+                  ? `Last time (${fmtDayShort(last.date)}): ${last.sets
+                      .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
+                      .join(', ')}`
+                  : 'First time logging this one.'}
+              </div>
+              <div className="wo-set-labels">
+                <span>Set</span>
+                <span style={{ textAlign: 'center' }}>kg</span>
+                <span style={{ textAlign: 'center' }}>Reps</span>
+                <span>✓</span>
+              </div>
+              {rows.map((s) => {
+                const d = drafts[s.id] || {};
+                return (
+                  <div key={s.id} className={`wo-set-row ${s.done ? 'wo-set-done' : ''}`}>
+                    <span className="wo-set-num">{s.set_number}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      value={d.weight ?? (Number(s.weight_kg) || '')}
+                      placeholder="kg"
+                      onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
+                      onBlur={() => commitSet(s)}
+                    />
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={d.reps ?? (s.reps || '')}
+                      placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : 'reps'}
+                      onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
+                      onBlur={() => commitSet(s)}
+                    />
+                    <button className={`wo-set-check ${s.done ? 'checked' : ''}`} onClick={() => toggleSet(s)}>
+                      ✓
+                    </button>
+                  </div>
+                );
+              })}
+              <button className="btn btn-ghost btn-sm wo-add-set" onClick={() => addSet(exerciseId)}>
+                + Add set
+              </button>
+            </div>
+          );
+        })}
+
+        <Card title="Add exercise">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select value={addExId} onChange={(e) => setAddExId(e.target.value)}>
+              <option value="">Choose an exercise…</option>
+              {[...data.exercises]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+            </select>
+            <button className="btn btn-secondary" onClick={addExercise} disabled={!addExId}>
+              Add
+            </button>
+          </div>
+          {data.exercises.length === 0 && (
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
+              Library is empty — add exercises on the Exercises screen first.
+            </p>
+          )}
+        </Card>
+
+        <Card title="Session notes">
+          <textarea
+            defaultValue={active.notes}
+            placeholder="How did it go?"
+            onBlur={(e) => update('workouts', active.id, { notes: e.target.value })}
+          />
+        </Card>
+
+        <p style={{ fontSize: 11, color: 'var(--text3)' }}>
+          Best set so far this session:{' '}
+          {(() => {
+            const done = sessionSets.filter((s) => s.done && Number(s.weight_kg) > 0 && s.reps > 0);
+            if (!done.length) return '—';
+            const top = done.reduce((a, b) =>
+              Number(a.weight_kg) * (1 + a.reps / 30) >= Number(b.weight_kg) * (1 + b.reps / 30) ? a : b
+            );
+            return `${exName(top.exercise_id)} ${fmtKg(Number(top.weight_kg))} × ${top.reps}`;
+          })()}
+        </p>
+      </div>
+    </>
+  );
+}
