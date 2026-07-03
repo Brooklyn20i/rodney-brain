@@ -8,18 +8,18 @@ export function LogoMark({ size = 22 }: { size?: number }) {
       aria-hidden="true"
       focusable="false"
     >
-      {/* Cadence C construction -- navy ground with an orange C so Fitness is
-          tellable apart from Work (navy) and Financial (sand) in a tab strip. */}
-      <rect width="32" height="32" rx="8" fill="#1A1F2E" />
+      {/* Cadence C construction -- sand ground with a Cadence-blue C, keeping
+          Fitness on the house style while still tellable apart in a tab strip. */}
+      <rect width="32" height="32" rx="8" fill="#EAE4D6" />
       <path
         d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36"
         fill="none"
-        stroke="#F97316"
+        stroke="#1B5E9E"
         strokeWidth="4.8"
         strokeLinecap="butt"
       />
-      <circle cx="23.06" cy="9.64" r="3.2" fill="#F97316" />
-      <circle cx="23.06" cy="22.36" r="3.2" fill="#F97316" />
+      <circle cx="23.06" cy="9.64" r="3.2" fill="#1B5E9E" />
+      <circle cx="23.06" cy="22.36" r="3.2" fill="#1B5E9E" />
     </svg>
   );
 }

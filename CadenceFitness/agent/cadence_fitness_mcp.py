@@ -226,9 +226,13 @@ def log_recovery_metric(
     sleep_performance_pct: int | None = None,
     hrv_ms: int | None = None,
     resting_hr: int | None = None,
+    active_energy_kcal: int | None = None,
+    steps: int | None = None,
     date: str | None = None,
 ) -> dict:
-    """Record (or update) a day's Whoop numbers. One row per day; omitted fields stay null/previous."""
+    """Record (or update) a day's Whoop / Apple Health numbers (recovery, sleep,
+    HRV, resting HR, calories burned, steps). One row per day; omitted fields
+    stay null/previous."""
     try:
         row: dict = {
             "owner_id": bridge.discover_owner_id(),
@@ -242,6 +246,8 @@ def log_recovery_metric(
             "sleep_performance_pct": sleep_performance_pct,
             "hrv_ms": hrv_ms,
             "resting_hr": resting_hr,
+            "active_energy_kcal": active_energy_kcal,
+            "steps": steps,
         }.items():
             if v is not None:
                 row[k] = v

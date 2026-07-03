@@ -305,6 +305,8 @@ export function loadDemoData(): CadenceFitnessData {
           hrv_ms: Math.round(78 + wobble(daysAgo * 2, 14)),
           sleep_hours: Math.round((7.2 + wobble(daysAgo + 2, 0.8)) * 10) / 10,
           sleep_performance_pct: Math.round(84 + wobble(daysAgo * 4, 10)),
+          active_energy_kcal: Math.round(680 + wobble(daysAgo * 5, 260)),
+          steps: Math.round(9000 + wobble(daysAgo * 3 + 1, 3500)),
           source: 'whoop' as const,
           notes: '',
         },

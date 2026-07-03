@@ -60,7 +60,7 @@ Single-user app: no multi-tenant workspace layer. RLS scopes every row to
    reuse the other Cadence projects).
 2. In the Supabase SQL Editor, run in order:
    `backend/migrations/0001_init.sql`, `0002_agent_messages.sql`,
-   `0003_agent_access.sql`.
+   `0003_agent_access.sql`, `0004_health_sync.sql`.
 3. In `web/`, `cp .env.example .env` and fill in `VITE_SUPABASE_URL` +
    `VITE_SUPABASE_ANON_KEY` from Supabase → Project Settings → API.
 4. `npm install && npm run dev`, sign up with your own email once so your
@@ -139,20 +139,48 @@ MCP tools Kobe gets: `probe`, `get_active_program`, `list_recent_workouts`,
 morning brief ("recovery 45%, swap legs for a spin?"), logging by message
 ("log sauna 20 min"), and cycle-aware programming suggestions.
 
-## Whoop & Renpho (phase 2)
+## Apple Health, Whoop & Renpho sync
 
-Today Whoop and Renpho numbers are entered in seconds by hand (or by telling
-Kobe). The schema is already source-aware (`metric_source =
-manual|whoop|renpho|agent`, one row per day, upsert-friendly), so automated
-sync slots in without a migration:
+A PWA can't read Apple HealthKit directly — iOS exposes no web API for it.
+The practical path uses **Apple Health as the hub**: Renpho already writes
+your weight into Health, and Whoop writes recovery, sleep, HRV and workouts
+into Health, so a single Apple **Shortcut** can push everything to Cadence
+Fitness. The schema is source-aware (`metric_source =
+manual|whoop|renpho|health|agent`, one row per day, upsert on
+`(owner_id, date)`), so re-running through the day just refreshes the row.
 
-- **Whoop** has an official OAuth developer API (recovery, sleep, strain,
-  workouts). Plan: a small server-side sync job (Vercel cron or a script in
-  Kobe's environment) writing daily rows into `recovery_metrics` with
-  `source = 'whoop'`.
-- **Renpho** has no public API; realistic options are periodic CSV export
-  from the Renpho app or Apple Health as an intermediary. Rows land in
-  `body_metrics` with `source = 'renpho'`.
+**Ingestion endpoint** — `backend/functions/health-ingest/index.ts` is a
+Supabase Edge Function that takes a Bearer token and a JSON body of the day's
+numbers and upserts them into `body_metrics` (weight, body fat) and
+`recovery_metrics` (active energy / calories out, steps, resting HR, HRV,
+sleep, recovery). No auth account or Supabase key ever lives on the phone —
+just the ingest token. Deploy and configure:
+
+```bash
+supabase functions deploy health-ingest --project-ref YOUR-FITNESS-PROJECT-REF
+# Then in Supabase → Edge Functions → health-ingest → Secrets, set:
+#   INGEST_TOKEN     a long random string
+#   INGEST_OWNER_ID  your auth user UID (step 4 above)
+```
+
+**Apple Shortcut recipe** (build once on the iPhone, then automate it):
+
+1. New Shortcut → add **Get Health Sample** / **Get Numbers from Health**
+   actions for the values you want: Body Mass, Body Fat %, Active Energy
+   (today's total), Steps, Resting Heart Rate, Heart Rate Variability, Sleep.
+2. Add **Text** → a JSON object with those variables, e.g.
+   `{"weight_kg":<Body Mass>,"active_energy_kcal":<Active Energy>,"steps":<Steps>,"resting_hr":<Resting HR>,"hrv_ms":<HRV>,"sleep_hours":<Sleep>}`.
+3. Add **Get Contents of URL** → your function URL
+   (`https://YOUR-FITNESS-PROJECT-REF.functions.supabase.co/health-ingest`),
+   Method **POST**, Request Body **JSON** (the Text above), Header
+   `Authorization: Bearer YOUR-INGEST-TOKEN`.
+4. In the Shortcuts **Automation** tab, run it on a daily schedule (e.g.
+   7am and after workouts). Values land in the app instantly via realtime.
+
+The Recovery and Body screens also keep a manual form as a fallback, and Kobe
+can log the same fields over MCP. A native Whoop-API cron (server-side OAuth)
+remains an option if you'd rather not route through Health, but Health covers
+weight, calories burned and recovery in one Shortcut with no extra API keys.
 
 ## Authority boundary
 

@@ -1,14 +1,13 @@
-/* Cadence Fitness design system -- ported from the Cadence family's design
-   tokens (Cadence/web/src/styles.css via CadenceFinancial) for visual parity,
-   with an orange icon-accent so Fitness is tellable apart from Work (navy)
-   and Financial (green) in a tab strip. */
+/* Cadence Fitness design system -- ported verbatim from the Cadence house
+   style (Cadence/web/src/styles.css). Same tokens, same clean blue icon
+   accent as the main app; no bespoke accent colour. */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --sidebar-bg: #1A1F2E;
   --sidebar-active: #2C3654;
   --sidebar-text: rgba(255,255,255,0.65);
   --sidebar-active-text: #FFFFFF;
-  --sidebar-icon-active: #F97316;
+  --sidebar-icon-active: #5B9CF6;
   --app-bg: #F4F4F0;
   --surface: #FFFFFF;
   --surface2: #F8F8F6;
@@ -148,6 +147,26 @@ body {
 .rest-timer.done .rest-timer-time { color: #34D399; }
 .rest-timer .btn { background: rgba(255,255,255,0.12); color: #fff; }
 
+/* ── Gym / focus mode (default on phones during a session) ── */
+.screen-content.gym-mode { padding-top: 14px; }
+.gym-progress { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+.gym-dot { width: 26px; height: 6px; border-radius: 3px; border: none; padding: 0; background: var(--border); cursor: pointer; }
+.gym-dot.active { background: var(--accent); }
+.gym-dot.complete { background: var(--green); }
+.gym-progress-label { text-align: center; font-size: 12px; font-weight: 700; color: var(--text2); letter-spacing: 0.3px; margin-bottom: 12px; }
+.wo-exercise.gym { padding: 20px 18px; }
+.wo-exercise.gym .wo-exercise-name { font-size: 22px; }
+.wo-exercise.gym .wo-set-labels,
+.wo-exercise.gym .wo-set-row { grid-template-columns: 52px 1fr 1fr 56px; gap: 10px; }
+.wo-exercise.gym .wo-set-row { padding: 8px 0; }
+.wo-exercise.gym .wo-set-row input { padding: 15px 10px; font-size: 20px; }
+.wo-exercise.gym .wo-set-check { width: 56px; height: 56px; font-size: 24px; }
+.gym-nav { position: sticky; bottom: 0; display: flex; gap: 10px; margin-top: 14px; padding: 12px 0 calc(6px + var(--safe-bottom)); background: linear-gradient(to top, var(--app-bg) 72%, transparent); }
+.gym-nav .btn { flex: 1; justify-content: center; padding: 15px; font-size: 15px; border-radius: 14px; }
+.gym-add { margin-top: 12px; }
+.gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 4px 0; }
+.gym-add .gym-add-body { display: flex; gap: 8px; margin-top: 8px; }
+
 /* ── Day picker rows / list rows ── */
 .pick-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--border); font-size: 14px; }
 .pick-row:last-child { border-bottom: none; }
@@ -162,7 +181,7 @@ body {
 .macro-fill { height: 100%; border-radius: 4px; background: var(--accent); }
 .macro-fill.macro-protein { background: var(--teal); }
 .macro-fill.macro-carbs { background: var(--purple); }
-.macro-fill.macro-fat { background: var(--orange); }
+.macro-fill.macro-fat { background: var(--accent-lt); }
 .macro-fill.macro-over { background: var(--red); }
 .macro-value { width: 110px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
 

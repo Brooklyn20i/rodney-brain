@@ -22,6 +22,8 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
   const [sleepPerf, setSleepPerf] = useState('');
   const [hrv, setHrv] = useState('');
   const [rhr, setRhr] = useState('');
+  const [energy, setEnergy] = useState('');
+  const [steps, setSteps] = useState('');
 
   const save = async () => {
     const patch = {
@@ -31,6 +33,8 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
       sleep_performance_pct: sleepPerf === '' ? (existing?.sleep_performance_pct ?? null) : Math.round(Number(sleepPerf)),
       hrv_ms: hrv === '' ? (existing?.hrv_ms ?? null) : Math.round(Number(hrv)),
       resting_hr: rhr === '' ? (existing?.resting_hr ?? null) : Math.round(Number(rhr)),
+      active_energy_kcal: energy === '' ? (existing?.active_energy_kcal ?? null) : Math.round(Number(energy)),
+      steps: steps === '' ? (existing?.steps ?? null) : Math.round(Number(steps)),
       source: 'whoop' as const,
     };
     if (existing) await update('recovery_metrics', existing.id, patch);
@@ -41,6 +45,8 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
     setSleepPerf('');
     setHrv('');
     setRhr('');
+    setEnergy('');
+    setSteps('');
   };
 
   const recSpark = [...rows]
@@ -103,10 +109,22 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
               <label className="field">Resting HR</label>
               <input type="number" inputMode="numeric" value={rhr} placeholder={existing?.resting_hr?.toString() ?? ''} onChange={(e) => setRhr(e.target.value)} />
             </div>
+            <div>
+              <label className="field">Calories out</label>
+              <input type="number" inputMode="numeric" value={energy} placeholder={existing?.active_energy_kcal?.toString() ?? 'active energy'} onChange={(e) => setEnergy(e.target.value)} />
+            </div>
+            <div>
+              <label className="field">Steps</label>
+              <input type="number" inputMode="numeric" value={steps} placeholder={existing?.steps?.toString() ?? ''} onChange={(e) => setSteps(e.target.value)} />
+            </div>
           </div>
           <button className="btn btn-primary" onClick={save}>
             {existing ? 'Update day' : 'Save day'}
           </button>
+          <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+            These normally arrive automatically from Apple Health (which Whoop and Renpho write into) —
+            see the Apple Shortcut setup in AGENTS.md. This form is the manual fallback.
+          </p>
         </Card>
 
         <Card title="Last 14 days">
@@ -120,6 +138,8 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
                   <th>Sleep</th>
                   <th>HRV</th>
                   <th>RHR</th>
+                  <th>Cals out</th>
+                  <th>Steps</th>
                   <th>Source</th>
                 </tr>
               </thead>
@@ -132,6 +152,8 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
                     <td>{r.sleep_hours != null ? `${fmtNum(Number(r.sleep_hours), 1)}h` : '—'}</td>
                     <td>{r.hrv_ms ?? '—'}</td>
                     <td>{r.resting_hr ?? '—'}</td>
+                    <td>{r.active_energy_kcal != null ? fmtNum(r.active_energy_kcal) : '—'}</td>
+                    <td>{r.steps != null ? fmtNum(r.steps) : '—'}</td>
                     <td>{SOURCE_LABEL[r.source]}</td>
                   </tr>
                 ))}

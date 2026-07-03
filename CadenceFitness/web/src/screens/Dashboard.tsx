@@ -83,6 +83,36 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
           <Metric label="Sessions this week" value={`${weekWorkouts.length}`} delta={`${weekSets} hard sets`} />
         </div>
 
+        {recovery?.active_energy_kcal != null && (
+          <Card title="Energy balance today">
+            <div className="cf-table-wrap">
+              <table className="cf-table">
+                <tbody>
+                  <tr>
+                    <td>Calories in (food)</td>
+                    <td>{fmtNum(totals.calories)}</td>
+                  </tr>
+                  <tr>
+                    <td>Calories out (active energy)</td>
+                    <td>{fmtNum(recovery.active_energy_kcal)}</td>
+                  </tr>
+                  <tr className="cf-total">
+                    <td>Food − active burn</td>
+                    <td>
+                      {totals.calories - recovery.active_energy_kcal >= 0 ? '+' : ''}
+                      {fmtNum(totals.calories - recovery.active_energy_kcal)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+              Active energy synced from Apple Health / Whoop. This is food minus active burn only — it
+              doesn't include your resting metabolism, so it isn't your full daily deficit.
+            </p>
+          </Card>
+        )}
+
         <Card title="Today's training">
           {inProgress ? (
             <div className="cf-callout">

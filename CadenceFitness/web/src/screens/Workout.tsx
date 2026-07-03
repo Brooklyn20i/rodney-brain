@@ -7,13 +7,20 @@ import type { ProgramDay, WorkoutSet } from '../lib/types';
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
 // sets with weight/reps, see what you did last time, and run a rest timer.
-// Built for one-handed phone/iPad use mid-workout.
+// On a phone it opens in full-screen focus mode (one exercise at a time, big
+// touch targets) like Whoop / MacroFactor; a List toggle shows everything.
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
   const { data, insert, update, remove } = useCadenceFitness();
   const today = todayISO();
 
   const active = data.workouts.find((w) => w.status === 'in_progress');
   const activeProgram = data.programs.find((p) => p.status === 'active');
+
+  // Focus (gym) mode: default on for phones, off on desktop. Toggleable.
+  const [gymMode, setGymMode] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+  );
+  const [focusIndex, setFocusIndex] = useState(0);
 
   // ── Rest timer ──────────────────────────────────────────────────────────
   const [restLeft, setRestLeft] = useState<number | null>(null);
@@ -82,6 +89,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         }
       }
     }
+    setFocusIndex(0);
   };
 
   // ── Session actions ─────────────────────────────────────────────────────
@@ -109,6 +117,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     return ordered.filter((id) => sessionSets.some((s) => s.exercise_id === id));
   }, [daySlots, sessionSets]);
 
+  // Keep the focused index in range as exercises are added/removed.
+  useEffect(() => {
+    setFocusIndex((i) => Math.min(i, Math.max(0, exerciseIds.length - 1)));
+  }, [exerciseIds.length]);
+
   const commitSet = async (set: WorkoutSet, extra?: Partial<WorkoutSet>) => {
     const d = drafts[set.id] || {};
     const patch: Partial<WorkoutSet> = { ...extra };
@@ -123,6 +136,12 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     if (done) {
       const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
       startRest(slot?.rest_seconds ?? 120);
+      // In focus mode, glide to the next exercise once this one's sets are all done.
+      const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
+      if (gymMode && others.length > 0 && others.every((x) => x.done)) {
+        const idx = exerciseIds.indexOf(set.exercise_id);
+        if (idx >= 0 && idx < exerciseIds.length - 1) setFocusIndex(idx + 1);
+      }
     }
   };
 
@@ -227,15 +246,144 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     );
   }
 
+  // ── Render helpers for an active session ────────────────────────────────
+  const renderExercise = (exerciseId: string, big: boolean) => {
+    const rows = sessionSets
+      .filter((s) => s.exercise_id === exerciseId)
+      .sort((a, b) => a.set_number - b.set_number);
+    const slot = daySlots.find((s) => s.exercise_id === exerciseId);
+    const last = lastSetsForExercise(data.workout_sets, data.workouts, exerciseId, active.id);
+    return (
+      <div key={exerciseId} className={`wo-exercise ${big ? 'gym' : ''}`}>
+        <div className="wo-exercise-head">
+          <span className="wo-exercise-name">{exName(exerciseId)}</span>
+          {slot && (
+            <span className="wo-exercise-target">
+              {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
+              {slot.target_rpe ? ` @ RPE ${slot.target_rpe}` : ''} · rest {Math.round(slot.rest_seconds / 60)}m
+            </span>
+          )}
+        </div>
+        {slot?.notes && <div className="wo-lasttime">{slot.notes}</div>}
+        <div className="wo-lasttime">
+          {last
+            ? `Last time (${fmtDayShort(last.date)}): ${last.sets
+                .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
+                .join(', ')}`
+            : 'First time logging this one.'}
+        </div>
+        <div className="wo-set-labels">
+          <span>Set</span>
+          <span style={{ textAlign: 'center' }}>kg</span>
+          <span style={{ textAlign: 'center' }}>Reps</span>
+          <span>✓</span>
+        </div>
+        {rows.map((s) => {
+          const d = drafts[s.id] || {};
+          return (
+            <div key={s.id} className={`wo-set-row ${s.done ? 'wo-set-done' : ''}`}>
+              <span className="wo-set-num">{s.set_number}</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                value={d.weight ?? (Number(s.weight_kg) || '')}
+                placeholder="kg"
+                onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
+                onBlur={() => commitSet(s)}
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                value={d.reps ?? (s.reps || '')}
+                placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : 'reps'}
+                onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
+                onBlur={() => commitSet(s)}
+              />
+              <button className={`wo-set-check ${s.done ? 'checked' : ''}`} onClick={() => toggleSet(s)}>
+                ✓
+              </button>
+            </div>
+          );
+        })}
+        <button className="btn btn-ghost btn-sm wo-add-set" onClick={() => addSet(exerciseId)}>
+          + Add set
+        </button>
+      </div>
+    );
+  };
+
+  const addExerciseControl = (wrap: 'card' | 'plain') => {
+    const control = (
+      <div className={wrap === 'plain' ? 'gym-add-body' : ''} style={wrap === 'card' ? { display: 'flex', gap: 8 } : undefined}>
+        <select value={addExId} onChange={(e) => setAddExId(e.target.value)}>
+          <option value="">Choose an exercise…</option>
+          {[...data.exercises]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+        </select>
+        <button className="btn btn-secondary" onClick={addExercise} disabled={!addExId}>
+          Add
+        </button>
+      </div>
+    );
+    if (wrap === 'plain') {
+      return (
+        <details className="gym-add">
+          <summary>+ Add an exercise to this session</summary>
+          {control}
+        </details>
+      );
+    }
+    return (
+      <Card title="Add exercise">
+        {control}
+        {data.exercises.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
+            Library is empty — add exercises on the Exercises screen first.
+          </p>
+        )}
+      </Card>
+    );
+  };
+
   // ── Render: active session ───────────────────────────────────────────────
   const elapsedMin = active.started_at
     ? Math.max(0, Math.floor((Date.now() - new Date(active.started_at).getTime()) / 60000))
     : 0;
   const doneCount = sessionSets.filter((s) => s.done).length;
+  const allSetsDone = (exerciseId: string) => {
+    const rows = sessionSets.filter((s) => s.exercise_id === exerciseId);
+    return rows.length > 0 && rows.every((s) => s.done);
+  };
+  const idx = Math.min(focusIndex, Math.max(0, exerciseIds.length - 1));
+
+  const restBar = restLeft !== null && (
+    <div className={`rest-timer ${restLeft <= 0 ? 'done' : ''}`}>
+      <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>{restLeft <= 0 ? 'Rest done — go' : 'Rest'}</span>
+      <span className="rest-timer-time">
+        {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
+      </span>
+      <button className="btn btn-sm" onClick={stopRest}>
+        Skip
+      </button>
+    </div>
+  );
 
   return (
     <>
-      <ScreenHeader title={active.name || 'Session'} subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets`} onMenu={onMenu}>
+      <ScreenHeader
+        title={active.name || 'Session'}
+        subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets`}
+        onMenu={onMenu}
+      >
+        <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
+          {gymMode ? '☰ List' : '⛶ Focus'}
+        </button>
         <button className="btn btn-danger btn-sm" onClick={discardSession}>
           Discard
         </button>
@@ -243,131 +391,73 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           Finish
         </button>
       </ScreenHeader>
-      <div className="screen-content">
-        {restLeft !== null && (
-          <div className={`rest-timer ${restLeft <= 0 ? 'done' : ''}`}>
-            <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>
-              {restLeft <= 0 ? 'Rest done — go' : 'Rest'}
-            </span>
-            <span className="rest-timer-time">
-              {restLeft <= 0
-                ? 'GO'
-                : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
-            </span>
-            <button className="btn btn-sm" onClick={stopRest}>
-              Skip
-            </button>
-          </div>
-        )}
 
-        {exerciseIds.map((exerciseId) => {
-          const rows = sessionSets
-            .filter((s) => s.exercise_id === exerciseId)
-            .sort((a, b) => a.set_number - b.set_number);
-          const slot = daySlots.find((s) => s.exercise_id === exerciseId);
-          const last = lastSetsForExercise(data.workout_sets, data.workouts, exerciseId, active.id);
-          return (
-            <div key={exerciseId} className="wo-exercise">
-              <div className="wo-exercise-head">
-                <span className="wo-exercise-name">{exName(exerciseId)}</span>
-                {slot && (
-                  <span className="wo-exercise-target">
-                    {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
-                    {slot.target_rpe ? ` @ RPE ${slot.target_rpe}` : ''} · rest {Math.round(slot.rest_seconds / 60)}m
-                  </span>
+      <div className={`screen-content ${gymMode ? 'gym-mode' : ''}`}>
+        {restBar}
+
+        {gymMode ? (
+          exerciseIds.length === 0 ? (
+            <>
+              <div className="cf-callout">No exercises in this session yet — add one to get going.</div>
+              {addExerciseControl('card')}
+            </>
+          ) : (
+            <>
+              <div className="gym-progress">
+                {exerciseIds.map((id, i) => (
+                  <button
+                    key={id}
+                    className={`gym-dot ${i === idx ? 'active' : ''} ${allSetsDone(id) ? 'complete' : ''}`}
+                    aria-label={`Go to ${exName(id)}`}
+                    onClick={() => setFocusIndex(i)}
+                  />
+                ))}
+              </div>
+              <div className="gym-progress-label">
+                Exercise {idx + 1} of {exerciseIds.length}
+              </div>
+              {renderExercise(exerciseIds[idx], true)}
+              <div className="gym-nav">
+                <button className="btn btn-secondary" disabled={idx === 0} onClick={() => setFocusIndex(idx - 1)}>
+                  ← Prev
+                </button>
+                {idx < exerciseIds.length - 1 ? (
+                  <button className="btn btn-primary" onClick={() => setFocusIndex(idx + 1)}>
+                    Next →
+                  </button>
+                ) : (
+                  <button className="btn btn-primary" onClick={finishSession}>
+                    Finish ✓
+                  </button>
                 )}
               </div>
-              {slot?.notes && <div className="wo-lasttime">{slot.notes}</div>}
-              <div className="wo-lasttime">
-                {last
-                  ? `Last time (${fmtDayShort(last.date)}): ${last.sets
-                      .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
-                      .join(', ')}`
-                  : 'First time logging this one.'}
-              </div>
-              <div className="wo-set-labels">
-                <span>Set</span>
-                <span style={{ textAlign: 'center' }}>kg</span>
-                <span style={{ textAlign: 'center' }}>Reps</span>
-                <span>✓</span>
-              </div>
-              {rows.map((s) => {
-                const d = drafts[s.id] || {};
-                return (
-                  <div key={s.id} className={`wo-set-row ${s.done ? 'wo-set-done' : ''}`}>
-                    <span className="wo-set-num">{s.set_number}</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.5"
-                      value={d.weight ?? (Number(s.weight_kg) || '')}
-                      placeholder="kg"
-                      onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
-                      onBlur={() => commitSet(s)}
-                    />
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={d.reps ?? (s.reps || '')}
-                      placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : 'reps'}
-                      onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
-                      onBlur={() => commitSet(s)}
-                    />
-                    <button className={`wo-set-check ${s.done ? 'checked' : ''}`} onClick={() => toggleSet(s)}>
-                      ✓
-                    </button>
-                  </div>
+              {addExerciseControl('plain')}
+            </>
+          )
+        ) : (
+          <>
+            {exerciseIds.map((exerciseId) => renderExercise(exerciseId, false))}
+            {addExerciseControl('card')}
+            <Card title="Session notes">
+              <textarea
+                defaultValue={active.notes}
+                placeholder="How did it go?"
+                onBlur={(e) => update('workouts', active.id, { notes: e.target.value })}
+              />
+            </Card>
+            <p style={{ fontSize: 11, color: 'var(--text3)' }}>
+              Best set so far this session:{' '}
+              {(() => {
+                const done = sessionSets.filter((s) => s.done && Number(s.weight_kg) > 0 && s.reps > 0);
+                if (!done.length) return '—';
+                const top = done.reduce((a, b) =>
+                  Number(a.weight_kg) * (1 + a.reps / 30) >= Number(b.weight_kg) * (1 + b.reps / 30) ? a : b
                 );
-              })}
-              <button className="btn btn-ghost btn-sm wo-add-set" onClick={() => addSet(exerciseId)}>
-                + Add set
-              </button>
-            </div>
-          );
-        })}
-
-        <Card title="Add exercise">
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select value={addExId} onChange={(e) => setAddExId(e.target.value)}>
-              <option value="">Choose an exercise…</option>
-              {[...data.exercises]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-            </select>
-            <button className="btn btn-secondary" onClick={addExercise} disabled={!addExId}>
-              Add
-            </button>
-          </div>
-          {data.exercises.length === 0 && (
-            <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
-              Library is empty — add exercises on the Exercises screen first.
+                return `${exName(top.exercise_id)} ${fmtKg(Number(top.weight_kg))} × ${top.reps}`;
+              })()}
             </p>
-          )}
-        </Card>
-
-        <Card title="Session notes">
-          <textarea
-            defaultValue={active.notes}
-            placeholder="How did it go?"
-            onBlur={(e) => update('workouts', active.id, { notes: e.target.value })}
-          />
-        </Card>
-
-        <p style={{ fontSize: 11, color: 'var(--text3)' }}>
-          Best set so far this session:{' '}
-          {(() => {
-            const done = sessionSets.filter((s) => s.done && Number(s.weight_kg) > 0 && s.reps > 0);
-            if (!done.length) return '—';
-            const top = done.reduce((a, b) =>
-              Number(a.weight_kg) * (1 + a.reps / 30) >= Number(b.weight_kg) * (1 + b.reps / 30) ? a : b
-            );
-            return `${exName(top.exercise_id)} ${fmtKg(Number(top.weight_kg))} × ${top.reps}`;
-          })()}
-        </p>
+          </>
+        )}
       </div>
     </>
   );

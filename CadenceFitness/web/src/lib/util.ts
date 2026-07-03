@@ -99,6 +99,7 @@ export const SOURCE_LABEL: Record<MetricSource, string> = {
   manual: 'Manual',
   whoop: 'Whoop',
   renpho: 'Renpho',
+  health: 'Apple Health',
   agent: 'Kobe',
 };
 

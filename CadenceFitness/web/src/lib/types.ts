@@ -40,8 +40,9 @@ export type CardioKind =
   | 'other';
 
 // Where a metric came from. 'whoop' / 'renpho' rows are values read off those
-// apps (or synced by an agent); 'manual' is typed in directly.
-export type MetricSource = 'manual' | 'whoop' | 'renpho' | 'agent';
+// apps; 'health' is synced from Apple Health (which both Whoop and Renpho
+// write into); 'agent' is logged by Kobe; 'manual' is typed in directly.
+export type MetricSource = 'manual' | 'whoop' | 'renpho' | 'health' | 'agent';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'shake';
 
@@ -202,6 +203,10 @@ export interface RecoveryMetric {
   hrv_ms: number | null;
   sleep_hours: number | null;
   sleep_performance_pct: number | null;
+  // Calories burned + steps for the day. Populated from Apple Health (active
+  // energy / step count) or entered manually; used for the energy-balance view.
+  active_energy_kcal: number | null;
+  steps: number | null;
   source: MetricSource;
   notes: string;
   created_at: string;
