@@ -7,6 +7,17 @@ import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import './styles.css';
 
+// Resilience: a new deploy renames hashed chunks. If a stale service worker
+// serves an old shell that imports a chunk that no longer exists, the browser
+// fires vite:preloadError — reload once to fetch the fresh index instead of
+// white-screening. The sessionStorage guard prevents a reload loop.
+window.addEventListener('vite:preloadError', () => {
+  if (sessionStorage.getItem('cad-reloaded') !== '1') {
+    sessionStorage.setItem('cad-reloaded', '1');
+    window.location.reload();
+  }
+});
+
 // Sentry is enabled when VITE_SENTRY_DSN is set in the environment.
 // In dev mode it is left unconfigured (errors still appear in the console).
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;

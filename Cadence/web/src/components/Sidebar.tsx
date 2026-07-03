@@ -48,7 +48,16 @@ export function Sidebar({ current, onNavigate, badges, open, workspaceName }: Pr
 
   return (
     <nav id="sidebar" className={open ? 'open' : ''}>
-      <div id="sidebar-title">Cadence<span className="sidebar-sub">Work</span></div>
+      <div id="sidebar-title">
+        <svg className="sidebar-logo" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+          <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" strokeWidth="3.5"
+            strokeLinecap="round" strokeDasharray="44 13" transform="rotate(40 16 16)" />
+        </svg>
+        <span className="sidebar-brand-text">
+          <span className="sidebar-brand-name">Cadence</span>
+          <span className="sidebar-sub">Work</span>
+        </span>
+      </div>
       {NAV.map((grp, i) => (
         <React.Fragment key={grp.section}>
           {i > 0 && <div className="nav-sep" />}
