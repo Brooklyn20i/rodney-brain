@@ -34,6 +34,8 @@ export type OwnerLens = 'kobe' | 'warren' | 'dan' | 'mckinsey' | 'rodney';
 export type LoanRateType = 'fixed' | 'variable';
 export type InvestmentSide = 'buy' | 'sell';
 
+export type PropertyType = 'house' | 'townhouse' | 'unit' | 'land' | 'commercial' | 'other';
+
 export interface Entity {
   id: string;
   owner_id: string;
@@ -55,6 +57,31 @@ export interface Property {
   evidence_status: string;
   role: string;
   annual_rent: number;
+  // ── Rich property-investment fields (migration 0007) ──
+  // All optional so pre-existing rows and the CSV importer stay valid; the
+  // returns engine guards each with a sensible default. This is the data the
+  // best property tools (Stessa / Real Estate Investar / PropertyMe) hold per
+  // property so cash-on-cash, yield-on-cost, LVR, CAGR and gearing can all be
+  // computed rather than eyeballed.
+  purchase_price?: number;
+  purchase_date?: string | null; // 'YYYY-MM-DD'
+  // Total cash out of pocket to acquire (deposit + stamp duty + legals +
+  // buyer's agent). The denominator for cash-on-cash return.
+  cash_invested?: number;
+  land_value?: number; // for land-tax & depreciation split
+  // Annual depreciation deduction (Div 43 capital works + Div 40 plant), from
+  // a quantity-surveyor schedule. Non-cash: reduces taxable income, not cash.
+  depreciation_annual?: number;
+  property_type?: PropertyType;
+  bedrooms?: number;
+  bathrooms?: number;
+  car_spaces?: number;
+  land_size_sqm?: number;
+  ownership_share?: number; // fraction owned, e.g. 0.5 for tenants-in-common
+  weekly_rent?: number; // current contract/asking rent per week
+  lease_start?: string | null; // 'YYYY-MM-DD'
+  lease_end?: string | null; // 'YYYY-MM-DD'
+  tenant?: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

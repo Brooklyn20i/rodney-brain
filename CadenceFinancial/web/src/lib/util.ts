@@ -66,6 +66,21 @@ export const APPROVAL_STATUS_LABEL: Record<string, string> = {
   implemented: 'Implemented',
 };
 
+export const PROPERTY_TYPE_LABEL: Record<string, string> = {
+  house: 'House',
+  townhouse: 'Townhouse',
+  unit: 'Unit / apartment',
+  land: 'Land',
+  commercial: 'Commercial',
+  other: 'Other',
+};
+
+export const GEARING_LABEL: Record<string, string> = {
+  positive: 'Positively geared',
+  neutral: 'Neutral',
+  negative: 'Negatively geared',
+};
+
 export const INSURANCE_CATEGORY_LABEL: Record<string, string> = {
   life: 'Life',
   tpd: 'TPD',

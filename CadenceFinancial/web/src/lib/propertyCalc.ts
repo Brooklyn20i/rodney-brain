@@ -10,7 +10,7 @@
 // Pure functions, integer-cents arithmetic (see financeCalc.ts). Nothing is
 // ever stored back to a row.
 
-import type { Property, PropertyLedgerCategory, PropertyLedgerEntry } from './types';
+import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerEntry } from './types';
 import { centsToDollars, toCents } from './financeCalc';
 
 export const INCOME_CATEGORIES = new Set<PropertyLedgerCategory>(['rent', 'other_income']);
@@ -208,5 +208,152 @@ export function propertyYields(
   return {
     grossYield: (monthlyIncome * 12) / value,
     netYield: (monthlyNet * 12) / value,
+  };
+}
+
+// ── Full per-property investment metrics ────────────────────────────────
+// The dashboard a serious property tool shows per property: acquisition
+// economics, financing/LVR, income yields (on value AND on cost), capital
+// growth CAGR, weekly cashflow, cash-on-cash, total return, and the
+// after-depreciation tax position. Pure; guards every optional field.
+
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+export type GearingStatus = 'positive' | 'neutral' | 'negative';
+
+export interface PropertyFinancials {
+  value: number;
+  // Financing (summed across this property's loans).
+  debt: number; // gross loan balance
+  offset: number;
+  netDebt: number; // debt - offset, floored at 0
+  equity: number; // value - gross debt
+  usableEquity: number; // max(0, 0.8*value - debt) -- borrowable headroom
+  lvr: number | null; // gross debt / value
+
+  // Acquisition & capital growth.
+  purchasePrice: number;
+  capitalGrowth: number; // value - purchase price
+  capitalGrowthPct: number | null; // vs purchase price
+  years: number | null; // held, from purchase_date
+  cagr: number | null; // annualised capital growth rate
+
+  // Income.
+  annualRent: number; // weekly_rent*52 if set, else trailing income annualised
+  grossYield: number | null; // annualRent / value
+  yieldOnCost: number | null; // annualRent / purchase price
+
+  // Cashflow (interest-only P&L basis).
+  annualNet: number; // trailing avg monthly net * 12
+  netYield: number | null; // annualNet / value
+  weeklyCashflow: number; // annualNet / 52 -- the "out of pocket per week" read
+  cashInvested: number;
+  cashOnCash: number | null; // annualNet / cash invested
+  gearing: GearingStatus;
+
+  // Tax (depreciation is a non-cash deduction).
+  depreciationAnnual: number;
+  taxablePosition: number; // annualNet - depreciation (annual)
+  negativelyGeared: boolean; // taxable position < 0
+
+  // Total return = income return + capital growth rate.
+  totalReturnPct: number | null; // netYield + cagr
+  totalReturnAnnual: number; // annualNet + implied annual capital growth ($)
+
+  // Lease.
+  weeklyRent: number;
+  leaseEnd: string | null;
+  daysToLeaseEnd: number | null;
+}
+
+// trailing: the trailingAverages() result for this property (monthly figures).
+// asOf: reference date for CAGR / lease countdown (defaults to now); passed in
+// so tests are deterministic.
+export function propertyFinancials(
+  property: Property,
+  loans: Loan[],
+  trailing: TrailingAverages,
+  asOf: Date = new Date()
+): PropertyFinancials {
+  const value = property.value;
+  const debtC = loans.reduce((s, l) => s + toCents(l.balance), 0);
+  const offsetC = loans.reduce((s, l) => s + toCents(l.offset_balance), 0);
+  const debt = centsToDollars(debtC);
+  const offset = centsToDollars(offsetC);
+  const netDebt = centsToDollars(Math.max(0, debtC - offsetC));
+  const equity = centsToDollars(toCents(value) - debtC);
+  const usableEquity = centsToDollars(Math.max(0, Math.round(toCents(value) * 0.8) - debtC));
+  const lvr = value > 0 ? debt / value : null;
+
+  const purchasePrice = property.purchase_price ?? 0;
+  const capitalGrowth = purchasePrice > 0 ? value - purchasePrice : 0;
+  const capitalGrowthPct = purchasePrice > 0 ? capitalGrowth / purchasePrice : null;
+
+  let years: number | null = null;
+  let cagr: number | null = null;
+  if (property.purchase_date && purchasePrice > 0 && value > 0) {
+    const y = (asOf.getTime() - new Date(property.purchase_date + 'T00:00:00').getTime()) / MS_PER_YEAR;
+    if (y > 0) {
+      years = y;
+      cagr = Math.pow(value / purchasePrice, 1 / y) - 1;
+    }
+  }
+
+  const weeklyRent = property.weekly_rent ?? 0;
+  const annualRent = weeklyRent > 0 ? weeklyRent * 52 : trailing.avgIncome * 12;
+  const grossYield = value > 0 ? annualRent / value : null;
+  const yieldOnCost = purchasePrice > 0 ? annualRent / purchasePrice : null;
+
+  const annualNet = trailing.avgNet * 12;
+  const netYield = value > 0 ? annualNet / value : null;
+  const weeklyCashflow = annualNet / 52;
+  const cashInvested = property.cash_invested ?? 0;
+  const cashOnCash = cashInvested > 0 ? annualNet / cashInvested : null;
+  const gearing: GearingStatus = annualNet > 0 ? 'positive' : annualNet < 0 ? 'negative' : 'neutral';
+
+  const depreciationAnnual = property.depreciation_annual ?? 0;
+  const taxablePosition = annualNet - depreciationAnnual;
+
+  const impliedGrowthAnnual = cagr !== null ? value * cagr : 0;
+  const totalReturnAnnual = annualNet + impliedGrowthAnnual;
+  const totalReturnPct = value > 0 && (netYield !== null || cagr !== null) ? (netYield ?? 0) + (cagr ?? 0) : null;
+
+  let daysToLeaseEnd: number | null = null;
+  if (property.lease_end) {
+    daysToLeaseEnd = Math.round(
+      (new Date(property.lease_end + 'T00:00:00').getTime() - asOf.getTime()) / (24 * 60 * 60 * 1000)
+    );
+  }
+
+  return {
+    value,
+    debt,
+    offset,
+    netDebt,
+    equity,
+    usableEquity,
+    lvr,
+    purchasePrice,
+    capitalGrowth,
+    capitalGrowthPct,
+    years,
+    cagr,
+    annualRent,
+    grossYield,
+    yieldOnCost,
+    annualNet,
+    netYield,
+    weeklyCashflow,
+    cashInvested,
+    cashOnCash,
+    gearing,
+    depreciationAnnual,
+    taxablePosition,
+    negativelyGeared: taxablePosition < 0,
+    totalReturnPct,
+    totalReturnAnnual,
+    weeklyRent,
+    leaseEnd: property.lease_end ?? null,
+    daysToLeaseEnd,
   };
 }

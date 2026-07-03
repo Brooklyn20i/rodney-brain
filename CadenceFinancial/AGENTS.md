@@ -186,20 +186,36 @@ public API and scraping violates its terms. The Debt & Offset screen's
 check, then takes the number as a portal-led estimate -- the same evidence
 grade the workbook always used.
 
-## Property portfolio (migration 0006)
+## Property portfolio (migrations 0006 + 0007)
 
-`property_ledger` holds one row per line item on a monthly rent statement or
-cost bill (`web/src/lib/propertyCalc.ts` turns it into P&L). Income
+`property_ledger` (0006) holds one row per line item on a monthly rent
+statement or cost bill; `propertyCalc.ts` turns it into P&L. Income
 categories are `rent`/`other_income`; everything else is an expense.
 **Interest is a ledger expense line** (entered from the loan statement) so
 the P&L reflects the real financing cost, but **loan principal is never a
-ledger line** — it's a balance-sheet transfer, so the screen's "net
-cashflow" is an interest-only P&L figure. The **Property Portfolio** screen
-(under Invest) shows portfolio tiles, a "where the costs come from" category
-breakdown, a per-property table with gross/net yields and cashflow status, a
-per-property drill-in with the itemised statement + trailing averages, and a
-"Log statement" form that writes one ledger row per non-zero line. Overview
-flags any property running at a monthly cash loss in the latest period.
+ledger line** — it's a balance-sheet transfer, so "net cashflow" is an
+interest-only P&L figure.
+
+Migration 0007 enriches `properties` with acquisition economics
+(`purchase_price`, `purchase_date`, `cash_invested`, `land_value`,
+`depreciation_annual`), physical detail (`property_type`, `bedrooms`,
+`bathrooms`, `car_spaces`, `land_size_sqm`, `ownership_share`) and lease
+detail (`weekly_rent`, `lease_start`, `lease_end`, `tenant`) — all
+nullable/backward-compatible. `propertyFinancials()` computes the full
+investment dashboard from these: gross/net yield, **yield on cost**, LVR,
+equity + usable equity (80%), capital growth $ and **CAGR**, weekly
+cashflow, **cash-on-cash**, total return (income + growth), cash-gearing
+status, and the **after-depreciation taxable position** (a property can be
+cash-positive yet negatively geared for tax — the engine shows both).
+
+The **Property Portfolio** screen (under Invest) has a portfolio overview
+(value/equity/LVR/gross-yield/net-cashflow tiles, "where the costs come
+from" breakdown, a per-property table with equity/LVR/yield/weekly-cashflow/
+growth) and a **dedicated per-property detail page** (hero metrics + cards
+for acquisition & growth, financing, income & lease, returns & gearing,
+month P&L with a period selector, and full monthly history) plus in-page
+"Edit details" and "Log statement" forms. Overview flags any property
+running at a monthly cash loss in the latest period.
 
 ## Kobe integration
 
