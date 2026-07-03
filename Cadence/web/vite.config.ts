@@ -16,6 +16,11 @@ export default defineConfig({
         // Without this, opening the URL offline fails at the network level
         // before the service worker can intercept it.
         navigateFallback: '/index.html',
+        // /financial is a DIFFERENT app (Cadence Financial), reverse-proxied
+        // to its own Vercel project by vercel.json. Without this denylist the
+        // service worker serves the cached main-app shell for /financial
+        // navigations and the proxy never gets a chance.
+        navigateFallbackDenylist: [/^\/financial/],
         cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
