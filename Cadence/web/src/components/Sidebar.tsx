@@ -48,7 +48,7 @@ export function Sidebar({ current, onNavigate, badges, open, workspaceName }: Pr
 
   return (
     <nav id="sidebar" className={open ? 'open' : ''}>
-      <div id="sidebar-title">Cadence</div>
+      <div id="sidebar-title">Cadence<span className="sidebar-sub">Work</span></div>
       {NAV.map((grp, i) => (
         <React.Fragment key={grp.section}>
           {i > 0 && <div className="nav-sep" />}
@@ -59,7 +59,7 @@ export function Sidebar({ current, onNavigate, badges, open, workspaceName }: Pr
       <div id="sidebar-footer">
         {FOOTER.map(item)}
         <div id="sync-status"><span className="status-dot" /> Live sync on</div>
-        <div id="sidebar-signature">{workspaceName ?? 'My workspace'} · Cadence</div>
+        <div id="sidebar-signature">{workspaceName ?? 'My workspace'} · Cadence Work</div>
       </div>
     </nav>
   );

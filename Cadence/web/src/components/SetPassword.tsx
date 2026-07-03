@@ -21,7 +21,7 @@ export function SetPassword() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         <p>Set your password to finish signing in.</p>
         <form onSubmit={submit}>
           <div className="form-group">

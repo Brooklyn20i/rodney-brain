@@ -22,7 +22,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (!configured) return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         <p>Not connected to backend. Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env</code> and rebuild.</p>
       </div>
     </div>
@@ -67,7 +67,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'reset_sent') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         <p>Password reset email sent to <strong>{email}</strong>. Open the link in the same browser, set your password, then come back and sign in.</p>
         <button className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}
           onClick={() => { setStep('login'); setErr(''); }}>
@@ -80,7 +80,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'waitlist_done') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         <p style={{ fontSize: 24, margin: '16px 0 8px' }}>✓</p>
         <p><strong>You're on the list.</strong></p>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -97,7 +97,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'waitlist') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         <p>Request early access to your executive cockpit.</p>
         <form onSubmit={joinWaitlist}>
           <div className="form-group">
@@ -127,7 +127,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence</h1>
+        <h1>Cadence Work</h1>
         {inviteHint
           ? <p>Sign in (or create an account) to accept your team invite.</p>
           : <p>Sign in to your executive cockpit.</p>

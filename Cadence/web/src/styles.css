@@ -47,7 +47,8 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 
 /* ── Sidebar ── */
 #sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--sidebar-bg); display: flex; flex-direction: column; padding: 20px 12px 20px; overflow-y: auto; z-index: 10; }
-#sidebar-title { font-size: 22px; font-weight: 700; color: #FFFFFF; padding: 8px 8px 20px; letter-spacing: -0.3px; }
+#sidebar-title { font-size: 22px; font-weight: 700; color: #FFFFFF; padding: 8px 8px 20px; letter-spacing: -0.3px; line-height: 1.05; }
+#sidebar-title .sidebar-sub { display: block; font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--sidebar-icon-active); margin-top: 3px; }
 .nav-section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 10px 8px 4px; }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; margin-bottom: 2px; color: var(--sidebar-text); font-size: 14px; font-weight: 500; transition: background 0.15s, color 0.15s; position: relative; text-decoration: none; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
 .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9); }

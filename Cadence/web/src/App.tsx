@@ -72,7 +72,7 @@ export function App() {
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
   }), [data]);
 
-  if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
+  if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence Work</h1><p>Loading…</p></div></div>;
   if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} />;
   if (needsPasswordSet) return <SetPassword />;
 
