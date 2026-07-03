@@ -124,3 +124,99 @@ export function periodAfterMonths(fromPeriod: string, months: number): string {
   const nm = (total % 12) + 1;
   return `${ny}-${String(nm).padStart(2, '0')}`;
 }
+
+// ── What-if scenario engine ─────────────────────────────────────────────
+// Full-balance-sheet projection with a separate growth assumption per asset
+// class -- including property, compounding on the full property VALUE while
+// debt is carried flat, so the leveraged-equity effect is captured (5%
+// growth on a mortgaged property grows equity much faster than 5%). The
+// monthly operating contribution is added flat on top, same basis as the
+// runway floor. Every rate here is an owner-stated planning input, not a
+// forecast; the UI never persists these -- it's a sandbox.
+
+export type WhatIfClass = 'cash' | 'property' | 'shares' | 'btc' | 'super' | 'collectibles';
+
+export const WHAT_IF_CLASSES: WhatIfClass[] = [
+  'cash',
+  'property',
+  'shares',
+  'btc',
+  'super',
+  'collectibles',
+];
+
+export interface WhatIfInputs {
+  targetNetWorth: number;
+  // Flat monthly addition to net worth (savings + buys + debt paydown pace).
+  monthlyContribution: number;
+  // Annual growth assumption per asset class (0.05 = 5%/yr). Missing = 0.
+  rates: Partial<Record<WhatIfClass, number>>;
+}
+
+export interface WhatIfMilestone {
+  months: number;
+  netWorth: number;
+}
+
+export interface WhatIfResult {
+  // First month projected net worth >= target (0 = already there),
+  // null = not within 100 years on these assumptions.
+  monthsToTarget: number | null;
+  // Projected net worth at fixed horizons, for a sanity-check table.
+  milestones: WhatIfMilestone[];
+  startingNetWorth: number;
+}
+
+const MILESTONE_MONTHS = [12, 36, 60, 120, 240];
+
+export function projectWhatIf(latest: MonthlyMetric, inputs: WhatIfInputs): WhatIfResult {
+  const balances: Record<WhatIfClass, number> = {
+    cash: toCents(latest.cash_offsets),
+    property: toCents(latest.property_value),
+    shares: toCents(latest.shares),
+    btc: toCents(latest.btc_crypto),
+    super: toCents(latest.super_balance),
+    collectibles: toCents(latest.collectibles_value),
+  };
+  const monthlyRates: Record<WhatIfClass, number> = {} as Record<WhatIfClass, number>;
+  for (const cls of WHAT_IF_CLASSES) {
+    monthlyRates[cls] = annualToMonthlyRate(inputs.rates[cls] ?? 0);
+  }
+
+  const debtC = toCents(latest.total_debt);
+  const contributionC = toCents(inputs.monthlyContribution);
+  const targetC = toCents(inputs.targetNetWorth);
+
+  const netWorthAt = () =>
+    WHAT_IF_CLASSES.reduce((s, cls) => s + balances[cls], 0) - debtC;
+
+  let contributedC = 0;
+  let monthsToTarget: number | null = netWorthAt() >= targetC ? 0 : null;
+  const milestones: WhatIfMilestone[] = [];
+  const startingNetWorth = centsToDollars(netWorthAt());
+
+  for (let month = 1; month <= MAX_MONTHS; month++) {
+    for (const cls of WHAT_IF_CLASSES) {
+      balances[cls] = Math.round(balances[cls] * (1 + monthlyRates[cls]));
+    }
+    contributedC += contributionC;
+    const nwC = netWorthAt() + contributedC;
+    if (monthsToTarget === null && nwC >= targetC) monthsToTarget = month;
+    if (MILESTONE_MONTHS.includes(month)) {
+      milestones.push({ months: month, netWorth: centsToDollars(nwC) });
+    }
+    if (month >= Math.max(...MILESTONE_MONTHS) && monthsToTarget !== null) break;
+  }
+
+  return { monthsToTarget, milestones, startingNetWorth };
+}
+
+// The trailing operating pace used to prefill the what-if contribution --
+// same 6-month all-in average the runway floor uses.
+export function trailingOperatingAverage(months: MonthlyMetric[], trailingWindow = 6): number {
+  if (months.length === 0) return 0;
+  const sorted = [...months].sort((a, b) => a.period.localeCompare(b.period));
+  const trailing = sorted.slice(-trailingWindow);
+  return summarizePeriod(trailing, trailing[0].period, trailing[trailing.length - 1].period)
+    .allInMonthlyAverage;
+}

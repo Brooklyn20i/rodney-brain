@@ -2,10 +2,143 @@ import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
-import { computeRunway, periodAfterMonths } from '../lib/goalCalc';
+import {
+  computeRunway,
+  periodAfterMonths,
+  projectWhatIf,
+  trailingOperatingAverage,
+  WHAT_IF_CLASSES,
+  type WhatIfClass,
+} from '../lib/goalCalc';
 import { formatMoney, formatPercent, fmtDMY, monthLabel } from '../lib/util';
+import type { MonthlyMetric } from '../lib/types';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
+
+const WHAT_IF_LABEL: Record<WhatIfClass, string> = {
+  cash: 'Cash / offsets',
+  property: 'Property',
+  shares: 'Shares',
+  btc: 'BTC / crypto',
+  super: 'Super',
+  collectibles: 'Collectibles',
+};
+
+const balanceFor = (m: MonthlyMetric, cls: WhatIfClass): number =>
+  ({
+    cash: m.cash_offsets,
+    property: m.property_value,
+    shares: m.shares,
+    btc: m.btc_crypto,
+    super: m.super_balance,
+    collectibles: m.collectibles_value,
+  })[cls];
+
+const yearsMonths = (n: number) => `${Math.floor(n / 12)}y ${n % 12}m`;
+
+// Interactive sandbox: what-if growth per asset class against any target.
+// Nothing here persists -- it's a modelling tool, and keeping it ephemeral
+// is what lets it stay clearly separated from the evidence-graded numbers.
+function WhatIfModeller({ current, months, defaultTarget }: { current: MonthlyMetric; months: MonthlyMetric[]; defaultTarget: number }) {
+  const trailingPace = trailingOperatingAverage(months);
+  const [target, setTarget] = useState(String(defaultTarget));
+  const [contribution, setContribution] = useState(String(Math.round(trailingPace)));
+  const [rates, setRates] = useState<Record<WhatIfClass, string>>({
+    cash: '0',
+    property: '5',
+    shares: '7',
+    btc: '0',
+    super: '7',
+    collectibles: '0',
+  });
+
+  const result = projectWhatIf(current, {
+    targetNetWorth: num(target),
+    monthlyContribution: num(contribution),
+    rates: Object.fromEntries(
+      WHAT_IF_CLASSES.map((cls) => [cls, num(rates[cls]) / 100])
+    ) as Partial<Record<WhatIfClass, number>>,
+  });
+
+  return (
+    <Card title="What-if modeller — every asset, your assumptions">
+      <div className="wizard-grid">
+        <div className="form-group">
+          <label className="field">Target net worth (A$)</label>
+          <input type="text" value={target} onChange={(e) => setTarget(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="field">Monthly operating surplus (A$)</label>
+          <input type="text" value={contribution} onChange={(e) => setContribution(e.target.value)} />
+        </div>
+      </div>
+      <div className="cf-table-wrap" style={{ marginTop: 4 }}>
+        <table className="cf-table">
+          <thead>
+            <tr>
+              <th>Asset class</th>
+              <th>Current</th>
+              <th>Assumed growth %/yr</th>
+            </tr>
+          </thead>
+          <tbody>
+            {WHAT_IF_CLASSES.map((cls) => (
+              <tr key={cls}>
+                <td style={{ textAlign: 'left' }}>{WHAT_IF_LABEL[cls]}</td>
+                <td>{formatMoney(balanceFor(current, cls), true)}</td>
+                <td>
+                  <input
+                    type="text"
+                    style={{ width: 70, textAlign: 'right' }}
+                    value={rates[cls]}
+                    onChange={(e) => setRates((r) => ({ ...r, [cls]: e.target.value }))}
+                  />
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td style={{ textAlign: 'left', color: 'var(--text2)' }}>Total debt (carried flat)</td>
+              <td>{formatMoney(current.total_debt, true)}</td>
+              <td />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="cf-metric-grid" style={{ marginTop: 14 }}>
+        <Metric
+          label={`Reaches ${formatMoney(num(target), true)}`}
+          value={
+            result.monthsToTarget === null
+              ? 'Not in 100y'
+              : result.monthsToTarget === 0
+                ? 'Already there'
+                : yearsMonths(result.monthsToTarget)
+          }
+          delta={
+            result.monthsToTarget
+              ? `~${monthLabel(periodAfterMonths(current.period, result.monthsToTarget))}`
+              : undefined
+          }
+          tone={result.monthsToTarget === null ? 'bad' : 'good'}
+        />
+        {result.milestones
+          .filter((m) => [12, 60, 120, 240].includes(m.months))
+          .map((m) => (
+            <Metric
+              key={m.months}
+              label={`In ${m.months / 12} year${m.months > 12 ? 's' : ''}`}
+              value={formatMoney(m.netWorth, true)}
+            />
+          ))}
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
+        Property growth compounds the full property value while debt stays flat, so the leveraged
+        equity effect is captured. All rates are your planning inputs — nothing here is a forecast,
+        and nothing here is saved.
+      </p>
+    </Card>
+  );
+}
 
 export function Goals({ onMenu }: { onMenu: () => void }) {
   const { data, insert, update } = useCadenceFinancial();
@@ -224,6 +357,14 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
             </Card>
           );
         })}
+
+        {current && (
+          <WhatIfModeller
+            current={current}
+            months={months}
+            defaultTarget={data.goals[0]?.target_net_worth ?? 10_000_000}
+          />
+        )}
       </div>
     </>
   );

@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#1A1F2E"/>
-  <!-- exact match to the main Cadence app's C mark (Cadence/web/public/icon-512.png) -->
-  <path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#FFFFFF" stroke-width="4.8" stroke-linecap="butt"/>
-  <circle cx="23.06" cy="9.64" r="3.2" fill="#FFFFFF"/>
-  <circle cx="23.06" cy="22.36" r="3.2" fill="#FFFFFF"/>
+  <!-- Cadence Financial mark: the Cadence C construction with reversed
+       colours (sand ground, navy C) so the two apps share a family
+       resemblance but are instantly tellable apart on a home screen. -->
+  <rect width="32" height="32" rx="8" fill="#EAE4D6"/>
+  <path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#1A1F2E" stroke-width="4.8" stroke-linecap="butt"/>
+  <circle cx="23.06" cy="9.64" r="3.2" fill="#1A1F2E"/>
+  <circle cx="23.06" cy="22.36" r="3.2" fill="#1A1F2E"/>
 </svg>

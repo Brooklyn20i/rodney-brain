@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { annualToMonthlyRate, computeRunway, periodAfterMonths } from '../goalCalc';
+import {
+  annualToMonthlyRate,
+  computeRunway,
+  periodAfterMonths,
+  projectWhatIf,
+  trailingOperatingAverage,
+} from '../goalCalc';
 import type { Goal, MonthlyMetric } from '../types';
 
 // Fictional fixture data only -- see CadenceFinancial/AGENTS.md for why.
@@ -114,6 +120,76 @@ describe('computeRunway', () => {
 
   it('returns null with no monthly data', () => {
     expect(computeRunway(goal(), [])).toBeNull();
+  });
+});
+
+describe('projectWhatIf', () => {
+  // Balance sheet: 200k cash + 1m property + 100k shares + 50k BTC + 150k
+  // super - 500k debt = 1m net worth.
+  const latest = month({
+    period: '2025-07',
+    cash_offsets: 200_000,
+    property_value: 1_000_000,
+    shares: 100_000,
+    btc_crypto: 50_000,
+    super_balance: 150_000,
+    total_debt: 500_000,
+    net_worth: 1_000_000,
+  });
+
+  it('with zero rates it reduces to the linear operating floor', () => {
+    const r = projectWhatIf(latest, { targetNetWorth: 1_120_000, monthlyContribution: 10_000, rates: {} });
+    expect(r.startingNetWorth).toBeCloseTo(1_000_000, 2);
+    expect(r.monthsToTarget).toBe(12); // 120k gap / 10k per month
+    expect(r.milestones.find((m) => m.months === 12)!.netWorth).toBeCloseTo(1_120_000, 0);
+  });
+
+  it('property growth compounds the full property value, capturing the leverage effect', () => {
+    // 5% on the 1m property only, no contributions: equity grows by the full
+    // property appreciation because debt is carried flat.
+    const r = projectWhatIf(latest, { targetNetWorth: 2_000_000, monthlyContribution: 0, rates: { property: 0.05 } });
+    const rm = annualToMonthlyRate(0.05);
+    const propertyAt = (n: number) => 1_000_000 * (1 + rm) ** n;
+    const nwAt = (n: number) => propertyAt(n) + 500_000 - 500_000; // other assets flat, debt flat
+    const n = r.monthsToTarget!;
+    expect(nwAt(n)).toBeGreaterThanOrEqual(2_000_000 - 5); // cents rounding tolerance
+    expect(nwAt(n - 1)).toBeLessThan(2_000_000);
+    // ~14.2 years for property to double at 5%: sanity-check the ballpark.
+    expect(n).toBeGreaterThan(160);
+    expect(n).toBeLessThan(180);
+  });
+
+  it('multi-class rates apply independently per class', () => {
+    const r = projectWhatIf(latest, {
+      targetNetWorth: 10_000_000,
+      monthlyContribution: 5_000,
+      rates: { property: 0.05, shares: 0.07, btc: 0.1, super: 0.06 },
+    });
+    expect(r.monthsToTarget).not.toBeNull();
+    // Independent closed-form cross-check at the 120-month milestone.
+    const g = (v: number, rate: number, n: number) => v * (1 + annualToMonthlyRate(rate)) ** n;
+    const expected120 =
+      200_000 +
+      g(1_000_000, 0.05, 120) +
+      g(100_000, 0.07, 120) +
+      g(50_000, 0.1, 120) +
+      g(150_000, 0.06, 120) -
+      500_000 +
+      5_000 * 120;
+    const actual120 = r.milestones.find((m) => m.months === 120)!.netWorth;
+    expect(Math.abs(actual120 - expected120)).toBeLessThan(expected120 * 0.0001);
+  });
+
+  it('unreachable targets report null within the 100-year horizon', () => {
+    const r = projectWhatIf(latest, { targetNetWorth: 100_000_000, monthlyContribution: 0, rates: {} });
+    expect(r.monthsToTarget).toBeNull();
+  });
+});
+
+describe('trailingOperatingAverage', () => {
+  it('matches the runway floor basis', () => {
+    expect(trailingOperatingAverage(months)).toBeCloseTo(10_000, 2);
+    expect(trailingOperatingAverage([])).toBe(0);
   });
 });
 
