@@ -1601,6 +1601,37 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .sync-code { flex: 1; min-width: 0; font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', monospace; font-size: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; word-break: break-all; }
 .sync-code-block { white-space: pre; overflow-x: auto; word-break: normal; margin: 0; }
 
+/* ── Financial budget ── */
+.bg-view-toggle { display: inline-flex; gap: 2px; background: var(--surface2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.bg-view-toggle button { border: none; background: transparent; color: var(--text2); font-size: 13px; font-weight: 700; font-family: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.bg-view-toggle button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.bg-row { display: grid; grid-template-columns: minmax(90px,1.4fr) minmax(96px,1fr) 118px 108px 92px 34px 30px; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.bg-row:last-of-type { border-bottom: none; }
+.bg-row-off { opacity: 0.5; }
+.bg-row input, .bg-row select { padding: 8px 8px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-family: inherit; width: 100%; min-width: 0; }
+.bg-row input:focus, .bg-row select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.12); }
+.bg-label { font-weight: 600; }
+.bg-amount { position: relative; display: flex; align-items: center; }
+.bg-amount-prefix { position: absolute; left: 8px; font-size: 12px; color: var(--text3); pointer-events: none; }
+.bg-amount input { padding-left: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+.bg-normalised { text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.bg-toggle { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text3); font-size: 14px; cursor: pointer; }
+.bg-toggle.on { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+.bg-del { width: 28px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--red); font-size: 13px; cursor: pointer; }
+.bg-section-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.bg-section-total { font-size: 13px; color: var(--text2); }
+@media (max-width: 720px) {
+  /* On phones the 7-column row is too tight — reflow to a two-line card. */
+  .bg-row { grid-template-columns: 1fr 1fr auto auto; grid-template-areas: 'label label toggle del' 'cat amount amount amount' 'freq freq norm norm'; gap: 6px 8px; padding: 10px 0; }
+  .bg-label { grid-area: label; }
+  .bg-cat { grid-area: cat; }
+  .bg-amount { grid-area: amount; }
+  .bg-freq { grid-area: freq; }
+  .bg-normalised { grid-area: norm; align-self: center; }
+  .bg-toggle { grid-area: toggle; justify-self: end; }
+  .bg-del { grid-area: del; justify-self: end; }
+}
+
 /* ── Nutrition weekly report ── */
 .nu-week-bars { display: flex; gap: 8px; align-items: flex-end; height: 96px; margin-bottom: 12px; }
 .nu-week-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }

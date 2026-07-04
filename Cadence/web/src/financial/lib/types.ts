@@ -381,6 +381,54 @@ export interface PropertyLedgerEntry {
   deleted_at: string | null;
 }
 
+// ── Macro budget / cashflow plan ────────────────────────────────────────────
+// A forward-looking recurring budget: income streams in minus recurring
+// payments out = free cash. Distinct from monthly_metrics (actuals) and the
+// Free Cash Engine (which reads actuals) — this is the plan Rodney sets.
+// Each line carries its own frequency; the app normalises to a monthly view
+// (see lib/budgetCalc.ts). Amounts are always positive; `kind` decides sign.
+export type BudgetKind = 'income' | 'expense';
+
+export type BudgetFrequency = 'weekly' | 'fortnightly' | 'monthly' | 'quarterly' | 'annual';
+
+// Grouping for the summary. Stored as free text (DB doesn't constrain it) so
+// new categories need no migration; the UI offers this preset list per kind.
+export type BudgetCategory =
+  // income
+  | 'salary'
+  | 'rental_income'
+  | 'interest'
+  | 'dividends'
+  | 'business'
+  | 'other_income'
+  // expense
+  | 'mortgage'
+  | 'rent'
+  | 'credit_card'
+  | 'loan_repayment'
+  | 'utilities'
+  | 'insurance'
+  | 'subscriptions'
+  | 'living'
+  | 'savings_transfer'
+  | 'other_expense';
+
+export interface BudgetLine {
+  id: string;
+  owner_id: string;
+  kind: BudgetKind;
+  category: string; // BudgetCategory, but free text at the DB level
+  label: string;
+  amount: number; // always positive; kind decides income vs payment
+  frequency: BudgetFrequency;
+  active: boolean;
+  sort_order: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -398,6 +446,7 @@ export interface CadenceFinancialData {
   insurance_policies: InsurancePolicy[];
   estate_items: EstateItem[];
   property_ledger: PropertyLedgerEntry[];
+  budget_lines: BudgetLine[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -417,6 +466,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'insurance_policies',
   'estate_items',
   'property_ledger',
+  'budget_lines',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -436,4 +486,5 @@ export const emptyData = (): CadenceFinancialData => ({
   insurance_policies: [],
   estate_items: [],
   property_ledger: [],
+  budget_lines: [],
 });

@@ -57,7 +57,7 @@ TABLES = [
     "investment_transactions", "monthly_metrics", "evidence_items",
     "decisions", "liquidity_buckets", "allocation_policies", "risk_policies",
     "goals", "insurance_policies", "estate_items", "property_ledger",
-    "agent_messages", "financial_agent_access",
+    "budget_lines", "agent_messages", "financial_agent_access",
 ]
 
 KEYCHAIN_SERVICE = "cadence-financial-agent-password"

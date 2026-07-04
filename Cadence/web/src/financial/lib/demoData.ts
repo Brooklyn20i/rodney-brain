@@ -10,6 +10,7 @@
 import type {
   AgentMessage,
   AllocationPolicy,
+  BudgetLine,
   CadenceFinancialData,
   Decision,
   Entity,
@@ -447,6 +448,20 @@ const propertyLedger: PropertyLedgerEntry[] = (() => {
   return rows;
 })();
 
+// Macro budget — fictional recurring plan. Income streams in, payments out.
+const budgetLines: BudgetLine[] = [
+  { ...base, id: 'bg-salary', kind: 'income', category: 'salary', label: 'Salary (after tax)', amount: 11_500, frequency: 'monthly', active: true, sort_order: 0, notes: '' },
+  { ...base, id: 'bg-rent-income', kind: 'income', category: 'rental_income', label: 'Rental income (net of agent)', amount: 1_450, frequency: 'weekly', active: true, sort_order: 1, notes: 'Across the property portfolio.' },
+  { ...base, id: 'bg-interest', kind: 'income', category: 'interest', label: 'Offset / savings interest', amount: 4_800, frequency: 'annual', active: true, sort_order: 2, notes: '' },
+  { ...base, id: 'bg-dividends', kind: 'income', category: 'dividends', label: 'Share dividends', amount: 2_100, frequency: 'quarterly', active: true, sort_order: 3, notes: '' },
+  { ...base, id: 'bg-mortgage', kind: 'expense', category: 'mortgage', label: 'Home + investment mortgages', amount: 7_800, frequency: 'monthly', active: true, sort_order: 4, notes: 'Interest + principal across loans.' },
+  { ...base, id: 'bg-cards', kind: 'expense', category: 'credit_card', label: 'Credit cards (paid in full)', amount: 2_600, frequency: 'monthly', active: true, sort_order: 5, notes: '' },
+  { ...base, id: 'bg-utilities', kind: 'expense', category: 'utilities', label: 'Power, water, internet, phone', amount: 720, frequency: 'monthly', active: true, sort_order: 6, notes: '' },
+  { ...base, id: 'bg-insurance', kind: 'expense', category: 'insurance', label: 'Insurances (life, home, motor)', amount: 5_400, frequency: 'annual', active: true, sort_order: 7, notes: '' },
+  { ...base, id: 'bg-subs', kind: 'expense', category: 'subscriptions', label: 'Subscriptions', amount: 180, frequency: 'monthly', active: true, sort_order: 8, notes: '' },
+  { ...base, id: 'bg-living', kind: 'expense', category: 'living', label: 'Groceries, fuel, everyday', amount: 900, frequency: 'fortnightly', active: true, sort_order: 9, notes: '' },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -465,5 +480,6 @@ export function loadDemoData(): CadenceFinancialData {
     insurance_policies: insurancePolicies,
     estate_items: estateItems,
     property_ledger: propertyLedger,
+    budget_lines: budgetLines,
   };
 }

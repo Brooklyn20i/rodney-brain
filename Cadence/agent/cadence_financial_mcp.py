@@ -117,6 +117,85 @@ def list_liquidity_buckets() -> list[dict]:
         return [{"error": str(e)}]
 
 
+# ── Budget (macro cashflow plan) ────────────────────────────────────────────
+
+_BUDGET_PER_YEAR = {"weekly": 52, "fortnightly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
+
+
+@mcp.tool()
+def get_budget() -> dict:
+    """Rodney's macro budget: recurring income streams and payments, plus the
+    monthly/annual free-cash summary. Every active line is normalised to a
+    monthly figure so income minus payments = free cash."""
+    try:
+        lines = bridge.select("budget_lines", "select=*&deleted_at=is.null&order=sort_order", limit=200)
+        income_m = 0.0
+        expense_m = 0.0
+        for l in lines:
+            if not l.get("active", True):
+                continue
+            monthly = float(l.get("amount", 0)) * _BUDGET_PER_YEAR.get(l.get("frequency", "monthly"), 12) / 12
+            if l.get("kind") == "income":
+                income_m += monthly
+            else:
+                expense_m += monthly
+        free_m = income_m - expense_m
+        return {
+            "lines": lines,
+            "monthly_income": round(income_m, 2),
+            "monthly_payments": round(expense_m, 2),
+            "monthly_free_cash": round(free_m, 2),
+            "annual_free_cash": round(free_m * 12, 2),
+            "savings_rate": round(free_m / income_m, 4) if income_m > 0 else 0,
+        }
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def add_budget_line(
+    kind: str,
+    label: str,
+    amount: float,
+    frequency: str = "monthly",
+    category: str = "",
+) -> dict:
+    """Add a recurring budget line. kind is 'income' or 'expense'; frequency is
+    weekly/fortnightly/monthly/quarterly/annual; category is a grouping label
+    (e.g. 'salary', 'mortgage', 'credit_card'). amount is always positive."""
+    try:
+        if kind not in ("income", "expense"):
+            return {"error": "kind must be 'income' or 'expense'"}
+        if frequency not in _BUDGET_PER_YEAR:
+            return {"error": f"frequency must be one of {', '.join(_BUDGET_PER_YEAR)}"}
+        row = {
+            "owner_id": bridge.discover_owner_id(),
+            "kind": kind,
+            "category": category or ("other_income" if kind == "income" else "other_expense"),
+            "label": label,
+            "amount": amount,
+            "frequency": frequency,
+            "active": True,
+        }
+        return _first(bridge.insert("budget_lines", row))
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def update_budget_line(line_id: str, patch: dict) -> dict:
+    """Update a budget line (amount, frequency, label, category, active, kind).
+    Only the given fields change."""
+    try:
+        allowed = {"kind", "category", "label", "amount", "frequency", "active", "sort_order", "notes"}
+        clean = {k: v for k, v in patch.items() if k in allowed}
+        if not clean:
+            return {"error": "no updatable fields provided"}
+        return _first(bridge.patch_row("budget_lines", line_id, clean))
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
+
+
 @mcp.tool()
 def get_portfolio_overview() -> dict:
     """One-call snapshot: latest net worth, properties, loans, holdings and liquidity."""

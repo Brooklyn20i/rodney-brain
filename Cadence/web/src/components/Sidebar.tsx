@@ -39,6 +39,7 @@ export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'financial:goals', label: 'Goals & Runway', icon: '⚑' },
   ]},
   { section: 'Operate', items: [
+    { id: 'financial:budget', label: 'Budget', icon: '▤' },
     { id: 'financial:month-close', label: 'Month Close', icon: '●' },
     { id: 'financial:free-cash-engine', label: 'Free Cash Engine', icon: '$' },
     { id: 'financial:net-worth-bridge', label: 'Net Worth Bridge', icon: '⇌' },

@@ -27,6 +27,41 @@ export function fmtDMY(iso: string | null): string {
   return d.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// ── Budget labels ───────────────────────────────────────────────────────────
+export const BUDGET_FREQUENCY_LABEL: Record<string, string> = {
+  weekly: 'Weekly',
+  fortnightly: 'Fortnightly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  annual: 'Annual',
+};
+
+export const BUDGET_INCOME_CATEGORIES: { key: string; label: string }[] = [
+  { key: 'salary', label: 'Salary / wages' },
+  { key: 'rental_income', label: 'Rental income' },
+  { key: 'interest', label: 'Interest' },
+  { key: 'dividends', label: 'Dividends' },
+  { key: 'business', label: 'Business / other work' },
+  { key: 'other_income', label: 'Other income' },
+];
+
+export const BUDGET_EXPENSE_CATEGORIES: { key: string; label: string }[] = [
+  { key: 'mortgage', label: 'Mortgage' },
+  { key: 'rent', label: 'Rent' },
+  { key: 'credit_card', label: 'Credit cards' },
+  { key: 'loan_repayment', label: 'Loan repayments' },
+  { key: 'utilities', label: 'Utilities & bills' },
+  { key: 'insurance', label: 'Insurance' },
+  { key: 'subscriptions', label: 'Subscriptions' },
+  { key: 'living', label: 'Living & everyday' },
+  { key: 'savings_transfer', label: 'Savings / investing' },
+  { key: 'other_expense', label: 'Other payment' },
+];
+
+export const BUDGET_CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  [...BUDGET_INCOME_CATEGORIES, ...BUDGET_EXPENSE_CATEGORIES].map((c) => [c.key, c.label])
+);
+
 export const EVIDENCE_GRADE_LABEL: Record<string, string> = {
   screenshot: 'Screenshot-grade',
   statement: 'Statement-grade',

@@ -30,6 +30,7 @@ const Ace = lazy(() => import('./screens/Ace').then((m) => ({ default: m.Ace }))
 // ── Financial domain ──────────────────────────────────────────────────────
 const FinOverview = lazy(() => import('./financial/screens/Overview').then((m) => ({ default: m.Overview })));
 const FinGoals = lazy(() => import('./financial/screens/Goals').then((m) => ({ default: m.Goals })));
+const FinBudget = lazy(() => import('./financial/screens/Budget').then((m) => ({ default: m.Budget })));
 const FinMonthClose = lazy(() => import('./financial/screens/MonthClose').then((m) => ({ default: m.MonthClose })));
 const FinFreeCashEngine = lazy(() => import('./financial/screens/FreeCashEngine').then((m) => ({ default: m.FreeCashEngine })));
 const FinNetWorthBridge = lazy(() => import('./financial/screens/NetWorthBridge').then((m) => ({ default: m.NetWorthBridge })));
@@ -153,6 +154,7 @@ export function App() {
       switch (s) {
         case 'overview': return <FinOverview onMenu={onMenu} onNavigate={financialNavigate} />;
         case 'goals': return <FinGoals onMenu={onMenu} />;
+        case 'budget': return <FinBudget onMenu={onMenu} />;
         case 'month-close': return <FinMonthClose onMenu={onMenu} />;
         case 'free-cash-engine': return <FinFreeCashEngine onMenu={onMenu} />;
         case 'net-worth-bridge': return <FinNetWorthBridge onMenu={onMenu} />;
