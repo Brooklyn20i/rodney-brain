@@ -200,6 +200,135 @@ def get_week_summary(start_date: str | None = None) -> dict:
         return {"error": str(e)}
 
 
+# ── Recovery drivers (what moves Rodney's recovery) ─────────────────────────
+# Mirrors Cadence/web/src/fitness/lib/insights.ts so Kobe can coach against the
+# same numbers the app shows: contrasts + a Welch t-test, association not proof.
+
+_DRV_MIN_N = 20
+_DRV_MIN_DELTA = 2.0
+
+
+def _welch(a: list[float], b: list[float]) -> dict:
+    import statistics as st
+
+    m1 = sum(a) / len(a) if a else 0.0
+    m2 = sum(b) / len(b) if b else 0.0
+    v1 = st.variance(a) if len(a) > 1 else 0.0
+    v2 = st.variance(b) if len(b) > 1 else 0.0
+    se = (v1 / max(1, len(a)) + v2 / max(1, len(b))) ** 0.5
+    t = (m1 - m2) / se if se > 0 else 0.0
+    return {"n_with": len(a), "n_without": len(b), "mean_with": m1, "mean_without": m2, "delta": m1 - m2, "t": t}
+
+
+def _confidence(t: float, n1: int, n2: int) -> str | None:
+    if n1 < _DRV_MIN_N or n2 < _DRV_MIN_N:
+        return None
+    a = abs(t)
+    if a >= 2.8:
+        return "high"
+    if a >= 2.1:
+        return "medium"
+    return None
+
+
+def _shift(iso: str, n: int) -> str:
+    return (dt.date.fromisoformat(iso) + dt.timedelta(days=n)).isoformat()
+
+
+def _finish(cid, label, detail, a, b):
+    c = _welch(a, b)
+    conf = _confidence(c["t"], c["n_with"], c["n_without"])
+    if not conf or abs(c["delta"]) < _DRV_MIN_DELTA:
+        return None
+    sign = "+" if c["delta"] >= 0 else "-"
+    return {
+        "id": cid,
+        "label": label,
+        "detail": detail,
+        "mean_with": round(c["mean_with"], 1),
+        "mean_without": round(c["mean_without"], 1),
+        "delta": round(c["delta"], 1),
+        "n_with": c["n_with"],
+        "n_without": c["n_without"],
+        "confidence": conf,
+        "helps": c["delta"] > 0,
+        "sentence": f"{label}: recovery averages {round(c['mean_with'])}% vs {round(c['mean_without'])}% "
+        f"{detail} ({sign}{abs(round(c['delta']))} pts, {conf} confidence, n={c['n_with']}/{c['n_without']}).",
+    }
+
+
+@mcp.tool()
+def get_recovery_drivers() -> dict:
+    """What moves Rodney's recovery, learned across all his data (Whoop plus
+    workouts, cardio, sauna, nutrition). Each driver contrasts recovery under a
+    condition vs without it, gated by a Welch t-test and a minimum sample so
+    weak/noisy links are held back. Association, not proof. Use these numbers to
+    coach (e.g. protect sleep, ease off after hard days)."""
+    try:
+        recs = bridge.select(
+            "recovery_metrics",
+            "select=date,recovery_pct,strain,sleep_hours&deleted_at=is.null&order=date.asc",
+            limit=5000,
+        )
+        recovery = {r["date"]: float(r["recovery_pct"]) for r in recs if r.get("recovery_pct") is not None}
+        strain = {r["date"]: float(r["strain"]) for r in recs if r.get("strain") is not None}
+        sleep = {r["date"]: float(r["sleep_hours"]) for r in recs if r.get("sleep_hours") is not None}
+
+        def days(table, extra=""):
+            rows = bridge.select(table, f"select=date&deleted_at=is.null{extra}", limit=5000)
+            return {r["date"] for r in rows}
+
+        sauna_d = days("sauna_sessions")
+        cardio_d = days("cardio_sessions")
+        lift_d = days("workouts", "&status=eq.completed")
+        prot_rows = bridge.select("nutrition_logs", "select=date,protein_g&deleted_at=is.null", limit=10000)
+        protein: dict[str, float] = {}
+        for r in prot_rows:
+            protein[r["date"]] = protein.get(r["date"], 0.0) + float(r.get("protein_g") or 0)
+
+        drivers = []
+
+        # Sleep (same night → that morning's recovery)
+        a = [rec for d, rec in recovery.items() if sleep.get(d, 0) >= 7]
+        b = [rec for d, rec in recovery.items() if d in sleep and sleep[d] < 6.5]
+        drv = _finish("sleep", "After 7h+ sleep", "after nights under 6.5h", a, b)
+        if drv:
+            drivers.append(drv)
+
+        # Prior-day strain terciles → next-day recovery
+        sv = sorted(strain.values())
+        if len(sv) >= 6:
+            lo, hi = sv[len(sv) // 3], sv[2 * len(sv) // 3]
+            if hi > lo:
+                a = [rec for d, rec in recovery.items() if strain.get(_shift(d, -1), -1) >= hi]
+                b = [rec for d, rec in recovery.items() if 0 <= strain.get(_shift(d, -1), -1) <= lo]
+                drv = _finish("strain", "After a hard day", "after an easy day", a, b)
+                if drv:
+                    drivers.append(drv)
+
+        # Prior-day behaviours → next-day recovery
+        for cid, dayset, label, detail in [
+            ("sauna", sauna_d, "After a sauna", "otherwise"),
+            ("cardio", cardio_d, "After cardio", "on other days"),
+            ("lift", lift_d, "After lifting", "on non-lifting days"),
+        ]:
+            a = [rec for d, rec in recovery.items() if _shift(d, -1) in dayset]
+            b = [rec for d, rec in recovery.items() if _shift(d, -1) not in dayset and _shift(d, -1) in recovery]
+            drv = _finish(cid, label, detail, a, b)
+            if drv:
+                drivers.append(drv)
+
+        rank = {"high": 2, "medium": 1}
+        drivers.sort(key=lambda d: (rank.get(d["confidence"], 0), abs(d["delta"])), reverse=True)
+        return {
+            "considered_days": len(recovery),
+            "drivers": drivers,
+            "note": "Associations across Rodney's own data, not proof of cause.",
+        }
+    except bridge.FitnessBridgeError as e:
+        return {"error": str(e)}
+
+
 # ── Writing: logging for Rodney ─────────────────────────────────────────────
 
 @mcp.tool()

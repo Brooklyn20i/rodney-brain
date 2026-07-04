@@ -296,21 +296,27 @@ export function loadDemoData(): CadenceFitnessData {
   // has something to show: HRV drifts down (78→55) and resting HR up (52→60)
   // over the span, mirroring a real multi-year decline, with seasonal wobble.
   const REC_DAYS = 730;
+  let prevStrain = 10;
   for (let daysAgo = REC_DAYS; daysAgo >= 0; daysAgo--) {
     const date = addDays(today, -daysAgo);
     const t = (REC_DAYS - daysAgo) / REC_DAYS; // 0 (oldest) → 1 (today)
     const hrvBase = 78 - t * 23; // long decline
     const rhrBase = 52 + t * 8; // long rise
+    const sleepH = Math.max(4, 6.6 + wobble(daysAgo + 2, 1.2));
+    const strain = Math.max(3, 14 - t * 5 + wobble(daysAgo * 2 + 1, 4));
+    // Recovery genuinely depends on the night's sleep and the *previous* day's
+    // strain, so the drivers analysis has a real signal to find in the demo.
+    const rec = 62 + (sleepH - 6.6) * 6 - (prevStrain - 10) * 1.3 + wobble(daysAgo * 3, 9);
     data.recovery_metrics.push(
       stamp(
         {
           id: id('rec'),
           date,
-          recovery_pct: Math.max(15, Math.min(99, Math.round(62 + wobble(daysAgo * 3, 24)))),
-          strain: Math.round(Math.max(3, 14 - t * 5 + wobble(daysAgo * 2 + 1, 4)) * 10) / 10,
+          recovery_pct: Math.max(15, Math.min(99, Math.round(rec))),
+          strain: Math.round(strain * 10) / 10,
           resting_hr: Math.round(rhrBase + wobble(daysAgo + 5, 4)),
           hrv_ms: Math.max(28, Math.round(hrvBase + wobble(daysAgo * 2, 12))),
-          sleep_hours: Math.round(Math.max(4, 6.6 + wobble(daysAgo + 2, 1.2)) * 10) / 10,
+          sleep_hours: Math.round(sleepH * 10) / 10,
           sleep_performance_pct: Math.round(83 + wobble(daysAgo * 4, 12)),
           active_energy_kcal: Math.round(680 + wobble(daysAgo * 5, 260)),
           steps: Math.round(9000 + wobble(daysAgo * 3 + 1, 3500)),
@@ -320,6 +326,7 @@ export function loadDemoData(): CadenceFitnessData {
         date
       )
     );
+    prevStrain = strain;
   }
 
   // ── Nutrition: targets, saved meals, today's + yesterday's log ─────────

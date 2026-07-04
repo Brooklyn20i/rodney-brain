@@ -8,6 +8,7 @@ import {
   trajectory,
   type RecoveryField,
 } from '../lib/fitnessCalc';
+import { recoveryDrivers } from '../lib/insights';
 import { fmtDayShort, fmtNum, SOURCE_LABEL, todayISO } from '../lib/util';
 
 // Recovery over the long haul. Kobe backfilled years of Whoop data; a 14-day
@@ -67,6 +68,19 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
 
   const hrvTraj = useMemo(() => trajectory(rows, 'hrv_ms'), [rows]);
   const rhrTraj = useMemo(() => trajectory(rows, 'resting_hr'), [rows]);
+
+  const driverReport = useMemo(
+    () =>
+      recoveryDrivers({
+        recovery_metrics: data.recovery_metrics,
+        workouts: data.workouts,
+        workout_sets: data.workout_sets,
+        cardio_sessions: data.cardio_sessions,
+        sauna_sessions: data.sauna_sessions,
+        nutrition_logs: data.nutrition_logs,
+      }),
+    [data.recovery_metrics, data.workouts, data.workout_sets, data.cardio_sessions, data.sauna_sessions, data.nutrition_logs]
+  );
 
   if (totalDays === 0) {
     return (
@@ -138,6 +152,36 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
                 ? 'Falling HRV with a rising resting heart rate points to lower recovery capacity over this period — usually reduced training, more stress, or worse sleep. The charts below show when it turned.'
                 : 'Rising HRV with a steady or falling resting heart rate points to improving recovery capacity over this period.'}
             </p>
+          </Card>
+        )}
+
+        {/* What moves your recovery — drivers learned across all your data */}
+        {(driverReport.drivers.length > 0 || driverReport.consideredDays >= 30) && (
+          <Card title="What moves your recovery">
+            {driverReport.drivers.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>{driverReport.note}</p>
+            ) : (
+              <>
+                {driverReport.drivers.map((d) => (
+                  <div key={d.id} className="rec-driver">
+                    <div className="rec-driver-main">
+                      <div className="rec-driver-head">
+                        <span className="rec-driver-label">{d.label}</span>
+                        <span className={`rec-driver-delta ${d.helps ? 'up' : 'down'}`}>
+                          {d.delta >= 0 ? '+' : '−'}
+                          {fmtNum(Math.abs(d.delta))} pts
+                        </span>
+                      </div>
+                      <div className="rec-driver-sub">
+                        {fmtNum(d.meanWith)}% vs {fmtNum(d.meanWithout)}% {d.detail} · {d.nWith}/{d.nWithout} days ·{' '}
+                        <span className={`rec-conf rec-conf-${d.confidence}`}>{d.confidence} confidence</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <p style={{ fontSize: 11, color: 'var(--text3)', margin: '10px 0 0' }}>{driverReport.note}</p>
+              </>
+            )}
           </Card>
         )}
 
