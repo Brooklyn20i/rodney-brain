@@ -30,8 +30,9 @@ export interface AllocationRow {
   cls: AssetClass;
   label: string;
   value: number;
-  // Fraction of NET WORTH (matching the workbook's "% net worth" targets),
-  // not gross assets.
+  // Fraction of gross total assets. The table displays gross asset-class
+  // values plus a total-assets footer, so percentages must reconcile to that
+  // same denominator rather than the lower debt-adjusted net worth.
   pct: number;
   band: { min: number; base: number; max: number };
   status: BandStatus;
@@ -57,9 +58,10 @@ export function allocationRows(
     { cls: 'collectibles', value: latest.collectibles_value },
   ];
 
-  const nw = latest.net_worth;
+  const derivedTotalAssets = values.reduce((sum, row) => sum + row.value, 0);
+  const totalAssets = latest.total_assets > 0 ? latest.total_assets : derivedTotalAssets;
   return values.map(({ cls, value }) => {
-    const pct = nw > 0 ? value / nw : 0;
+    const pct = totalAssets > 0 ? value / totalAssets : 0;
     const band = bandFor(cls);
     const status: BandStatus =
       pct < band.min ? 'below_band' : pct > band.max ? 'above_band' : 'in_band';

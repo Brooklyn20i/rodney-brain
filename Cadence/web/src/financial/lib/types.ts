@@ -224,7 +224,7 @@ export interface AllocationPolicy {
   id: string;
   owner_id: string;
   asset_class: AssetClass;
-  target_min: number; // fraction of net worth, e.g. 0.05
+  target_min: number; // fraction of total assets, e.g. 0.05
   target_base: number;
   target_max: number;
   created_at: string;

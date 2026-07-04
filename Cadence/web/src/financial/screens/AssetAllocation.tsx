@@ -14,7 +14,7 @@ export function AssetAllocation({ onMenu }: { onMenu: () => void }) {
     <>
       <ScreenHeader
         title="Asset Allocation"
-        subtitle="Where net worth actually sits, against your policy bands."
+        subtitle="Where gross assets actually sit, against your policy bands."
         onMenu={onMenu}
       />
       <div className="screen-content">
@@ -25,14 +25,14 @@ export function AssetAllocation({ onMenu }: { onMenu: () => void }) {
             const rows = allocationRows(current, data.allocation_policies);
             const totalAssets = rows.reduce((s, r) => s + r.value, 0);
             return (
-              <Card title="Allocation vs. policy bands (% of net worth)">
+              <Card title="Allocation vs. policy bands (% of total assets)">
                 <div className="cf-table-wrap">
                   <table className="cf-table">
                     <thead>
                       <tr>
                         <th>Asset class</th>
                         <th>Value</th>
-                        <th>% of net worth</th>
+                        <th>% of total assets</th>
                         <th>Target band</th>
                         <th>Status</th>
                       </tr>
