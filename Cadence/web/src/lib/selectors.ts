@@ -2,7 +2,7 @@
 // No React dependencies — data in, arrays out.
 
 import type { WorkItem, Project, ProjectUpdate, Milestone } from './types';
-import { todayStr, addDaysStr, isOverdue } from './util';
+import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
 import { isUserTask } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
@@ -162,6 +162,69 @@ export function getHorizonMarkers(
   }
 
   return markers.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// ── Calendar ──────────────────────────────────────────────────────────────────
+// One flat, dated event stream for the month/agenda calendar. Tasks come from
+// work_items with a due date (the primary content); milestones, project targets
+// and 1:1s ride along on the HorizonMarkers already computed for the Horizon
+// screen, so the two surfaces can never disagree about what's coming up.
+export type CalendarKind = 'task' | 'milestone' | 'target' | 'meeting';
+
+export interface CalendarEvent {
+  id: string;
+  date: string;                 // YYYY-MM-DD (local)
+  kind: CalendarKind;
+  title: string;
+  subtitle: string;
+  done: boolean;
+  overdue: boolean;
+  workItemId?: string;          // set for tasks → open the item editor
+  nav?: 'projects' | 'people';  // set for markers → jump to their screen
+  refId?: string;               // project id / person id for nav
+}
+
+const CAL_KIND_ORDER: Record<CalendarKind, number> = { meeting: 0, milestone: 1, target: 2, task: 3 };
+
+export function getCalendarEvents(items: WorkItem[], markers: HorizonMarker[]): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+
+  for (const w of items) {
+    if (w.deleted_at || !w.due_date) continue;
+    out.push({
+      id: 'wi:' + w.id, date: w.due_date, kind: 'task',
+      title: w.title, subtitle: TYPE_LABEL[w.type] || 'Task',
+      done: w.done, overdue: !w.done && isOverdue(w.due_date),
+      workItemId: w.id,
+    });
+  }
+
+  for (const m of markers) {
+    out.push({
+      id: m.id, date: m.date, kind: m.kind as CalendarKind,
+      title: m.title, subtitle: m.subtitle,
+      done: false, overdue: m.kind !== 'meeting' && isOverdue(m.date),
+      nav: m.nav, refId: m.refId,
+    });
+  }
+
+  // Sort by date, then by kind so a day's meetings sit above its tasks, then by
+  // title for a stable order across renders.
+  return out.sort((a, b) =>
+    a.date.localeCompare(b.date) ||
+    CAL_KIND_ORDER[a.kind] - CAL_KIND_ORDER[b.kind] ||
+    a.title.localeCompare(b.title));
+}
+
+// Group events by their date string for O(1) day lookups in the grid.
+export function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
+  const map = new Map<string, CalendarEvent[]>();
+  for (const e of events) {
+    const bucket = map.get(e.date);
+    if (bucket) bucket.push(e);
+    else map.set(e.date, [e]);
+  }
+  return map;
 }
 
 // ── Project grouping ──────────────────────────────────────────────────────────

@@ -20,6 +20,39 @@ export const addDaysStr = (n: number): string => {
   return localDateStr(d);
 };
 
+// ── Month-grid helpers (calendar) ─────────────────────────────────────────────
+// All local-time so the grid lines up with localDateStr()/todayStr() elsewhere.
+
+// A 6×7 matrix of YYYY-MM-DD strings for the month containing `anchor`, weeks
+// starting Monday (en-AU/European convention, matching the DD/MM formatters).
+// Always 42 cells so the grid height never jumps between months; leading and
+// trailing cells spill into the neighbouring months.
+export function monthGrid(anchor: Date): string[][] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const mondayOffset = (first.getDay() + 6) % 7; // Sun=0→6, Mon=1→0 … Sat=6→5
+  const weeks: string[][] = [];
+  for (let w = 0; w < 6; w++) {
+    const row: string[] = [];
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset + w * 7 + d);
+      row.push(localDateStr(cell));
+    }
+    weeks.push(row);
+  }
+  return weeks;
+}
+
+// First-of-month `Date`, `delta` months from `anchor` (negative = earlier).
+export const addMonths = (anchor: Date, delta: number): Date =>
+  new Date(anchor.getFullYear(), anchor.getMonth() + delta, 1);
+
+// "July 2026" — the only place month names appear (the grid needs a heading).
+export const fmtMonthYear = (d: Date): string =>
+  d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+
+export const isSameMonth = (iso: string, anchor: Date): boolean =>
+  iso.slice(0, 7) === localDateStr(anchor).slice(0, 7);
+
 // ── en-AU numeric display formatters ─────────────────────────────────────────
 // Using 'en-AU' gives DD/MM — never month names ("Jun", "June").
 // Appending T12:00:00 to bare YYYY-MM-DD strings prevents a one-day shift
