@@ -1,7 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
+import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
-import { fmtDayShort, todayISO } from '../lib/util';
+import { fmtDayShort, fmtNum, todayISO } from '../lib/util';
+import { parseWeightCSV, parseWhoopCSV, type BodyImportRow, type RecoveryImportRow } from '../lib/csvImport';
+
+type PendingImport =
+  | { kind: 'recovery'; rows: RecoveryImportRow[]; from: string; to: string; skipped: number; file: string }
+  | { kind: 'body'; rows: BodyImportRow[]; from: string; to: string; skipped: number; file: string };
 
 // How data gets into Cadence Fitness without typing it in: Whoop and Renpho
 // both write into Apple Health, and one Apple Shortcut posts the day's Health
@@ -40,6 +46,73 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
     await navigator.clipboard.writeText(text);
     setCopied(label);
     setTimeout(() => setCopied(''), 2000);
+  };
+
+  // ── Historical backfill (Whoop export CSV / weight history CSV) ─────────
+  const whoopFileRef = useRef<HTMLInputElement>(null);
+  const weightFileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<PendingImport | null>(null);
+  const [importMsg, setImportMsg] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const onCSVPicked = async (kind: 'recovery' | 'body', file: File | undefined) => {
+    if (!file) return;
+    setImportMsg('');
+    setPending(null);
+    const text = await file.text();
+    const parsed = kind === 'recovery' ? parseWhoopCSV(text) : parseWeightCSV(text);
+    if (!parsed.rows.length) {
+      setImportMsg(
+        `Couldn't find any dated rows in ${file.name}. For Whoop use physiological_cycles.csv from the export ZIP; for weight, a CSV with date + weight columns.`
+      );
+      return;
+    }
+    setPending({
+      kind,
+      rows: parsed.rows as never,
+      from: parsed.from!,
+      to: parsed.to!,
+      skipped: parsed.skipped,
+      file: file.name,
+    } as PendingImport);
+  };
+
+  const runImport = async () => {
+    if (!pending || importing) return;
+    setImporting(true);
+    setImportMsg('');
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const ownerId = sess.session?.user?.id;
+      if (!ownerId) throw new Error('Sign in first — imports write to your account.');
+      const table = pending.kind === 'recovery' ? 'recovery_metrics' : 'body_metrics';
+      const source = pending.kind === 'recovery' ? 'whoop' : 'renpho';
+      const payload = pending.rows.map((r) => ({ ...r, owner_id: ownerId, source }));
+      // PostgREST bulk rows must share identical keys, and days can carry
+      // different metrics (e.g. no HRV one night). Group by key signature so
+      // each request is homogeneous and absent fields never null-out
+      // existing values.
+      const groups = new Map<string, Record<string, unknown>[]>();
+      for (const row of payload) {
+        const sig = Object.keys(row).sort().join(',');
+        (groups.get(sig) ?? groups.set(sig, []).get(sig)!).push(row);
+      }
+      for (const rows of groups.values()) {
+        for (let i = 0; i < rows.length; i += 200) {
+          const { error } = await supabase
+            .schema('fitness')
+            .from(table)
+            .upsert(rows.slice(i, i + 200), { onConflict: 'owner_id,date' });
+          if (error) throw new Error(error.message);
+        }
+      }
+      setImportMsg(`✓ Imported ${payload.length} days (${fmtDayShort(pending.from)} – ${fmtDayShort(pending.to)}) from ${pending.file}.`);
+      setPending(null);
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : 'Import failed.');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const sampleBody = `{
@@ -124,6 +197,65 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
               Run the shortcut once manually — the two rows above should flip to <Tag label="today" tone="good" />.
             </li>
           </ol>
+        </Card>
+
+        <Card title="Backfill history (Whoop export / weight CSV)">
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 0 }}>
+            Going back in time: download a <strong>monthly export</strong> from Whoop (Settings → Data export —
+            it arrives as a ZIP; unzip it and import <code>physiological_cycles.csv</code> here), or any weight
+            history CSV with date + weight columns. Days are keyed by date, so re-importing overlapping months
+            is safe. You can also just send the file to <strong>Kobe</strong> in chat — he has bulk-import
+            tools and will map whatever format it's in.
+          </p>
+          <input
+            ref={whoopFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              onCSVPicked('recovery', e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+          <input
+            ref={weightFileRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              onCSVPicked('body', e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" onClick={() => whoopFileRef.current?.click()}>
+              Import Whoop CSV…
+            </button>
+            <button className="btn btn-secondary" onClick={() => weightFileRef.current?.click()}>
+              Import weight CSV…
+            </button>
+          </div>
+          {pending && (
+            <div className="cf-callout" style={{ marginTop: 12 }}>
+              <strong>{pending.file}</strong>: {fmtNum(pending.rows.length)} days of{' '}
+              {pending.kind === 'recovery' ? 'recovery/sleep/strain' : 'weight'} data,{' '}
+              {fmtDayShort(pending.from)} – {fmtDayShort(pending.to)}
+              {pending.skipped > 0 ? ` (${pending.skipped} unparseable lines skipped)` : ''}.
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button className="btn btn-primary" onClick={runImport} disabled={importing}>
+                  {importing ? 'Importing…' : `Import ${fmtNum(pending.rows.length)} days`}
+                </button>
+                <button className="btn btn-ghost" onClick={() => setPending(null)} disabled={importing}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {importMsg && (
+            <p style={{ fontSize: 13, marginTop: 10, color: importMsg.startsWith('✓') ? 'var(--green)' : 'var(--red)' }}>
+              {importMsg}
+            </p>
+          )}
         </Card>
 
         <Card title="Manual fallback">

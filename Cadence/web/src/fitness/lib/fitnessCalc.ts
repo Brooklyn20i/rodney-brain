@@ -187,6 +187,148 @@ export function targetFor(targets: NutritionTarget[], date: string): NutritionTa
   return applicable.length ? applicable[applicable.length - 1] : null;
 }
 
+// ── Energy balance (MacroFactor-style) ─────────────────────────────────────
+// The honest way to know your deficit/surplus: infer maintenance (TDEE) from
+// what you actually ate vs how your trend weight actually moved, instead of
+// trusting a formula or a watch. Over a window:
+//   TDEE ≈ avg intake − (Δ trend-weight kg × 7700 kcal) / days
+// Requires consistent food logging + regular weigh-ins to be meaningful.
+
+const KCAL_PER_KG = 7700;
+
+export interface EnergyEstimate {
+  tdee: number; // estimated maintenance kcal/day
+  avgIntake: number; // average logged kcal/day (logged days only)
+  weightDeltaKg: number; // trend weight change across the window
+  spanDays: number; // days between first and last trend point used
+  loggedDays: number; // days with at least one food log in the window
+  reliable: boolean; // enough data to take the number seriously
+}
+
+export function estimateTDEE(
+  logs: NutritionLog[],
+  metrics: BodyMetric[],
+  endDate: string,
+  windowDays = 21
+): EnergyEstimate | null {
+  const startDate = (() => {
+    const d = new Date(endDate + 'T12:00:00');
+    d.setDate(d.getDate() - (windowDays - 1));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+
+  const trend = weightTrend(metrics).filter((p) => p.date >= startDate && p.date <= endDate);
+  if (trend.length < 2) return null;
+  const first = trend[0];
+  const last = trend[trend.length - 1];
+  const spanDays = Math.round(
+    (new Date(last.date + 'T12:00:00').getTime() - new Date(first.date + 'T12:00:00').getTime()) / 86_400_000
+  );
+  if (spanDays < 7) return null;
+
+  const byDay = new Map<string, number>();
+  for (const l of logs) {
+    if (l.date >= first.date && l.date <= last.date) {
+      byDay.set(l.date, (byDay.get(l.date) ?? 0) + Number(l.calories));
+    }
+  }
+  const loggedDays = byDay.size;
+  if (loggedDays === 0) return null;
+  const avgIntake = [...byDay.values()].reduce((a, b) => a + b, 0) / loggedDays;
+
+  const weightDeltaKg = last.avg - first.avg;
+  const tdee = avgIntake - (weightDeltaKg * KCAL_PER_KG) / spanDays;
+
+  return {
+    tdee: Math.round(tdee),
+    avgIntake: Math.round(avgIntake),
+    weightDeltaKg,
+    spanDays,
+    loggedDays,
+    // ~half the window logged and weigh-ins spanning at least 10 days:
+    // below that the arithmetic still works but the number is noise.
+    reliable: loggedDays >= Math.min(10, windowDays / 2) && spanDays >= 10,
+  };
+}
+
+export interface WeekDayReport {
+  date: string;
+  calories: number; // 0 if nothing logged
+  protein_g: number;
+  logged: boolean;
+  target: number | null; // calorie target in force that day
+  delta: number | null; // calories − target (needs both)
+}
+
+export interface WeekReport {
+  start: string;
+  end: string;
+  days: WeekDayReport[];
+  loggedDays: number;
+  avgIntake: number | null; // logged days only
+  avgProtein: number | null;
+  onTargetDays: number; // logged days at or under target (cut logic)
+  weightDeltaKg: number | null; // trend change across the week
+  tdee: number | null; // estimate as of week end
+  avgDailyBalance: number | null; // avgIntake − tdee
+  projectedKgPerWeek: number | null; // what that balance implies
+}
+
+// One week of nutrition vs targets vs scale movement — the weekly review.
+export function weekReport(
+  logs: NutritionLog[],
+  targets: NutritionTarget[],
+  metrics: BodyMetric[],
+  weekStart: string
+): WeekReport {
+  const { start, end } = weekOf(weekStart);
+  const days: WeekDayReport[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start + 'T12:00:00');
+    d.setDate(d.getDate() + i);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dayLogs = logs.filter((l) => l.date === date);
+    const calories = dayLogs.reduce((s, l) => s + Number(l.calories), 0);
+    const protein = dayLogs.reduce((s, l) => s + Number(l.protein_g), 0);
+    const t = targetFor(targets, date);
+    days.push({
+      date,
+      calories,
+      protein_g: protein,
+      logged: dayLogs.length > 0,
+      target: t ? t.calories : null,
+      delta: t && dayLogs.length > 0 ? calories - t.calories : null,
+    });
+  }
+
+  const logged = days.filter((d) => d.logged);
+  const avgIntake = logged.length ? Math.round(logged.reduce((s, d) => s + d.calories, 0) / logged.length) : null;
+  const avgProtein = logged.length ? Math.round(logged.reduce((s, d) => s + d.protein_g, 0) / logged.length) : null;
+  const onTargetDays = logged.filter((d) => d.delta !== null && d.delta <= 0).length;
+
+  const trend = weightTrend(metrics).filter((p) => p.date >= start && p.date <= end);
+  const weightDeltaKg = trend.length >= 2 ? trend[trend.length - 1].avg - trend[0].avg : null;
+
+  const est = estimateTDEE(logs, metrics, end);
+  const tdee = est && est.reliable ? est.tdee : null;
+  const avgDailyBalance = tdee !== null && avgIntake !== null ? avgIntake - tdee : null;
+  const projectedKgPerWeek = avgDailyBalance !== null ? (avgDailyBalance * 7) / KCAL_PER_KG : null;
+
+  return {
+    start,
+    end,
+    days,
+    loggedDays: logged.length,
+    avgIntake,
+    avgProtein,
+    onTargetDays,
+    weightDeltaKg,
+    tdee,
+    avgDailyBalance,
+    projectedKgPerWeek,
+  };
+}
+
 // ── Program cycles ──────────────────────────────────────────────────────────
 
 export interface CyclePosition {

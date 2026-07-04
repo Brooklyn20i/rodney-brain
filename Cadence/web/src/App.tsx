@@ -1,5 +1,7 @@
 import { useMemo, useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useCadence } from './lib/store';
+import { useCadenceFitness } from './fitness/lib/store';
+import { useCadenceFinancial } from './financial/lib/store';
 import { isOverdue } from './lib/util';
 import { isFiled } from './lib/tasks';
 import { Login } from './components/Login';
@@ -64,6 +66,17 @@ const DEFAULT_SCREEN: Record<Domain, string> = {
 
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing, canEdit } = useCadence();
+  // Fitness/Financial have their own data stores; without this their save
+  // failures were invisible (no banner anywhere) — a failed write just looked
+  // like the tap did nothing.
+  const fitness = useCadenceFitness();
+  const financial = useCadenceFinancial();
+  const domainSyncError = syncError || fitness.syncError || financial.syncError;
+  const clearDomainSyncError = () => {
+    clearSyncError();
+    fitness.clearSyncError();
+    financial.clearSyncError();
+  };
   const [screen, setScreen] = useState('today');
   const [focusId, setFocusId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -76,13 +89,13 @@ export function App() {
 
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!syncError) return;
+    if (!domainSyncError) return;
     if (errorTimer.current) clearTimeout(errorTimer.current);
-    errorTimer.current = setTimeout(() => clearSyncError(), 30000);
+    errorTimer.current = setTimeout(() => clearDomainSyncError(), 30000);
     return () => { if (errorTimer.current) clearTimeout(errorTimer.current); };
-  // clearSyncError is stable (useCallback); omitting avoids double-timer bug.
+  // the clear callbacks are stable (useCallback); omitting avoids double-timer bug.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncError]);
+  }, [domainSyncError]);
 
   // Handle ?invite=<token> on load. Stash token for post-login processing.
   const inviteToken = new URLSearchParams(window.location.search).get('invite');
@@ -210,10 +223,10 @@ export function App() {
       {!isOffline && !isSyncing && pendingCount > 0 && (
         <div className="syncing-banner">{pendingCount} change{pendingCount === 1 ? '' : 's'} synced</div>
       )}
-      {syncError && (
+      {domainSyncError && (
         <div className="sync-error-banner">
-          ⚠ {syncError}
-          <button className="sync-error-dismiss" onClick={clearSyncError}>✕</button>
+          ⚠ {domainSyncError}
+          <button className="sync-error-dismiss" onClick={clearDomainSyncError}>✕</button>
         </div>
       )}
       {inviteBanner && (

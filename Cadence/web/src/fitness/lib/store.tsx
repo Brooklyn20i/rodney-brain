@@ -22,6 +22,9 @@ export interface Ctx {
   remove: (table: Table, id: string) => Promise<void>;
   syncError: string | null;
   clearSyncError: () => void;
+  // Writes currently in flight — lets screens show a truthful "Saving… /
+  // Saved ✓" indicator instead of leaving saves invisible.
+  saving: boolean;
 }
 
 export const CadenceFitnessCtx = createContext<Ctx | null>(null);
@@ -40,6 +43,15 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [data, setData] = useState<CadenceFitnessData>(() => (DEMO_MODE ? loadDemoData() : emptyData()));
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [inflight, setInflight] = useState(0);
+  const trackWrite = async <T,>(op: () => PromiseLike<T>): Promise<T> => {
+    setInflight((n) => n + 1);
+    try {
+      return await op();
+    } finally {
+      setInflight((n) => Math.max(0, n - 1));
+    }
+  };
 
   const reload = useCallback(async (table?: Table) => {
     if (DEMO_MODE) return;
@@ -133,12 +145,14 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     }
 
     const ownedRow = ownerId ? { owner_id: ownerId, ...stamped } : stamped;
-    const { data: d, error } = await supabase
-      .schema('fitness')
-      .from(table as string)
-      .insert(ownedRow)
-      .select()
-      .single();
+    const { data: d, error } = await trackWrite(() =>
+      supabase
+        .schema('fitness')
+        .from(table as string)
+        .insert(ownedRow)
+        .select()
+        .single()
+    );
     if (error) {
       setSyncError(error.message || 'Save failed');
       throw error;
@@ -158,13 +172,15 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       return { ...found, ...patch } as Row<K>;
     }
 
-    const { data: d, error } = await supabase
-      .schema('fitness')
-      .from(table as string)
-      .update(patch as any)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data: d, error } = await trackWrite(() =>
+      supabase
+        .schema('fitness')
+        .from(table as string)
+        .update(patch as any)
+        .eq('id', id)
+        .select()
+        .single()
+    );
     if (error) {
       setSyncError(error.message || 'Save failed');
       throw error;
@@ -176,11 +192,13 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   const remove = async (table: Table, id: string): Promise<void> => {
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (DEMO_MODE) return;
-    const { error } = await supabase
-      .schema('fitness')
-      .from(table as string)
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    const { error } = await trackWrite(() =>
+      supabase
+        .schema('fitness')
+        .from(table as string)
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id)
+    );
     if (error) {
       setSyncError(error.message || 'Delete failed');
       throw error;
@@ -199,6 +217,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         remove,
         syncError,
         clearSyncError,
+        saving: inflight > 0,
       }}
     >
       {children}

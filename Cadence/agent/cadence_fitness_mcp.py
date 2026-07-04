@@ -256,6 +256,75 @@ def log_recovery_metric(
         return {"error": str(e)}
 
 
+# Historical backfill: Rodney sends Kobe a Whoop monthly export (ZIP of CSVs)
+# or a weight/scale history; Kobe parses whatever the format is and calls
+# these with clean rows. Upserts key on (owner_id, date), so re-importing the
+# same export -- or overlapping months -- is always safe.
+
+_RECOVERY_KEYS = {
+    "recovery_pct", "strain", "sleep_hours", "sleep_performance_pct",
+    "hrv_ms", "resting_hr", "active_energy_kcal", "steps", "notes",
+}
+_BODY_KEYS = {"weight_kg", "body_fat_pct", "muscle_mass_kg", "notes"}
+_BULK_CHUNK = 200
+
+
+def _bulk_upsert(table: str, rows: list[dict], allowed: set[str], default_source: str) -> dict:
+    owner = bridge.discover_owner_id()
+    clean: list[dict] = []
+    skipped: list[str] = []
+    for i, r in enumerate(rows):
+        date = str(r.get("date", ""))[:10]
+        if len(date) != 10:
+            skipped.append(f"row {i}: missing/invalid date")
+            continue
+        row = {"owner_id": owner, "date": date, "source": r.get("source", default_source)}
+        for k in allowed:
+            if r.get(k) is not None:
+                row[k] = r[k]
+        if len(row) <= 3:
+            skipped.append(f"row {i} ({date}): no metric fields")
+            continue
+        clean.append(row)
+    # PostgREST bulk rows must share identical keys; group by key signature
+    # so mixed-completeness days don't fail the request (or null each other).
+    groups: dict[str, list[dict]] = {}
+    for row in clean:
+        groups.setdefault(",".join(sorted(row)), []).append(row)
+    written = 0
+    for rows_group in groups.values():
+        for start in range(0, len(rows_group), _BULK_CHUNK):
+            chunk = rows_group[start : start + _BULK_CHUNK]
+            bridge.upsert(table, chunk, on_conflict="owner_id,date")  # type: ignore[arg-type]
+            written += len(chunk)
+    return {"written": written, "skipped": skipped[:20], "skipped_count": len(skipped)}
+
+
+@mcp.tool()
+def bulk_upsert_recovery_metrics(rows: list[dict]) -> dict:
+    """Backfill many days of Whoop/recovery history at once (e.g. from Rodney's
+    monthly Whoop export ZIP). Each row: {"date": "YYYY-MM-DD"} plus any of
+    recovery_pct, strain, sleep_hours, sleep_performance_pct, hrv_ms,
+    resting_hr, active_energy_kcal, steps, notes, source (default 'whoop').
+    One row per day, upserted on (owner_id, date) -- re-imports are safe."""
+    try:
+        return _bulk_upsert("recovery_metrics", rows, _RECOVERY_KEYS, "whoop")
+    except bridge.FitnessBridgeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def bulk_upsert_body_metrics(rows: list[dict]) -> dict:
+    """Backfill many days of scale history at once (Renpho export, spreadsheet,
+    etc.). Each row: {"date": "YYYY-MM-DD"} plus any of weight_kg,
+    body_fat_pct, muscle_mass_kg, notes, source (default 'renpho').
+    One row per day, upserted on (owner_id, date) -- re-imports are safe."""
+    try:
+        return _bulk_upsert("body_metrics", rows, _BODY_KEYS, "renpho")
+    except bridge.FitnessBridgeError as e:
+        return {"error": str(e)}
+
+
 @mcp.tool()
 def log_nutrition(
     name: str,

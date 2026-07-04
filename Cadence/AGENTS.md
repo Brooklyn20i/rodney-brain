@@ -87,6 +87,18 @@ super app via one agent account (`rbalech+cadence-kobe@gmail.com`), one grant
 per schema. The Hermes MCP servers are registered as `cadence`,
 `cadence_fitness` and `cadence_financial` in `~/.hermes/config.yaml`.
 
+**Backfilling Whoop / weight history**: Rodney can download a monthly export
+from Whoop (a ZIP whose useful file is `physiological_cycles.csv`) and scale
+history from Renpho. Two ways in, both idempotent (upsert on owner_id+date, so
+overlapping re-imports are safe):
+1. **Direct**: Fitness → Sync → "Backfill history" imports the CSVs in-app.
+2. **Via Kobe**: send the ZIP/CSV/PDF to Kobe; the fitness MCP server exposes
+   `bulk_upsert_recovery_metrics(rows)` and `bulk_upsert_body_metrics(rows)`
+   (`Cadence/agent/cadence_fitness_mcp.py`) — Kobe parses whatever format he
+   was handed into `{date, metric...}` rows and calls those. Column names in
+   vendor exports drift between versions, which is why the tools take clean
+   rows and the parsing intelligence stays in the agent.
+
 **Moving real Financial data**: if you already had real entries in the
 standalone Cadence Financial app's own Supabase project, that data does not
 move automatically — `Cadence/backend/FINANCIAL_DATA_MERGE_RUNBOOK.md` is an

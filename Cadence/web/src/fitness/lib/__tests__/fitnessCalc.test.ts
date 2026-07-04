@@ -3,6 +3,7 @@ import {
   cyclePosition,
   dayNutrition,
   epley1RM,
+  estimateTDEE,
   lastSetsForExercise,
   nextProgramDay,
   prsByExercise,
@@ -11,6 +12,7 @@ import {
   trendDelta,
   weekOf,
   weeklySetsByMuscle,
+  weekReport,
   weightTrend,
   workoutTonnage,
 } from '../fitnessCalc';
@@ -188,6 +190,82 @@ describe('dayNutrition / targetFor', () => {
     expect(targetFor(targets, '2026-07-03')!.phase).toBe('cut');
     expect(targetFor(targets, '2026-03-01')!.phase).toBe('bulk');
     expect(targetFor(targets, '2025-12-01')).toBeNull();
+  });
+});
+
+describe('estimateTDEE / weekReport', () => {
+  // 21 days of complete logging at 2500 kcal/day with weight dead flat →
+  // maintenance should come back ≈ 2500.
+  const flatMetrics: BodyMetric[] = Array.from({ length: 21 }, (_, i) => ({
+    id: `bm${i}`,
+    date: `2026-06-${String(i + 1).padStart(2, '0')}`,
+    weight_kg: 90,
+    body_fat_pct: null,
+    muscle_mass_kg: null,
+    source: 'renpho' as const,
+    notes: '',
+    ...base,
+  }));
+  const steadyLogs: NutritionLog[] = Array.from({ length: 21 }, (_, i) => ({
+    id: `nl${i}`,
+    date: `2026-06-${String(i + 1).padStart(2, '0')}`,
+    meal: 'dinner' as const,
+    name: 'Day of food',
+    calories: 2500,
+    protein_g: 180,
+    carbs_g: 250,
+    fat_g: 80,
+    notes: '',
+    ...base,
+  }));
+
+  it('flat weight at steady intake → TDEE ≈ intake', () => {
+    const est = estimateTDEE(steadyLogs, flatMetrics, '2026-06-21');
+    expect(est).not.toBeNull();
+    expect(est!.reliable).toBe(true);
+    expect(est!.tdee).toBe(2500);
+    expect(est!.weightDeltaKg).toBeCloseTo(0, 5);
+  });
+
+  it('losing weight at steady intake → TDEE above intake (a real deficit)', () => {
+    // ~0.5kg lost across the window at 2500/day → TDEE ≈ 2500 + 0.5*7700/20
+    const losing = flatMetrics.map((m, i) => ({ ...m, weight_kg: 90 - i * 0.025 }));
+    const est = estimateTDEE(steadyLogs, losing, '2026-06-21');
+    expect(est).not.toBeNull();
+    expect(est!.tdee).toBeGreaterThan(2500);
+    expect(est!.tdee).toBeLessThan(2800);
+  });
+
+  it('too little data → null or unreliable', () => {
+    expect(estimateTDEE([], [], '2026-06-21')).toBeNull();
+    const twoDays = flatMetrics.slice(0, 2);
+    expect(estimateTDEE(steadyLogs, twoDays, '2026-06-21')).toBeNull(); // span < 7d
+    const sparse = estimateTDEE(steadyLogs.slice(0, 3), flatMetrics, '2026-06-21');
+    expect(sparse!.reliable).toBe(false); // only 3 logged days
+  });
+
+  it('weekReport aggregates days, adherence and balance', () => {
+    const targets: NutritionTarget[] = [
+      { id: 't', effective_from: '2026-01-01', phase: 'cut', calories: 2600, protein_g: 190, carbs_g: 240, fat_g: 80, notes: '', ...base },
+    ];
+    // Week of Mon 15 Jun – Sun 21 Jun, fully logged at 2500 (all under 2600).
+    const r = weekReport(steadyLogs, targets, flatMetrics, '2026-06-17');
+    expect(r.start).toBe('2026-06-15');
+    expect(r.end).toBe('2026-06-21');
+    expect(r.loggedDays).toBe(7);
+    expect(r.avgIntake).toBe(2500);
+    expect(r.onTargetDays).toBe(7);
+    expect(r.weightDeltaKg).toBeCloseTo(0, 5);
+    expect(r.tdee).toBe(2500);
+    expect(r.avgDailyBalance).toBe(0);
+    expect(r.projectedKgPerWeek).toBeCloseTo(0, 5);
+  });
+
+  it('weekReport with nothing logged reports empty days, not zeros-as-data', () => {
+    const r = weekReport([], [], [], '2026-06-17');
+    expect(r.loggedDays).toBe(0);
+    expect(r.avgIntake).toBeNull();
+    expect(r.days.every((d) => !d.logged)).toBe(true);
   });
 });
 

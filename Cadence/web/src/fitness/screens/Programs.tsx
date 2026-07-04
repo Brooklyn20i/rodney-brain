@@ -33,9 +33,12 @@ export function Programs({ onMenu }: { onMenu: () => void }) {
     setOpenId(p.id);
   };
 
+  // Switching programs is non-destructive: the previous active one drops back
+  // to draft so you can flip between programs whenever you like. Archiving is
+  // an explicit choice via the status selector.
   const setActive = async (p: Program) => {
     for (const other of data.programs.filter((x) => x.status === 'active' && x.id !== p.id)) {
-      await update('programs', other.id, { status: 'archived' });
+      await update('programs', other.id, { status: 'draft' });
     }
     await update('programs', p.id, { status: 'active', start_date: p.start_date || todayISO() });
   };

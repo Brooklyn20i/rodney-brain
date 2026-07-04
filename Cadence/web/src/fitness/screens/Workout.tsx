@@ -9,12 +9,38 @@ import type { ProgramDay, WorkoutSet } from '../lib/types';
 // sets with weight/reps, see what you did last time, and run a rest timer.
 // On a phone it opens in full-screen focus mode (one exercise at a time, big
 // touch targets) like Whoop / MacroFactor; a List toggle shows everything.
+// Default rest for exercises without a program slot (ad-hoc sessions).
+const REST_DEFAULT_KEY = 'cadence-fitness:rest-default';
+const REST_PRESETS = [60, 90, 120, 180, 300];
+const fmtRest = (s: number) => (s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
-  const { data, insert, update, remove } = useCadenceFitness();
+  const { data, insert, update, remove, saving } = useCadenceFitness();
   const today = todayISO();
 
   const active = data.workouts.find((w) => w.status === 'in_progress');
   const activeProgram = data.programs.find((p) => p.status === 'active');
+
+  // Rest default for slot-less exercises; user-adjustable, persisted locally.
+  const [restDefault, setRestDefault] = useState(() => Number(localStorage.getItem(REST_DEFAULT_KEY)) || 120);
+  const changeRestDefault = (s: number) => {
+    setRestDefault(s);
+    localStorage.setItem(REST_DEFAULT_KEY, String(s));
+  };
+  // Which exercise's rest picker is open (exercise id or null).
+  const [restPickerFor, setRestPickerFor] = useState<string | null>(null);
+
+  // Switch the running program without touching the others' history: the
+  // previous active program goes back to draft (NOT archived), so you can
+  // flip between programs at any time.
+  const switchProgram = async (programId: string) => {
+    const target = data.programs.find((p) => p.id === programId);
+    if (!target || target.status === 'active') return;
+    for (const other of data.programs.filter((x) => x.status === 'active' && x.id !== programId)) {
+      await update('programs', other.id, { status: 'draft' });
+    }
+    await update('programs', programId, { status: 'active', start_date: target.start_date || today });
+  };
 
   // Focus (gym) mode: default on for phones, off on desktop. Toggleable.
   const [gymMode, setGymMode] = useState(
@@ -154,7 +180,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     await commitSet(set, { done });
     if (done) {
       const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
-      startRest(slot?.rest_seconds ?? 120);
+      startRest(slot?.rest_seconds ?? restDefault);
       // In focus mode, glide to the next exercise once this one's sets are all done.
       const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
       if (gymMode && others.length > 0 && others.every((x) => x.done)) {
@@ -237,11 +263,27 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       : [];
     const suggested = activeProgram ? nextProgramDay(days, data.workouts, activeProgram.id) : null;
     const pos = activeProgram ? cyclePosition(activeProgram, today) : null;
+    const switchable = data.programs.filter((p) => p.status === 'draft' || p.status === 'active');
 
     return (
       <>
         <ScreenHeader title="Workout" subtitle="Start today's session." onMenu={onMenu} />
         <div className="screen-content">
+          {switchable.length > 1 && (
+            <div className="wo-program-switch">
+              <label className="field" style={{ margin: 0 }}>
+                Program
+              </label>
+              <select value={activeProgram?.id ?? ''} onChange={(e) => e.target.value && switchProgram(e.target.value)}>
+                {!activeProgram && <option value="">Choose…</option>}
+                {switchable.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {activeProgram ? (
             <>
               <Card
@@ -313,7 +355,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               {slot.target_rpe ? ` · RPE ${slot.target_rpe}` : ''}
             </span>
           )}
-          {slot && <span className="wo-chip">Rest {Math.round(slot.rest_seconds / 60)}m</span>}
+          <button
+            className="wo-chip wo-chip-btn"
+            onClick={() => setRestPickerFor(restPickerFor === exerciseId ? null : exerciseId)}
+            aria-expanded={restPickerFor === exerciseId}
+          >
+            Rest {fmtRest(slot ? slot.rest_seconds : restDefault)} ▾
+          </button>
           <span className="wo-chip wo-chip-last">
             {last
               ? `Last ${fmtDayShort(last.date)}: ${last.sets
@@ -322,6 +370,24 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               : 'First time'}
           </span>
         </div>
+        {restPickerFor === exerciseId && (
+          <div className="wo-rest-picker">
+            {REST_PRESETS.map((s) => (
+              <button
+                key={s}
+                className={`cd-dur ${(slot ? slot.rest_seconds : restDefault) === s ? 'active' : ''}`}
+                onClick={async () => {
+                  if (slot) await update('program_exercises', slot.id, { rest_seconds: s });
+                  else changeRestDefault(s);
+                  setRestPickerFor(null);
+                }}
+              >
+                {fmtRest(s)}
+              </button>
+            ))}
+            <span className="wo-rest-note">{slot ? 'Saved to this exercise in your program' : 'Default for ad-hoc exercises'}</span>
+          </div>
+        )}
         {slot?.notes && <div className="wo-note">{slot.notes}</div>}
         <div className={`wo-set-labels ${big ? 'gym' : ''}`}>
           <span>Set</span>
@@ -488,6 +554,18 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         <span className="rest-timer-time">
           {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
         </span>
+        {restLeft > 0 && (
+          <button
+            className="rest-timer-skip"
+            onClick={() => {
+              restEndsAt.current = (restEndsAt.current ?? Date.now()) + 30_000;
+              setRestTotal((t) => t + 30);
+              setRestLeft((l) => (l ?? 0) + 30);
+            }}
+          >
+            +30s
+          </button>
+        )}
         <button className="rest-timer-skip" onClick={stopRest}>
           {restLeft <= 0 ? 'Done' : 'Skip'}
         </button>
@@ -502,7 +580,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <>
       <ScreenHeader
         title={active.name || 'Session'}
-        subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets`}
+        subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets · ${saving ? 'saving…' : 'saved ✓'}`}
         onMenu={onMenu}
       >
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>

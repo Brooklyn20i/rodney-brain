@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
-import { dayNutrition, targetFor } from '../lib/fitnessCalc';
+import { dayNutrition, estimateTDEE, targetFor, weekReport } from '../lib/fitnessCalc';
 import { addDays, fmtDayShort, fmtNum, MEAL_LABEL, MEALS, PHASE_LABEL, todayISO } from '../lib/util';
 import type { MealType, NutritionPhase } from '../lib/types';
 
@@ -45,6 +45,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const logs = data.nutrition_logs.filter((l) => l.date === date);
   const totals = dayNutrition(data.nutrition_logs, date);
   const target = targetFor(data.nutrition_targets, date);
+
+  // Energy balance: maintenance inferred from intake vs trend weight
+  // (MacroFactor's loop), and a weekly review with per-day adherence.
+  const energy = estimateTDEE(data.nutrition_logs, data.body_metrics, date);
+  const [weekAnchor, setWeekAnchor] = useState(todayISO());
+  const week = weekReport(data.nutrition_logs, data.nutrition_targets, data.body_metrics, weekAnchor);
 
   // ── Photo logging ─────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -281,6 +287,124 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               ))}
           </Card>
         )}
+
+        <Card
+          title="Energy balance"
+          actions={
+            energy?.reliable ? (
+              <Tag label={`Maintenance ≈ ${fmtNum(energy.tdee)} kcal`} tone="info" />
+            ) : undefined
+          }
+        >
+          {energy?.reliable ? (
+            (() => {
+              const balance = totals.calories - energy.tdee;
+              const cutting = balance < 0;
+              return (
+                <>
+                  <p style={{ fontSize: 14, margin: '0 0 6px' }}>
+                    Today so far:{' '}
+                    <strong style={{ color: cutting ? 'var(--green)' : 'var(--red)' }}>
+                      {cutting ? `${fmtNum(-balance)} kcal deficit` : `${fmtNum(balance)} kcal surplus`}
+                    </strong>{' '}
+                    vs your estimated maintenance.
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text2)', margin: 0 }}>
+                    Estimated from {energy.loggedDays} logged days and your weight trend over the last{' '}
+                    {energy.spanDays} days (avg intake {fmtNum(energy.avgIntake)} kcal,{' '}
+                    {energy.weightDeltaKg <= 0 ? '' : '+'}
+                    {fmtNum(energy.weightDeltaKg, 2)}kg trend). A steady 500 kcal daily deficit ≈ −0.45kg/week.
+                  </p>
+                </>
+              );
+            })()
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
+              Log food most days and weigh in regularly and Cadence will infer your true maintenance
+              calories from intake vs weight trend — no formulas.{' '}
+              {energy
+                ? `So far: ${energy.loggedDays} logged days across ${energy.spanDays} days of weigh-ins.`
+                : 'No weigh-in trend yet — add weight on the Body screen (or via Sync).'}
+            </p>
+          )}
+        </Card>
+
+        <Card
+          title="This week"
+          actions={
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setWeekAnchor(addDays(week.start, -1))}>
+                ←
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
+                {fmtDayShort(week.start)} – {fmtDayShort(week.end)}
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={week.end >= todayISO()}
+                onClick={() => setWeekAnchor(addDays(week.end, 1))}
+              >
+                →
+              </button>
+            </span>
+          }
+        >
+          <div className="nu-week-bars">
+            {week.days.map((d) => {
+              const max = Math.max(d.target ?? 0, d.calories, 1);
+              const pct = Math.round((d.calories / max) * 100);
+              const over = d.delta !== null && d.delta > 0;
+              return (
+                <div key={d.date} className="nu-week-day" title={`${fmtDayShort(d.date)}: ${fmtNum(d.calories)} kcal${d.target ? ` / ${fmtNum(d.target)}` : ''}`}>
+                  <div className="nu-week-track">
+                    <div
+                      className={`nu-week-fill ${!d.logged ? 'empty' : over ? 'over' : 'under'}`}
+                      style={{ height: `${d.logged ? Math.max(6, pct) : 0}%` }}
+                    />
+                    {d.target !== null && <div className="nu-week-goal" style={{ bottom: `${Math.min(100, (d.target / max) * 100)}%` }} />}
+                  </div>
+                  <span className="nu-week-label">{fmtDayShort(d.date).slice(0, 2)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="cf-table-wrap">
+            <table className="cf-table">
+              <tbody>
+                <tr>
+                  <td>Days logged</td>
+                  <td>{week.loggedDays}/7</td>
+                </tr>
+                <tr>
+                  <td>Average intake</td>
+                  <td>{week.avgIntake !== null ? `${fmtNum(week.avgIntake)} kcal · P${fmtNum(week.avgProtein ?? 0)}g` : '—'}</td>
+                </tr>
+                <tr>
+                  <td>Days at/under target</td>
+                  <td>{week.loggedDays ? `${week.onTargetDays}/${week.loggedDays}` : '—'}</td>
+                </tr>
+                <tr>
+                  <td>Weight trend this week</td>
+                  <td>
+                    {week.weightDeltaKg !== null
+                      ? `${week.weightDeltaKg >= 0 ? '+' : ''}${fmtNum(week.weightDeltaKg, 2)}kg`
+                      : '—'}
+                  </td>
+                </tr>
+                <tr className="cf-total">
+                  <td>Average daily balance</td>
+                  <td>
+                    {week.avgDailyBalance !== null
+                      ? `${week.avgDailyBalance >= 0 ? '+' : ''}${fmtNum(week.avgDailyBalance)} kcal (${
+                          week.projectedKgPerWeek! >= 0 ? '+' : ''
+                        }${fmtNum(week.projectedKgPerWeek!, 2)}kg/wk)`
+                      : 'needs maintenance estimate'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
         <Card title="Log from a photo">
           <input
