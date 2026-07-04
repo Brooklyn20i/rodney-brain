@@ -24,6 +24,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   // ── Rest timer ──────────────────────────────────────────────────────────
   const [restLeft, setRestLeft] = useState<number | null>(null);
+  const [restTotal, setRestTotal] = useState(0);
   const restEndsAt = useRef<number | null>(null);
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -42,6 +43,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   }, []);
   const startRest = (seconds: number) => {
     restEndsAt.current = Date.now() + seconds * 1000;
+    setRestTotal(seconds);
     setRestLeft(seconds);
   };
   const stopRest = () => {
@@ -274,30 +276,39 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       .sort((a, b) => a.set_number - b.set_number);
     const slot = daySlots.find((s) => s.exercise_id === exerciseId);
     const last = lastSetsForExercise(data.workout_sets, data.workouts, exerciseId, active.id);
+    const doneRows = rows.filter((s) => s.done).length;
     return (
       <div key={exerciseId} className={`wo-exercise ${big ? 'gym' : ''}`}>
         <div className="wo-exercise-head">
           <span className="wo-exercise-name">{exName(exerciseId)}</span>
-          {slot && (
-            <span className="wo-exercise-target">
-              {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
-              {slot.target_rpe ? ` @ RPE ${slot.target_rpe}` : ''} · rest {Math.round(slot.rest_seconds / 60)}m
+          {rows.length > 0 && (
+            <span className={`wo-exercise-count ${doneRows === rows.length ? 'complete' : ''}`}>
+              {doneRows}/{rows.length}
             </span>
           )}
         </div>
-        {slot?.notes && <div className="wo-lasttime">{slot.notes}</div>}
-        <div className="wo-lasttime">
-          {last
-            ? `Last time (${fmtDayShort(last.date)}): ${last.sets
-                .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
-                .join(', ')}`
-            : 'First time logging this one.'}
+        <div className="wo-chips">
+          {slot && (
+            <span className="wo-chip wo-chip-target">
+              {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
+              {slot.target_rpe ? ` · RPE ${slot.target_rpe}` : ''}
+            </span>
+          )}
+          {slot && <span className="wo-chip">Rest {Math.round(slot.rest_seconds / 60)}m</span>}
+          <span className="wo-chip wo-chip-last">
+            {last
+              ? `Last ${fmtDayShort(last.date)}: ${last.sets
+                  .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
+                  .join(', ')}`
+              : 'First time'}
+          </span>
         </div>
+        {slot?.notes && <div className="wo-note">{slot.notes}</div>}
         <div className="wo-set-labels">
           <span>Set</span>
-          <span style={{ textAlign: 'center' }}>kg</span>
+          <span style={{ textAlign: 'center' }}>Weight (kg)</span>
           <span style={{ textAlign: 'center' }}>Reps</span>
-          <span>✓</span>
+          <span aria-hidden="true"> </span>
         </div>
         {rows.map((s) => {
           const d = drafts[s.id] || {};
@@ -309,7 +320,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 inputMode="decimal"
                 step="0.5"
                 value={d.weight ?? (Number(s.weight_kg) || '')}
-                placeholder="kg"
+                placeholder="0"
                 onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
                 onBlur={() => commitSet(s)}
               />
@@ -317,11 +328,15 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 type="number"
                 inputMode="numeric"
                 value={d.reps ?? (s.reps || '')}
-                placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : 'reps'}
+                placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : '—'}
                 onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
                 onBlur={() => commitSet(s)}
               />
-              <button className={`wo-set-check ${s.done ? 'checked' : ''}`} onClick={() => toggleSet(s)}>
+              <button
+                className={`wo-set-check ${s.done ? 'checked' : ''}`}
+                aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
+                onClick={() => toggleSet(s)}
+              >
                 ✓
               </button>
             </div>
@@ -383,15 +398,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   };
   const idx = Math.min(focusIndex, Math.max(0, exerciseIds.length - 1));
 
+  const restPct = restTotal > 0 ? Math.max(0, Math.min(100, (restLeft! / restTotal) * 100)) : 0;
   const restBar = restLeft !== null && (
     <div className={`rest-timer ${restLeft <= 0 ? 'done' : ''}`}>
-      <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>{restLeft <= 0 ? 'Rest done — go' : 'Rest'}</span>
-      <span className="rest-timer-time">
-        {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
-      </span>
-      <button className="btn btn-sm" onClick={stopRest}>
-        Skip
-      </button>
+      <div className="rest-timer-main">
+        <span className="rest-timer-label">{restLeft <= 0 ? 'Rest complete' : 'Resting'}</span>
+        <span className="rest-timer-time">
+          {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
+        </span>
+        <button className="rest-timer-skip" onClick={stopRest}>
+          {restLeft <= 0 ? 'Done' : 'Skip'}
+        </button>
+      </div>
+      <div className="rest-timer-track">
+        <div className="rest-timer-fill" style={{ width: `${restLeft <= 0 ? 100 : restPct}%` }} />
+      </div>
     </div>
   );
 
@@ -424,18 +445,23 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </>
           ) : (
             <>
-              <div className="gym-progress">
-                {exerciseIds.map((id, i) => (
-                  <button
-                    key={id}
-                    className={`gym-dot ${i === idx ? 'active' : ''} ${allSetsDone(id) ? 'complete' : ''}`}
-                    aria-label={`Go to ${exName(id)}`}
-                    onClick={() => setFocusIndex(i)}
-                  />
-                ))}
-              </div>
-              <div className="gym-progress-label">
-                Exercise {idx + 1} of {exerciseIds.length}
+              <div className="gym-head">
+                <div className="gym-seg">
+                  {exerciseIds.map((id, i) => (
+                    <button
+                      key={id}
+                      className={`gym-seg-item ${i === idx ? 'active' : ''} ${allSetsDone(id) ? 'complete' : ''}`}
+                      aria-label={`Go to ${exName(id)}`}
+                      onClick={() => setFocusIndex(i)}
+                    />
+                  ))}
+                </div>
+                <div className="gym-head-label">
+                  <span>
+                    Exercise <strong>{idx + 1}</strong> of {exerciseIds.length}
+                  </span>
+                  <span className="gym-head-done">{exerciseIds.filter((id) => allSetsDone(id)).length} done</span>
+                </div>
               </div>
               {renderExercise(exerciseIds[idx], true)}
               <div className="gym-nav">

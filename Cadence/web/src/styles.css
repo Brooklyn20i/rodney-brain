@@ -1465,42 +1465,61 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .pick-row .pick-sub { font-size: 12px; color: var(--text2); margin-top: 1px; }
 
 /* ── Guided workout mode (Fitness) ── */
-.wo-exercise { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 14px; }
-.wo-exercise-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.wo-exercise-name { font-size: 16px; font-weight: 700; }
-.wo-exercise-target { font-size: 12px; color: var(--text2); }
-.wo-lasttime { font-size: 12px; color: var(--text3); margin-bottom: 8px; }
-.wo-set-row { display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 8px; align-items: center; padding: 5px 0; }
-.wo-set-row.wo-set-done { opacity: 0.75; }
-.wo-set-num { font-size: 12px; font-weight: 700; color: var(--text2); }
-.wo-set-row input { padding: 10px 10px; font-size: 16px; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); width: 100%; font-family: inherit; }
-.wo-set-check { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); font-size: 17px; cursor: pointer; color: var(--text3); }
-.wo-set-check.checked { background: var(--green-bg); color: var(--green); border-color: rgba(26,127,55,0.3); }
-.wo-set-labels { display: grid; grid-template-columns: 44px 1fr 1fr 44px; gap: 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text3); padding-bottom: 2px; }
-.wo-add-set { margin-top: 6px; }
-.rest-timer { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--sidebar-bg); color: #fff; border-radius: var(--radius); padding: 10px 16px; margin-bottom: 14px; box-shadow: var(--shadow-md); }
-.rest-timer-time { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.rest-timer.done .rest-timer-time { color: #34D399; }
-.rest-timer .btn { background: rgba(255,255,255,0.12); color: #fff; }
+.wo-exercise { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+.wo-exercise-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.wo-exercise-name { font-size: 17px; font-weight: 750; letter-spacing: -0.3px; line-height: 1.15; }
+.wo-exercise-count { flex-shrink: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+.wo-exercise-count.complete { color: var(--green); background: var(--green-bg); border-color: rgba(26,127,55,0.25); }
+.wo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.wo-chip { font-size: 12px; font-weight: 600; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; line-height: 1.3; }
+.wo-chip-target { color: var(--accent); background: var(--blue-bg); border-color: rgba(27,94,158,0.18); font-weight: 700; }
+.wo-chip-last { color: var(--text3); }
+.wo-note { font-size: 12px; color: var(--text2); background: var(--orange-bg); border-radius: 8px; padding: 7px 10px; margin-bottom: 12px; line-height: 1.4; }
+.wo-set-labels { display: grid; grid-template-columns: 40px 1fr 1fr 48px; gap: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); padding: 0 4px 6px; }
+.wo-set-row { display: grid; grid-template-columns: 40px 1fr 1fr 48px; gap: 10px; align-items: center; padding: 6px; border-radius: 12px; margin-bottom: 6px; background: var(--surface2); border: 1px solid transparent; transition: background 0.15s, border-color 0.15s; }
+.wo-set-row.wo-set-done { background: var(--green-bg); border-color: rgba(26,127,55,0.18); }
+.wo-set-num { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 auto; font-size: 13px; font-weight: 700; color: var(--text2); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+.wo-set-row.wo-set-done .wo-set-num { color: var(--green); border-color: rgba(26,127,55,0.3); }
+.wo-set-row input { padding: 11px 8px; font-size: 16px; font-weight: 600; text-align: center; border: 1px solid var(--border); border-radius: 10px; width: 100%; font-family: inherit; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
+.wo-set-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.12); }
+.wo-set-check { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface); font-size: 18px; cursor: pointer; color: var(--text3); display: flex; align-items: center; justify-content: center; transition: transform 0.12s, background 0.12s, border-color 0.12s, color 0.12s; }
+.wo-set-check:active { transform: scale(0.9); }
+.wo-set-check.checked { background: var(--green); color: #fff; border-color: var(--green); font-weight: 800; }
+.wo-add-set { margin-top: 4px; }
+
+/* rest timer */
+.rest-timer { position: sticky; top: 0; z-index: 5; background: var(--sidebar-bg); color: #fff; border-radius: 14px; padding: 12px 14px 10px; margin-bottom: 14px; box-shadow: var(--shadow-md); }
+.rest-timer-main { display: flex; align-items: center; gap: 12px; }
+.rest-timer-label { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; opacity: 0.7; text-transform: uppercase; }
+.rest-timer-time { flex: 1; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.rest-timer-skip { background: rgba(255,255,255,0.14); color: #fff; border: none; border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.rest-timer-track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.14); margin-top: 10px; overflow: hidden; }
+.rest-timer-fill { height: 100%; border-radius: 3px; background: var(--accent-lt); transition: width 1s linear; }
+.rest-timer.done { background: #14532D; }
+.rest-timer.done .rest-timer-time { color: #4ADE80; }
+.rest-timer.done .rest-timer-fill { background: #4ADE80; }
 
 /* ── Gym / focus mode (default on phones during a Fitness session) ── */
 .screen-content.gym-mode { padding-top: 14px; }
-.gym-progress { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
-.gym-dot { width: 26px; height: 6px; border-radius: 3px; border: none; padding: 0; background: var(--border); cursor: pointer; }
-.gym-dot.active { background: var(--accent); }
-.gym-dot.complete { background: var(--green); }
-.gym-progress-label { text-align: center; font-size: 12px; font-weight: 700; color: var(--text2); letter-spacing: 0.3px; margin-bottom: 12px; }
-.wo-exercise.gym { padding: 20px 18px; }
-.wo-exercise.gym .wo-exercise-name { font-size: 22px; }
+.gym-head { margin-bottom: 14px; }
+.gym-seg { display: flex; gap: 4px; }
+.gym-seg-item { flex: 1; height: 7px; border-radius: 4px; border: none; padding: 0; background: var(--border); cursor: pointer; transition: background 0.2s; }
+.gym-seg-item.complete { background: var(--green); }
+.gym-seg-item.active { background: var(--accent); box-shadow: 0 0 0 2px rgba(27,94,158,0.2); }
+.gym-head-label { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text2); }
+.gym-head-label strong { color: var(--text); font-weight: 800; }
+.gym-head-done { color: var(--green); font-weight: 700; }
+.wo-exercise.gym { padding: 20px 18px; border-radius: 18px; }
+.wo-exercise.gym .wo-exercise-name { font-size: 23px; }
 .wo-exercise.gym .wo-set-labels,
-.wo-exercise.gym .wo-set-row { grid-template-columns: 52px 1fr 1fr 56px; gap: 10px; }
-.wo-exercise.gym .wo-set-row { padding: 8px 0; }
+.wo-exercise.gym .wo-set-row { grid-template-columns: 44px 1fr 1fr 60px; gap: 10px; }
+.wo-exercise.gym .wo-set-row { padding: 8px; }
 .wo-exercise.gym .wo-set-row input { padding: 15px 10px; font-size: 20px; }
-.wo-exercise.gym .wo-set-check { width: 56px; height: 56px; font-size: 24px; }
-.gym-nav { position: sticky; bottom: 0; display: flex; gap: 10px; margin-top: 14px; padding: 12px 0 calc(6px + var(--safe-bottom)); background: linear-gradient(to top, var(--app-bg) 72%, transparent); }
-.gym-nav .btn { flex: 1; justify-content: center; padding: 15px; font-size: 15px; border-radius: 14px; }
-.gym-add { margin-top: 12px; }
-.gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 4px 0; }
+.wo-exercise.gym .wo-set-check { width: 56px; height: 56px; font-size: 24px; border-radius: 14px; }
+.gym-nav { position: sticky; bottom: 0; display: flex; gap: 10px; margin-top: 16px; padding: 12px 0 calc(6px + var(--safe-bottom)); background: linear-gradient(to top, var(--app-bg) 72%, transparent); }
+.gym-nav .btn { flex: 1; justify-content: center; padding: 16px; font-size: 15px; font-weight: 700; border-radius: 14px; }
+.gym-add { margin-top: 14px; }
+.gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 6px 0; }
 .gym-add .gym-add-body { display: flex; gap: 8px; margin-top: 8px; }
 
 /* ── Nutrition macro bars (Fitness) ── */
