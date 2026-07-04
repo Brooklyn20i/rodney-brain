@@ -94,7 +94,16 @@ export function Cardio({ onMenu }: { onMenu: () => void }) {
     if (!row.duration_min || saving) return;
     setSaving(true);
     try {
-      await insert('sauna_sessions', { date, ...row, notes: '' });
+      // Build the payload explicitly: presets carry a `label` field that is
+      // not a sauna_sessions column, and spreading the whole object would send
+      // it to Postgres and fail the insert.
+      await insert('sauna_sessions', {
+        date,
+        duration_min: row.duration_min,
+        temperature_c: row.temperature_c,
+        rounds: row.rounds,
+        notes: '',
+      });
       setSDur('');
       flash(`Sauna · ${row.duration_min} min logged ✓`);
     } finally {
