@@ -74,12 +74,18 @@ it can't drift out of sync with what's on screen.
 rich tabbed hub; Financial's and Fitness's are simple message threads, using
 `.agent-thread`/`.agent-msg*` CSS — deliberately NOT `.kobe-*`, which is
 Work's own richer UI, so the two don't visually collide). `Cadence/agent/`
-now holds both `cadence_bridge.py`/`cadence_supabase_mcp.py` (Work, `public`
-schema) and `cadence_fitness_bridge.py`/`cadence_fitness_mcp.py` (Fitness,
-`fitness` schema via `Accept-Profile`/`Content-Profile: fitness` headers on
-every REST call) — same Supabase project, same URL/anon key, different
-schema profile header. Financial has no MCP bridge (chat-only), matching its
-original design.
+now holds an MCP bridge per domain: `cadence_bridge.py`/`cadence_supabase_mcp.py`
+(Work, `public` schema), `cadence_fitness_bridge.py`/`cadence_fitness_mcp.py`
+(Fitness, `fitness` schema) and `cadence_financial_bridge.py`/`cadence_financial_mcp.py`
+(Financial, `financial` schema) — all against the same Supabase project, same
+URL/anon key, differing only by the `Accept-Profile`/`Content-Profile` schema
+header on every REST call. Each non-Work schema is reached by the agent through
+a grant-gated access table: `fitness.fitness_agent_access` (migration 0023) and
+`financial.financial_agent_access` (migration 0024), mirroring Work's
+`public.cadence_agent_access`. So Kobe/Hermes has read/write across the whole
+super app via one agent account (`rbalech+cadence-kobe@gmail.com`), one grant
+per schema. The Hermes MCP servers are registered as `cadence`,
+`cadence_fitness` and `cadence_financial` in `~/.hermes/config.yaml`.
 
 **Moving real Financial data**: if you already had real entries in the
 standalone Cadence Financial app's own Supabase project, that data does not
