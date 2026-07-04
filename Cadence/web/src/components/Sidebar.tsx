@@ -88,13 +88,14 @@ export const FITNESS_NAV: { section: string; items: NavItem[] }[] = [
 const DOMAINS: { id: Domain; label: string }[] = [
   { id: 'work', label: 'Work' },
   { id: 'financial', label: 'Financial' },
-  { id: 'fitness', label: 'Fitness' },
+  { id: 'fitness', label: 'Health' },
 ];
 
-// Custom, on-brand domain marks: a matched set of line icons (briefcase /
-// coin stack / dumbbell) drawn at one stroke weight with rounded joins, per
-// DESIGN.md's restrained executive language — replacing the old ◆ / $ / ♥
-// glyphs. currentColor so they inherit the pill's active/idle ink.
+// Domain marks, drawn to what each domain actually is rather than stock glyphs:
+// Work = the operating board (columns + cards), Financial = an asset growing
+// (coin with a rising trend), Health = vitality (heart with a pulse line).
+// One stroke weight, rounded joins, currentColor so they inherit the pill's
+// idle/active ink — per DESIGN.md's restrained executive line language.
 function DomainIcon({ id }: { id: Domain }) {
   const common = {
     width: 20,
@@ -102,40 +103,40 @@ function DomainIcon({ id }: { id: Domain }) {
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
-    strokeWidth: 1.9,
+    strokeWidth: 1.85,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     'aria-hidden': true,
   };
   if (id === 'work') {
-    // Briefcase — operations / follow-through.
+    // Operating board — columns with cards (the Board / Control surface).
     return (
       <svg {...common}>
-        <rect x="3" y="7.5" width="18" height="12.5" rx="2.2" />
-        <path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5" />
-        <path d="M3 12.5h18" />
-        <path d="M12 12v1.6" />
+        <rect x="3" y="4.5" width="18" height="15" rx="2.4" />
+        <path d="M9 4.5v15M15 4.5v15" />
+        <rect x="4.7" y="7.4" width="2.6" height="2.1" rx="0.7" fill="currentColor" stroke="none" />
+        <rect x="4.7" y="11" width="2.6" height="2.1" rx="0.7" fill="currentColor" stroke="none" />
+        <rect x="10.7" y="7.4" width="2.6" height="2.1" rx="0.7" fill="currentColor" stroke="none" />
+        <rect x="16.7" y="7.4" width="2.6" height="2.1" rx="0.7" fill="currentColor" stroke="none" />
       </svg>
     );
   }
   if (id === 'financial') {
-    // Coin stack — wealth.
+    // A coin with a rising trend inside — an asset growing.
     return (
       <svg {...common}>
-        <ellipse cx="12" cy="7" rx="7" ry="3" />
-        <path d="M5 7v5c0 1.66 3.13 3 7 3s7-1.34 7-3V7" />
-        <path d="M5 12v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" />
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M8 14.2l2.4-2.6 1.9 1.7 3.7-4" />
+        <path d="M14.2 9.3h1.9v1.9" />
       </svg>
     );
   }
-  // Fitness — dumbbell.
+  // Health — a clean symmetric heart with a single ECG pulse (training +
+  // recovery), so it reads as vitality, not a "favourite" heart.
   return (
     <svg {...common}>
-      <path d="M7.5 8.5v7" />
-      <path d="M4.5 10v4" />
-      <path d="M16.5 8.5v7" />
-      <path d="M19.5 10v4" />
-      <path d="M7.5 12h9" />
+      <path d="M12 19.6c-.6-.45-7.1-5.05-7.1-9.75A3.65 3.65 0 0 1 12 7.75a3.65 3.65 0 0 1 7.1 2.1c0 4.7-6.5 9.3-7.1 9.75Z" />
+      <path d="M7.6 12h2.15l1.05-2 1.55 3.4 1-1.4h2.05" />
     </svg>
   );
 }
@@ -172,7 +173,7 @@ export function Sidebar({ domain, onDomainChange, current, onNavigate, badges, o
         </svg>
         <span className="sidebar-brand-text">
           <span className="sidebar-brand-name">Cadence</span>
-          <span className="sidebar-sub">{domain === 'financial' ? 'Financial' : domain === 'fitness' ? 'Fitness' : 'Work'}</span>
+          <span className="sidebar-sub">{domain === 'financial' ? 'Financial' : domain === 'fitness' ? 'Health' : 'Work'}</span>
         </span>
       </div>
 
