@@ -132,6 +132,23 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
   };
 
+  // One-handed steppers: read draft-or-stored, apply the step, write through
+  // immediately and drop the draft so the row shows the committed value.
+  const stepWeight = async (set: WorkoutSet, delta: number) => {
+    const d = drafts[set.id] || {};
+    const cur = d.weight !== undefined ? Number(d.weight) || 0 : Number(set.weight_kg) || 0;
+    const next = Math.max(0, Math.round((cur + delta) * 100) / 100);
+    setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], weight: undefined } }));
+    await update('workout_sets', set.id, { weight_kg: next });
+  };
+  const stepReps = async (set: WorkoutSet, delta: number) => {
+    const d = drafts[set.id] || {};
+    const cur = d.reps !== undefined ? Math.round(Number(d.reps)) || 0 : set.reps || 0;
+    const next = Math.max(0, cur + delta);
+    setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], reps: undefined } }));
+    await update('workout_sets', set.id, { reps: next });
+  };
+
   const toggleSet = async (set: WorkoutSet) => {
     const done = !set.done;
     await commitSet(set, { done });
@@ -163,6 +180,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   };
 
   const [addExId, setAddExId] = useState('');
+  const [exSearch, setExSearch] = useState('');
   const addExercise = async () => {
     if (!addExId || !active) return;
     // Already in the session -> just tack on another set. New to the session ->
@@ -188,6 +206,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       }
     }
     setAddExId('');
+    setExSearch('');
   };
 
   const finishSession = async () => {
@@ -304,7 +323,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           </span>
         </div>
         {slot?.notes && <div className="wo-note">{slot.notes}</div>}
-        <div className="wo-set-labels">
+        <div className={`wo-set-labels ${big ? 'gym' : ''}`}>
           <span>Set</span>
           <span style={{ textAlign: 'center' }}>Weight (kg)</span>
           <span style={{ textAlign: 'center' }}>Reps</span>
@@ -312,26 +331,59 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         </div>
         {rows.map((s) => {
           const d = drafts[s.id] || {};
+          const weightField = (
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              value={d.weight ?? (Number(s.weight_kg) || '')}
+              placeholder="0"
+              onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
+              onBlur={() => commitSet(s)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+          );
+          const repsField = (
+            <input
+              type="number"
+              inputMode="numeric"
+              value={d.reps ?? (s.reps || '')}
+              placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : '—'}
+              onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
+              onBlur={() => commitSet(s)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+          );
           return (
-            <div key={s.id} className={`wo-set-row ${s.done ? 'wo-set-done' : ''}`}>
+            <div key={s.id} className={`wo-set-row ${big ? 'gym' : ''} ${s.done ? 'wo-set-done' : ''}`}>
               <span className="wo-set-num">{s.set_number}</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.5"
-                value={d.weight ?? (Number(s.weight_kg) || '')}
-                placeholder="0"
-                onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
-                onBlur={() => commitSet(s)}
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                value={d.reps ?? (s.reps || '')}
-                placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : '—'}
-                onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
-                onBlur={() => commitSet(s)}
-              />
+              {big ? (
+                <>
+                  <div className="wo-step-group">
+                    <button className="wo-step" aria-label="Weight down 2.5kg" onClick={() => stepWeight(s, -2.5)}>
+                      −
+                    </button>
+                    {weightField}
+                    <button className="wo-step" aria-label="Weight up 2.5kg" onClick={() => stepWeight(s, 2.5)}>
+                      +
+                    </button>
+                  </div>
+                  <div className="wo-step-group">
+                    <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
+                      −
+                    </button>
+                    {repsField}
+                    <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
+                      +
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {weightField}
+                  {repsField}
+                </>
+              )}
               <button
                 className={`wo-set-check ${s.done ? 'checked' : ''}`}
                 aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
@@ -350,28 +402,58 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   };
 
   const addExerciseControl = (wrap: 'card' | 'plain') => {
+    const q = exSearch.trim().toLowerCase();
+    const matches = q
+      ? [...data.exercises]
+          .filter((e) => e.name.toLowerCase().includes(q) || e.muscle_group.includes(q))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .slice(0, 8)
+      : [];
     const control = (
-      <div className={wrap === 'plain' ? 'gym-add-body' : ''} style={wrap === 'card' ? { display: 'flex', gap: 8 } : undefined}>
-        <select value={addExId} onChange={(e) => setAddExId(e.target.value)}>
-          <option value="">Choose an exercise…</option>
-          {[...data.exercises]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-        </select>
-        <button className="btn btn-secondary" onClick={addExercise} disabled={!addExId}>
-          Add
-        </button>
+      <div className="wo-add-ex">
+        <input
+          type="search"
+          value={exSearch}
+          placeholder="Search exercises… e.g. incline press"
+          onChange={(e) => {
+            setExSearch(e.target.value);
+            setAddExId('');
+          }}
+        />
+        {q && matches.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--text2)', margin: '6px 0 0' }}>
+            No match — add it on the Exercises screen first.
+          </p>
+        )}
+        {matches.map((e) => (
+          <button
+            key={e.id}
+            className="wo-add-ex-row"
+            onClick={() => {
+              setAddExId(e.id);
+              setExSearch(e.name);
+            }}
+            aria-pressed={addExId === e.id}
+          >
+            <span>{e.name}</span>
+            <span className="wo-add-ex-meta">
+              {e.muscle_group.replace('_', ' ')}
+              {sessionSets.some((s) => s.exercise_id === e.id) ? ' · in session' : ''}
+            </span>
+          </button>
+        ))}
+        {addExId && (
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addExercise}>
+            Add to session
+          </button>
+        )}
       </div>
     );
     if (wrap === 'plain') {
       return (
         <details className="gym-add">
           <summary>+ Add an exercise to this session</summary>
-          {control}
+          <div className="gym-add-body">{control}</div>
         </details>
       );
     }
@@ -426,9 +508,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
           {gymMode ? '☰ List' : '⛶ Focus'}
         </button>
-        <button className="btn btn-danger btn-sm" onClick={discardSession}>
-          Discard
-        </button>
         <button className="btn btn-primary" onClick={finishSession}>
           Finish
         </button>
@@ -479,6 +558,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 )}
               </div>
               {addExerciseControl('plain')}
+              <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession}>
+                Discard session
+              </button>
             </>
           )
         ) : (
@@ -492,6 +574,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 onBlur={(e) => update('workouts', active.id, { notes: e.target.value })}
               />
             </Card>
+            <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession}>
+              Discard session
+            </button>
             <p style={{ fontSize: 11, color: 'var(--text3)' }}>
               Best set so far this session:{' '}
               {(() => {

@@ -77,6 +77,7 @@ export const FITNESS_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'fitness:nutrition', label: 'Nutrition', icon: '◔' },
     { id: 'fitness:body', label: 'Body', icon: '⚖' },
     { id: 'fitness:recovery', label: 'Recovery', icon: '♥' },
+    { id: 'fitness:sync', label: 'Sync', icon: '⇅' },
   ]},
   { section: 'Agents', items: [
     { id: 'fitness:kobe', label: 'Kobe', icon: '⚡' },

@@ -53,6 +53,7 @@ const FitCardio = lazy(() => import('./fitness/screens/Cardio').then((m) => ({ d
 const FitNutrition = lazy(() => import('./fitness/screens/Nutrition').then((m) => ({ default: m.Nutrition })));
 const FitBody = lazy(() => import('./fitness/screens/Body').then((m) => ({ default: m.Body })));
 const FitRecovery = lazy(() => import('./fitness/screens/Recovery').then((m) => ({ default: m.Recovery })));
+const FitSync = lazy(() => import('./fitness/screens/Sync').then((m) => ({ default: m.Sync })));
 const FitKobe = lazy(() => import('./fitness/screens/Kobe').then((m) => ({ default: m.Kobe })));
 
 const DEFAULT_SCREEN: Record<Domain, string> = {
@@ -168,6 +169,7 @@ export function App() {
         case 'nutrition': return <FitNutrition onMenu={onMenu} />;
         case 'body': return <FitBody onMenu={onMenu} />;
         case 'recovery': return <FitRecovery onMenu={onMenu} />;
+        case 'sync': return <FitSync onMenu={onMenu} />;
         case 'kobe': return <FitKobe onMenu={onMenu} />;
         default: return <FitDashboard onMenu={onMenu} onNavigate={fitnessNavigate} />;
       }

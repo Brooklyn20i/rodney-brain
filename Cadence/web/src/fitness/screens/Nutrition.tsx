@@ -1,9 +1,39 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
+import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { dayNutrition, targetFor } from '../lib/fitnessCalc';
 import { addDays, fmtDayShort, fmtNum, MEAL_LABEL, MEALS, PHASE_LABEL, todayISO } from '../lib/util';
 import type { MealType, NutritionPhase } from '../lib/types';
+
+interface PhotoEstimate {
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  confidence: 'low' | 'medium' | 'high';
+  notes: string;
+}
+
+// Downscale a photo before upload: vision doesn't need 12MP, and mobile
+// uploads should stay small. Longest edge 1024px, JPEG q0.8.
+async function fileToBase64Jpeg(file: File): Promise<{ base64: string; mediaType: string }> {
+  const bitmap = await createImageBitmap(file);
+  const maxDim = 1024;
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas unavailable');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+  return { base64: dataUrl.slice(dataUrl.indexOf(',') + 1), mediaType: 'image/jpeg' };
+}
 
 // Daily calories + macros: quick entry, one-tap saved meals, phased targets.
 // Deliberately totals-first (not a food database) -- 90% of the MacroFactor
@@ -15,6 +45,60 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const logs = data.nutrition_logs.filter((l) => l.date === date);
   const totals = dayNutrition(data.nutrition_logs, date);
   const target = targetFor(data.nutrition_targets, date);
+
+  // ── Photo logging ─────────────────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const [estimate, setEstimate] = useState<PhotoEstimate | null>(null);
+  const [estMeal, setEstMeal] = useState<MealType>('lunch');
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const onPhotoPicked = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoError('');
+    setEstimate(null);
+    setPhotoBusy(true);
+    setPreview(URL.createObjectURL(file));
+    try {
+      const { base64, mediaType } = await fileToBase64Jpeg(file);
+      const { data: est, error } = await supabase.functions.invoke('food-vision', {
+        body: { image_base64: base64, media_type: mediaType },
+      });
+      if (error) throw new Error(error.message || 'Estimate failed');
+      if (est?.error) throw new Error(est.error);
+      setEstimate(est as PhotoEstimate);
+      const hour = new Date().getHours();
+      setEstMeal(hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 20 ? 'dinner' : 'snack');
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : 'Could not read the photo — try again or enter it manually.');
+    } finally {
+      setPhotoBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const clearPhoto = () => {
+    setEstimate(null);
+    setPhotoError('');
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(null);
+  };
+
+  const logEstimate = async () => {
+    if (!estimate) return;
+    await insert('nutrition_logs', {
+      date,
+      meal: estMeal,
+      name: estimate.name,
+      calories: estimate.calories,
+      protein_g: estimate.protein_g,
+      carbs_g: estimate.carbs_g,
+      fat_g: estimate.fat_g,
+      notes: estimate.notes ? `Photo estimate (${estimate.confidence}): ${estimate.notes}` : 'Photo estimate',
+    });
+    clearPhoto();
+  };
 
   // Quick add form
   const [meal, setMeal] = useState<MealType>('snack');
@@ -198,6 +282,114 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           </Card>
         )}
 
+        <Card title="Log from a photo">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={(e) => onPhotoPicked(e.target.files?.[0])}
+          />
+          {!estimate && !photoBusy && (
+            <>
+              <button className="btn btn-primary nu-photo-btn" onClick={() => fileRef.current?.click()}>
+                📷 Snap your meal
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
+                Kobe estimates calories and macros from the photo — you review before it's logged.
+              </p>
+            </>
+          )}
+          {photoBusy && (
+            <div className="nu-photo-review">
+              {preview && <img src={preview} alt="Your meal" className="nu-photo-thumb" />}
+              <p style={{ fontSize: 13, color: 'var(--text2)' }}>Estimating…</p>
+            </div>
+          )}
+          {photoError && (
+            <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 8 }}>
+              {photoError}
+            </p>
+          )}
+          {estimate && (
+            <div className="nu-photo-review">
+              {preview && <img src={preview} alt="Your meal" className="nu-photo-thumb" />}
+              <div className="form-grid" style={{ marginTop: 10 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label className="field">What</label>
+                  <input
+                    type="text"
+                    value={estimate.name}
+                    onChange={(e) => setEstimate({ ...estimate, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="field">Meal</label>
+                  <select value={estMeal} onChange={(e) => setEstMeal(e.target.value as MealType)}>
+                    {MEALS.map((m) => (
+                      <option key={m} value={m}>
+                        {MEAL_LABEL[m]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field">Calories</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={estimate.calories || ''}
+                    onChange={(e) => setEstimate({ ...estimate, calories: Math.round(Number(e.target.value) || 0) })}
+                  />
+                </div>
+                <div>
+                  <label className="field">Protein (g)</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={estimate.protein_g || ''}
+                    onChange={(e) => setEstimate({ ...estimate, protein_g: Math.round(Number(e.target.value) || 0) })}
+                  />
+                </div>
+                <div>
+                  <label className="field">Carbs (g)</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={estimate.carbs_g || ''}
+                    onChange={(e) => setEstimate({ ...estimate, carbs_g: Math.round(Number(e.target.value) || 0) })}
+                  />
+                </div>
+                <div>
+                  <label className="field">Fat (g)</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={estimate.fat_g || ''}
+                    onChange={(e) => setEstimate({ ...estimate, fat_g: Math.round(Number(e.target.value) || 0) })}
+                  />
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text2)', margin: '2px 0 10px' }}>
+                <Tag label={`${estimate.confidence} confidence`} tone={estimate.confidence === 'high' ? 'good' : estimate.confidence === 'low' ? 'warn' : 'info'} />{' '}
+                {estimate.notes}
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" onClick={logEstimate} disabled={!estimate.calories}>
+                  Add to {fmtDayShort(date)}
+                </button>
+                <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
+                  Retake
+                </button>
+                <button className="btn btn-ghost" onClick={clearPhoto}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
+
         <Card title="Quick add">
           <div className="form-grid">
             <div style={{ gridColumn: 'span 2' }}>
@@ -245,8 +437,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
         <Card title="Logged">
           {MEALS.filter((m) => logs.some((l) => l.meal === m)).map((m) => (
             <div key={m}>
-              <div className="cf-card-title" style={{ margin: '8px 0 2px' }}>
-                {MEAL_LABEL[m]}
+              <div className="cf-card-title nu-meal-head" style={{ margin: '8px 0 2px' }}>
+                <span>{MEAL_LABEL[m]}</span>
+                <span className="nu-meal-total">
+                  {fmtNum(logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.calories), 0))} kcal · P
+                  {fmtNum(logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.protein_g), 0))}
+                </span>
               </div>
               {logs
                 .filter((l) => l.meal === m)

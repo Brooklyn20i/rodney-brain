@@ -3,11 +3,15 @@ import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
 import { weeklySetsByMuscle, weekOf, workoutTonnage } from '../lib/fitnessCalc';
 import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, todayISO } from '../lib/util';
+import type { Workout, WorkoutSet } from '../lib/types';
 
 // Session log + weekly volume: what actually happened, week by week.
+// Sessions stay editable after the fact: fix a mistyped weight, add the set
+// you forgot to log, or delete the whole thing.
 export function History({ onMenu }: { onMenu: () => void }) {
-  const { data, remove } = useCadenceFitness();
+  const { data, insert, update, remove } = useCadenceFitness();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
   const completed = useMemo(
     () =>
@@ -83,38 +87,39 @@ export function History({ onMenu }: { onMenu: () => void }) {
                   <span style={{ color: 'var(--text3)' }}>{openNow ? '▾' : '▸'}</span>
                 </div>
                 {openNow && (
-                  <div style={{ padding: '4px 4px 12px' }}>
-                    {Object.entries(
-                      sets.reduce<Record<string, typeof sets>>((acc, s) => {
-                        (acc[s.exercise_id] ||= []).push(s);
-                        return acc;
-                      }, {})
-                    ).map(([exerciseId, rows]) => (
-                      <div key={exerciseId} style={{ fontSize: 13, padding: '3px 0' }}>
-                        <strong>{exName(exerciseId)}</strong>{' '}
-                        <span style={{ color: 'var(--text2)' }}>
-                          {rows
-                            .sort((a, b) => a.set_number - b.set_number)
-                            .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
-                            .join(', ')}
-                        </span>
-                      </div>
-                    ))}
-                    {w.notes && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>“{w.notes}”</div>}
-                    <button
-                      className="btn btn-danger btn-sm"
-                      style={{ marginTop: 8 }}
-                      onClick={async () => {
-                        if (!window.confirm('Delete this session and its sets?')) return;
-                        for (const s of data.workout_sets.filter((x) => x.workout_id === w.id)) {
-                          await remove('workout_sets', s.id);
-                        }
-                        await remove('workouts', w.id);
-                      }}
-                    >
-                      Delete session
-                    </button>
-                  </div>
+                  <SessionDetail
+                    workout={w}
+                    sets={data.workout_sets.filter((x) => x.workout_id === w.id)}
+                    editing={editId === w.id}
+                    onToggleEdit={() => setEditId(editId === w.id ? null : w.id)}
+                    exName={exName}
+                    onUpdateWorkout={(patch) => update('workouts', w.id, patch)}
+                    onUpdateSet={(id, patch) => update('workout_sets', id, patch)}
+                    onAddSet={async (exerciseId) => {
+                      const rows = data.workout_sets
+                        .filter((x) => x.workout_id === w.id && x.exercise_id === exerciseId)
+                        .sort((a, b) => a.set_number - b.set_number);
+                      const last = rows[rows.length - 1];
+                      await insert('workout_sets', {
+                        workout_id: w.id,
+                        exercise_id: exerciseId,
+                        set_number: (last?.set_number ?? 0) + 1,
+                        weight_kg: last ? Number(last.weight_kg) : 0,
+                        reps: last?.reps ?? 0,
+                        rpe: null,
+                        is_warmup: false,
+                        done: true,
+                      });
+                    }}
+                    onRemoveSet={(id) => remove('workout_sets', id)}
+                    onDelete={async () => {
+                      if (!window.confirm('Delete this session and its sets?')) return;
+                      for (const s of data.workout_sets.filter((x) => x.workout_id === w.id)) {
+                        await remove('workout_sets', s.id);
+                      }
+                      await remove('workouts', w.id);
+                    }}
+                  />
                 )}
               </div>
             );
@@ -133,5 +138,125 @@ export function History({ onMenu }: { onMenu: () => void }) {
         )}
       </div>
     </>
+  );
+}
+
+// Expanded view of one past session: read-only summary by default, full edit
+// mode (weights, reps, add/remove sets, name/date/notes) behind one tap.
+function SessionDetail({
+  workout: w,
+  sets,
+  editing,
+  onToggleEdit,
+  exName,
+  onUpdateWorkout,
+  onUpdateSet,
+  onAddSet,
+  onRemoveSet,
+  onDelete,
+}: {
+  workout: Workout;
+  sets: WorkoutSet[];
+  editing: boolean;
+  onToggleEdit: () => void;
+  exName: (id: string) => string;
+  onUpdateWorkout: (patch: Partial<Workout>) => void;
+  onUpdateSet: (id: string, patch: Partial<WorkoutSet>) => void;
+  onAddSet: (exerciseId: string) => void;
+  onRemoveSet: (id: string) => void;
+  onDelete: () => void;
+}) {
+  const shown = editing ? sets : sets.filter((s) => s.done);
+  const byExercise = Object.entries(
+    shown.reduce<Record<string, WorkoutSet[]>>((acc, s) => {
+      ((acc[s.exercise_id] ||= []) as WorkoutSet[]).push(s);
+      return acc;
+    }, {})
+  );
+
+  return (
+    <div style={{ padding: '4px 4px 12px' }}>
+      {editing && (
+        <div className="form-grid form-grid-2" style={{ marginBottom: 8 }}>
+          <div>
+            <label className="field">Name</label>
+            <input
+              type="text"
+              defaultValue={w.name}
+              onBlur={(e) => e.target.value.trim() && onUpdateWorkout({ name: e.target.value.trim() })}
+            />
+          </div>
+          <div>
+            <label className="field">Date</label>
+            <input type="date" defaultValue={w.date} onBlur={(e) => e.target.value && onUpdateWorkout({ date: e.target.value })} />
+          </div>
+        </div>
+      )}
+      {byExercise.map(([exerciseId, rows]) => (
+        <div key={exerciseId} style={{ fontSize: 13, padding: '3px 0' }}>
+          <strong>{exName(exerciseId)}</strong>{' '}
+          {!editing ? (
+            <span style={{ color: 'var(--text2)' }}>
+              {rows
+                .sort((a, b) => a.set_number - b.set_number)
+                .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
+                .join(', ')}
+            </span>
+          ) : (
+            <div style={{ marginTop: 4 }}>
+              {rows
+                .sort((a, b) => a.set_number - b.set_number)
+                .map((s) => (
+                  <div key={s.id} className="hist-set-edit">
+                    <span className="wo-set-num">{s.set_number}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      defaultValue={Number(s.weight_kg) || ''}
+                      placeholder="kg"
+                      onBlur={(e) => onUpdateSet(s.id, { weight_kg: Number(e.target.value) || 0 })}
+                    />
+                    <span className="hist-set-x">×</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      defaultValue={s.reps || ''}
+                      placeholder="reps"
+                      onBlur={(e) => onUpdateSet(s.id, { reps: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                    />
+                    <button className="btn btn-danger btn-sm" aria-label="Delete set" onClick={() => onRemoveSet(s.id)}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              <button className="btn btn-ghost btn-sm" onClick={() => onAddSet(exerciseId)}>
+                + Add set
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {editing ? (
+        <div style={{ marginTop: 8 }}>
+          <label className="field">Notes</label>
+          <textarea
+            defaultValue={w.notes}
+            placeholder="How did it go?"
+            onBlur={(e) => onUpdateWorkout({ notes: e.target.value })}
+          />
+        </div>
+      ) : (
+        w.notes && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 6 }}>“{w.notes}”</div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button className="btn btn-secondary btn-sm" onClick={onToggleEdit}>
+          {editing ? 'Done editing' : '✎ Edit session'}
+        </button>
+        <button className="btn btn-danger btn-sm" onClick={onDelete}>
+          Delete session
+        </button>
+      </div>
+    </div>
   );
 }
