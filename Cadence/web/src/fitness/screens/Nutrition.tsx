@@ -303,7 +303,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               return (
                 <>
                   <p style={{ fontSize: 14, margin: '0 0 6px' }}>
-                    Today so far:{' '}
+                    {date === todayISO() ? 'Today so far' : fmtDayShort(date)}:{' '}
                     <strong style={{ color: cutting ? 'var(--green)' : 'var(--red)' }}>
                       {cutting ? `${fmtNum(-balance)} kcal deficit` : `${fmtNum(balance)} kcal surplus`}
                     </strong>{' '}

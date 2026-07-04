@@ -9,7 +9,7 @@ import {
 import { ScreenHeader } from '../components/bits';
 
 const initials = (name: string) =>
-  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const fmtNext = (iso: string) => {
   if (iso === todayStr()) return 'Today';

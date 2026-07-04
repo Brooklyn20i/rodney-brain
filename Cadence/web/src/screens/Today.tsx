@@ -10,7 +10,7 @@ import { isUserTask } from '../lib/tasks';
 import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary } from '../lib/selectors';
 
 const initials = (name: string) =>
-  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const fmtMtgDay = (iso: string) => {
   if (iso === todayStr()) return 'Today';

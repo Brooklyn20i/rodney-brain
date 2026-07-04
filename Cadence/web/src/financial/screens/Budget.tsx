@@ -95,6 +95,7 @@ export function Budget({ onMenu }: { onMenu: () => void }) {
 
   const setRate = async (currency: string, value: string) => {
     const rate = num(value);
+    if (rate <= 0) return; // a 0/negative rate would zero out the currency's lines
     const existing = data.budget_fx_rates.find((r) => r.currency === currency && !r.deleted_at);
     if (existing) await update('budget_fx_rates', existing.id, { rate_to_aud: rate });
     else await insert('budget_fx_rates', { currency, rate_to_aud: rate });

@@ -60,7 +60,7 @@ function WaitlistSection() {
       .from('waitlist')
       .select('*')
       .order('created_at', { ascending: false })
-      .then(({ data }) => { setEntries((data as WaitlistEntry[]) || []); setLoading(false); });
+      .then(({ data }) => { setEntries((data as WaitlistEntry[]) || []); setLoading(false); }, () => setLoading(false));
   }, []);
 
   const updateStatus = async (id: string, status: 'approved' | 'rejected') => {

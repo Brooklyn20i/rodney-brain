@@ -151,7 +151,10 @@ export function trendDelta(points: TrendPoint[], days = 7): number | null {
   const last = points[points.length - 1];
   const cutoff = new Date(last.date + 'T12:00:00');
   cutoff.setDate(cutoff.getDate() - days);
-  const cutoffISO = cutoff.toISOString().slice(0, 10);
+  // Format in local time (not toISOString/UTC) to match every other date helper
+  // here — a UTC slice shifts the cutoff a day in AU time and picks the wrong
+  // reference point for the weekly/4-weekly change.
+  const cutoffISO = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
   let ref = points[0];
   for (const p of points) {
     if (p.date <= cutoffISO) ref = p;

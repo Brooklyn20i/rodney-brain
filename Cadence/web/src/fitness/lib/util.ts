@@ -39,11 +39,13 @@ export function fmtTimeHM(iso: string | null): string {
 }
 
 export function fmtKg(kg: number, digits = 1): string {
-  return `${Number(kg).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: digits })}kg`;
+  const v = Number.isFinite(Number(kg)) ? Number(kg) : 0;
+  return `${v.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: digits })}kg`;
 }
 
 export function fmtNum(n: number, digits = 0): string {
-  return Number(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  const v = Number.isFinite(Number(n)) ? Number(n) : 0;
+  return v.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: digits });
 }
 
 export const MUSCLE_GROUP_LABEL: Record<MuscleGroup, string> = {

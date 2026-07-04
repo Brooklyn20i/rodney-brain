@@ -241,7 +241,7 @@ function MeetingActionRow({ action, people, projects, onFile }: {
                   <button key={p.id} className="send-picker-option"
                     onClick={() => { onFile(action, { id: p.id, type: 'person', name: p.name }); setOpen(false); }}>
                     <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                      {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                      {(p.name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
                     </span>
                     {p.name}
                   </button>

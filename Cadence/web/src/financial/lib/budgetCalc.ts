@@ -55,7 +55,10 @@ export type RateLookup = Map<string, number>;
 export function fxLookup(rates: BudgetFxRate[]): RateLookup {
   const m = new Map<string, number>();
   for (const r of rates) {
-    if (!r.deleted_at) m.set(r.currency.toUpperCase(), Number(r.rate_to_aud));
+    // Only accept a positive rate. A stored 0 (or negative) would silently
+    // zero out every line in that currency; treat it as unset instead, so the
+    // currency falls back to 1:1 AND gets flagged by unratedCurrencies.
+    if (!r.deleted_at && Number(r.rate_to_aud) > 0) m.set(r.currency.toUpperCase(), Number(r.rate_to_aud));
   }
   m.set('AUD', 1); // base is always 1, regardless of any stored row
   return m;

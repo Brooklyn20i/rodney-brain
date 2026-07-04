@@ -71,6 +71,15 @@ describe('currency conversion', () => {
     const lines = [line('income', 'salary', 100, 'monthly', { currency: 'EUR' }), line('income', 'x', 1, 'monthly', { currency: 'USD' })];
     expect(unratedCurrencies(lines, fxLookup([fx('EUR', 1.6)]))).toEqual(['USD']);
   });
+
+  it('treats a 0/negative stored rate as unset — never zeroes out a currency', () => {
+    const lines = [line('income', 'salary', 5000, 'monthly', { currency: 'EUR' })];
+    const rates = fxLookup([fx('EUR', 0)]); // a bad 0 rate
+    // Falls back to 1:1 (not $0) AND is flagged for the user to fix.
+    expect(monthlyAudCents(lines[0], '2025-08', rates)).toBe(500000);
+    expect(unratedCurrencies(lines, rates)).toEqual(['EUR']);
+    expect(unratedCurrencies(lines, fxLookup([fx('EUR', -2)]))).toEqual(['EUR']);
+  });
 });
 
 describe('per-month contribution: frequency, window, one-off', () => {

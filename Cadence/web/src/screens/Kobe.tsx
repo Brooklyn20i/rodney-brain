@@ -4,6 +4,7 @@ import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import type { WorkItem } from '../lib/types';
 import { fmtDM, fmtDMY } from '../lib/util';
+import { sanitizeHtml } from '../lib/sanitize';
 
 type Tab = 'for_kobe' | 'brief' | 'from_kobe' | 'activity';
 
@@ -19,7 +20,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     () =>
       data.work_items
         .filter((w) => w.source === 'for:kobe' && !w.done && !w.deleted_at)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')),
     [data.work_items],
   );
 
@@ -27,7 +28,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     () =>
       data.notes
         .filter((n) => (n.folder || '').startsWith('__kobe__') && n.folder !== '__kobe_inbox__' && n.folder !== '__kobe_reply__')
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+        .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || '')),
     [data.notes],
   );
 
@@ -35,12 +36,12 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
     () =>
       data.work_items
         .filter((w) => w.source === 'agent:kobe' && !w.done && !w.deleted_at)
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+        .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || '')),
     [data.work_items],
   );
 
   const kobeActivity = useMemo(
-    () => data.activity.filter((a) => a.actor.startsWith('agent:')),
+    () => data.activity.filter((a) => (a.actor || '').startsWith('agent:')),
     [data.activity],
   );
 
@@ -118,7 +119,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                     <span className="kobe-brief-title">{latestBrief.title}</span>
                     <span className="kobe-brief-time">{fmtDM(latestBrief.updated_at)}</span>
                   </div>
-                  <div className="kobe-brief-body" dangerouslySetInnerHTML={{ __html: latestBrief.body || '<p>No content.</p>' }} />
+                  <div className="kobe-brief-body" dangerouslySetInnerHTML={{ __html: latestBrief.body ? sanitizeHtml(latestBrief.body) : '<p>No content.</p>' }} />
                 </div>
                 {olderNotes.length > 0 && (
                   <div className="kobe-older-notes">
@@ -155,7 +156,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
                       {a.detail && <div className="kobe-activity-detail">{a.detail}</div>}
                     </div>
                     <div className="kobe-activity-time" title={a.created_at}>
-                      {fmtDMY(a.created_at.slice(0, 10))}
+                      {fmtDMY((a.created_at || '').slice(0, 10))}
                     </div>
                   </div>
                 ))}

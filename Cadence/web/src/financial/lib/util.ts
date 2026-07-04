@@ -2,6 +2,7 @@
 // en-AU locale matches the source data (AUD figures, DD/MM dates).
 
 export function formatMoney(dollars: number, compact = false): string {
+  if (!Number.isFinite(dollars)) dollars = 0; // last-line defense against $NaN / $Infinity
   const sign = dollars < 0 ? '-' : '';
   const abs = Math.abs(dollars);
   if (compact) {

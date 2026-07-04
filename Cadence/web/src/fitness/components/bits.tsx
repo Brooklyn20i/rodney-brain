@@ -116,13 +116,15 @@ export function TrendLine({
   const x = (i: number) => (i / (points.length - 1)) * W;
   const y = (v: number) => padY + (1 - (v - min) / span) * (H - padY * 2);
   const rawPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(' ');
-  const avgPts = points.filter((p) => p.avg != null);
-  const avgPath = avgPts
-    .map((p) => {
-      const i = points.indexOf(p);
-      return `${i === points.indexOf(avgPts[0]) ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.avg!).toFixed(1)}`;
-    })
-    .join(' ');
+  // Single pass (no indexOf) — this renders ~1000-point series, so O(n²) here
+  // would freeze the "All" range.
+  const avgSegs: string[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (p.avg == null) continue;
+    avgSegs.push(`${avgSegs.length === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p.avg).toFixed(1)}`);
+  }
+  const avgPath = avgSegs.join(' ');
   const areaPath = `${rawPath} L${W} ${H} L0 ${H} Z`;
   const last = points[points.length - 1];
   return (

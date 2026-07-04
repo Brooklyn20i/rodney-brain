@@ -86,18 +86,23 @@ function parseInput(
     }
   }
 
+  // Escape regex metacharacters — a person "A+" or project "Q3 (Reset)" would
+  // otherwise throw a SyntaxError and crash Quick Add on every keystroke.
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordMatch = (word: string) => new RegExp(`\\b${esc(word)}\\b`, 'i').test(raw);
+
   // Person — match by first name
   for (const p of people) {
-    const first = p.name.split(' ')[0];
-    if (first.length >= 3 && new RegExp(`\\b${first}\\b`, 'i').test(raw)) {
+    const first = (p.name || '').split(' ')[0];
+    if (first.length >= 3 && wordMatch(first)) {
       person_id = p.id; personName = p.name; break;
     }
   }
 
   // Project — word match on active projects
   for (const p of projects.filter((p) => p.status === 'active')) {
-    const words = p.name.split(/\s+/).filter((w) => w.length >= 4);
-    if (words.some((w) => new RegExp(`\\b${w}\\b`, 'i').test(raw))) {
+    const words = (p.name || '').split(/\s+/).filter((w) => w.length >= 4);
+    if (words.some((w) => wordMatch(w))) {
       project_id = p.id; projectName = p.name; break;
     }
   }

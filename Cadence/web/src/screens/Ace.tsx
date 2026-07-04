@@ -3,6 +3,7 @@ import { useCadence } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { ScreenHeader } from '../components/bits';
 import { fmtDM } from '../lib/util';
+import { sanitizeHtml } from '../lib/sanitize';
 
 export function Ace({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
@@ -68,7 +69,7 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
                   {isAce && <div className="kobe-bubble-avatar ace-avatar">◆</div>}
                   <div className={`kobe-bubble${isAce ? ' kobe-bubble--kobe' : ' kobe-bubble--user'}`}>
                     {isAce ? (
-                      <div className="kobe-bubble-html" dangerouslySetInnerHTML={{ __html: m.body || '' }} />
+                      <div className="kobe-bubble-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(m.body || '') }} />
                     ) : (
                       <span>{m.body}</span>
                     )}

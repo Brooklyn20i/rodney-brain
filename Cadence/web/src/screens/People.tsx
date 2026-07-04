@@ -15,7 +15,7 @@ const isPersonLinked = (w: WorkItem, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+const initials = (name: string) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
 const mtgFolder = (personId: string) => `__mtg__${personId}`;

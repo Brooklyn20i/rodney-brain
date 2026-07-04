@@ -10,7 +10,7 @@ import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 
-const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+const initials = (name: string) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 
