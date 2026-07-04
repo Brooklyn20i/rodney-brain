@@ -4,6 +4,7 @@ import {
   getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
+  getCalendarEvents, groupEventsByDate,
 } from '../selectors';
 import { todayStr, addDaysStr } from '../util';
 import type { WorkItem, Project, Milestone, ProjectUpdate } from '../types';
@@ -244,5 +245,55 @@ describe('getHealthEvidence', () => {
   });
   it('returns null latestUpdate when none exist', () => {
     expect(getHealthEvidence(proj({}), [], []).latestUpdate).toBeNull();
+  });
+});
+
+describe('getCalendarEvents', () => {
+  it('emits a task event for each dated, non-deleted work item', () => {
+    const items = [
+      wi({ id: 'a', title: 'Ship it', due_date: '2026-06-25' }),
+      wi({ id: 'b', title: 'No date', due_date: null }),        // skipped — no due date
+      wi({ id: 'c', title: 'Gone', due_date: '2026-06-25', deleted_at: '2026-06-10' }), // skipped
+    ];
+    const events = getCalendarEvents(items, []);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ kind: 'task', title: 'Ship it', workItemId: 'a' });
+  });
+
+  it('flags an overdue open task but never a completed one', () => {
+    const items = [
+      wi({ id: 'a', title: 'Late', due_date: addDaysStr(-2) }),
+      wi({ id: 'b', title: 'Late but done', due_date: addDaysStr(-2), done: true }),
+    ];
+    const [late, done] = getCalendarEvents(items, []).sort((x, y) => x.title.localeCompare(y.title));
+    expect(late.overdue).toBe(true);
+    expect(done.overdue).toBe(false);
+    expect(done.done).toBe(true);
+  });
+
+  it('folds horizon markers in and orders a day meeting → milestone → task', () => {
+    const day = '2026-06-25';
+    const items = [wi({ id: 'a', title: 'Task', due_date: day })];
+    const markers = getHorizonMarkers(
+      [proj({ id: 'p1', status: 'active' })],
+      [ms({ id: 'm1', project_id: 'p1', title: 'Milestone', due_date: day })],
+      [{ personId: 'per1', name: 'Dana', date: day }],
+    );
+    const kinds = getCalendarEvents(items, markers)
+      .filter((e) => e.date === day)
+      .map((e) => e.kind);
+    expect(kinds).toEqual(['meeting', 'milestone', 'task']);
+  });
+
+  it('groups events by their date string', () => {
+    const items = [
+      wi({ id: 'a', due_date: '2026-06-25' }),
+      wi({ id: 'b', due_date: '2026-06-25' }),
+      wi({ id: 'c', due_date: '2026-06-26' }),
+    ];
+    const map = groupEventsByDate(getCalendarEvents(items, []));
+    expect(map.get('2026-06-25')).toHaveLength(2);
+    expect(map.get('2026-06-26')).toHaveLength(1);
+    expect(map.get('2026-06-27')).toBeUndefined();
   });
 });
