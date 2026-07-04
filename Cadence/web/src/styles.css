@@ -1390,7 +1390,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 }
 .domain-switch-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
 .domain-switch-btn.active { background: var(--sidebar-active); color: var(--sidebar-active-text); }
-.domain-switch-icon { font-size: 15px; opacity: 0.85; }
+.domain-switch-icon { display: flex; align-items: center; justify-content: center; height: 20px; opacity: 0.9; }
+.domain-switch-icon svg { display: block; width: 20px; height: 20px; }
 .domain-switch-btn.active .domain-switch-icon { color: var(--sidebar-icon-active); opacity: 1; }
 
 /* ── Cards / metrics (Financial + Fitness) ── */

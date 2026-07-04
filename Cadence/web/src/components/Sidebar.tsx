@@ -85,11 +85,60 @@ export const FITNESS_NAV: { section: string; items: NavItem[] }[] = [
   ]},
 ];
 
-const DOMAINS: { id: Domain; label: string; icon: string }[] = [
-  { id: 'work', label: 'Work', icon: '◆' },
-  { id: 'financial', label: 'Financial', icon: '$' },
-  { id: 'fitness', label: 'Fitness', icon: '♥' },
+const DOMAINS: { id: Domain; label: string }[] = [
+  { id: 'work', label: 'Work' },
+  { id: 'financial', label: 'Financial' },
+  { id: 'fitness', label: 'Fitness' },
 ];
+
+// Custom, on-brand domain marks: a matched set of line icons (briefcase /
+// coin stack / dumbbell) drawn at one stroke weight with rounded joins, per
+// DESIGN.md's restrained executive language — replacing the old ◆ / $ / ♥
+// glyphs. currentColor so they inherit the pill's active/idle ink.
+function DomainIcon({ id }: { id: Domain }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.9,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  if (id === 'work') {
+    // Briefcase — operations / follow-through.
+    return (
+      <svg {...common}>
+        <rect x="3" y="7.5" width="18" height="12.5" rx="2.2" />
+        <path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5" />
+        <path d="M3 12.5h18" />
+        <path d="M12 12v1.6" />
+      </svg>
+    );
+  }
+  if (id === 'financial') {
+    // Coin stack — wealth.
+    return (
+      <svg {...common}>
+        <ellipse cx="12" cy="7" rx="7" ry="3" />
+        <path d="M5 7v5c0 1.66 3.13 3 7 3s7-1.34 7-3V7" />
+        <path d="M5 12v4c0 1.66 3.13 3 7 3s7-1.34 7-3v-4" />
+      </svg>
+    );
+  }
+  // Fitness — dumbbell.
+  return (
+    <svg {...common}>
+      <path d="M7.5 8.5v7" />
+      <path d="M4.5 10v4" />
+      <path d="M16.5 8.5v7" />
+      <path d="M19.5 10v4" />
+      <path d="M7.5 12h9" />
+    </svg>
+  );
+}
 
 interface Props {
   domain: Domain;
@@ -135,7 +184,9 @@ export function Sidebar({ domain, onDomainChange, current, onNavigate, badges, o
             onClick={() => onDomainChange(d.id)}
             title={d.label}
           >
-            <span className="domain-switch-icon">{d.icon}</span>
+            <span className="domain-switch-icon">
+              <DomainIcon id={d.id} />
+            </span>
             {d.label}
           </button>
         ))}
