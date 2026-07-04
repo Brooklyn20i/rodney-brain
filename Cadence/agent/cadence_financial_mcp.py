@@ -117,36 +117,75 @@ def list_liquidity_buckets() -> list[dict]:
         return [{"error": str(e)}]
 
 
-# ── Budget (macro cashflow plan) ────────────────────────────────────────────
+# ── Budget (macro cashflow plan, multi-currency, AU financial year) ──────────
 
 _BUDGET_PER_YEAR = {"weekly": 52, "fortnightly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
+_BUDGET_FREQS = set(_BUDGET_PER_YEAR) | {"one_off"}
+
+
+def _fy_months(fy_start: int) -> list[str]:
+    out = []
+    for i in range(12):
+        mi = 6 + i
+        out.append(f"{fy_start + mi // 12}-{mi % 12 + 1:02d}")
+    return out
+
+
+def _fx_map(rows: list[dict]) -> dict:
+    m = {r["currency"].upper(): float(r.get("rate_to_aud", 1)) for r in rows if not r.get("deleted_at")}
+    m["AUD"] = 1.0
+    return m
+
+
+def _month_aud(line: dict, month: str, fx: dict) -> float:
+    if not line.get("active", True):
+        return 0.0
+    start, end, freq = line.get("start_month"), line.get("end_month"), line.get("frequency", "monthly")
+    if start and month < start:
+        return 0.0
+    if end and month > end:
+        return 0.0
+    amt = float(line.get("amount", 0))
+    if freq == "one_off":
+        native = amt if start == month else 0.0
+    else:
+        native = amt * _BUDGET_PER_YEAR.get(freq, 12) / 12
+    return native * fx.get((line.get("currency") or "AUD").upper(), 1.0)
 
 
 @mcp.tool()
-def get_budget() -> dict:
-    """Rodney's macro budget: recurring income streams and payments, plus the
-    monthly/annual free-cash summary. Every active line is normalised to a
-    monthly figure so income minus payments = free cash."""
+def get_budget(fy_start_year: int | None = None) -> dict:
+    """Rodney's macro budget: recurring income and payments with per-line
+    currency and frequency, converted to an AUD base, summarised for the
+    Australian financial year (1 Jul -> 30 Jun). Pass fy_start_year (e.g. 2025
+    for FY25-26); defaults to the current FY. Returns the raw lines, a
+    month-by-month AUD breakdown, and the annual totals."""
     try:
-        lines = bridge.select("budget_lines", "select=*&deleted_at=is.null&order=sort_order", limit=200)
-        income_m = 0.0
-        expense_m = 0.0
-        for l in lines:
-            if not l.get("active", True):
-                continue
-            monthly = float(l.get("amount", 0)) * _BUDGET_PER_YEAR.get(l.get("frequency", "monthly"), 12) / 12
-            if l.get("kind") == "income":
-                income_m += monthly
-            else:
-                expense_m += monthly
-        free_m = income_m - expense_m
+        lines = bridge.select("budget_lines", "select=*&deleted_at=is.null&order=sort_order", limit=300)
+        fx = _fx_map(bridge.select("budget_fx_rates", "select=*&deleted_at=is.null", limit=50))
+        if fy_start_year is None:
+            from datetime import date
+
+            t = date.today()
+            fy_start_year = t.year if t.month >= 7 else t.year - 1
+        months = []
+        tot_in = tot_out = 0.0
+        for mo in _fy_months(fy_start_year):
+            inc = sum(_month_aud(l, mo, fx) for l in lines if l.get("kind") == "income")
+            exp = sum(_month_aud(l, mo, fx) for l in lines if l.get("kind") == "expense")
+            tot_in += inc
+            tot_out += exp
+            months.append({"month": mo, "income_aud": round(inc, 2), "payments_aud": round(exp, 2), "free_cash_aud": round(inc - exp, 2)})
         return {
+            "fy_start_year": fy_start_year,
+            "currency_base": "AUD",
+            "fx_rates": fx,
             "lines": lines,
-            "monthly_income": round(income_m, 2),
-            "monthly_payments": round(expense_m, 2),
-            "monthly_free_cash": round(free_m, 2),
-            "annual_free_cash": round(free_m * 12, 2),
-            "savings_rate": round(free_m / income_m, 4) if income_m > 0 else 0,
+            "months": months,
+            "fy_income_aud": round(tot_in, 2),
+            "fy_payments_aud": round(tot_out, 2),
+            "fy_free_cash_aud": round(tot_in - tot_out, 2),
+            "savings_rate": round((tot_in - tot_out) / tot_in, 4) if tot_in > 0 else 0,
         }
     except bridge.FinancialBridgeError as e:
         return {"error": str(e)}
@@ -159,22 +198,31 @@ def add_budget_line(
     amount: float,
     frequency: str = "monthly",
     category: str = "",
+    currency: str = "AUD",
+    start_month: str | None = None,
+    end_month: str | None = None,
 ) -> dict:
-    """Add a recurring budget line. kind is 'income' or 'expense'; frequency is
-    weekly/fortnightly/monthly/quarterly/annual; category is a grouping label
-    (e.g. 'salary', 'mortgage', 'credit_card'). amount is always positive."""
+    """Add a budget line. kind is 'income' or 'expense'; frequency is
+    weekly/fortnightly/monthly/quarterly/annual/one_off; currency is a 3-letter
+    code (AUD base; set its rate with set_fx_rate); category is a grouping key
+    (e.g. 'salary', 'mortgage'). start_month/end_month ('YYYY-MM') limit the
+    line to a window — a one_off lands its whole amount in start_month. amount
+    is always positive."""
     try:
         if kind not in ("income", "expense"):
             return {"error": "kind must be 'income' or 'expense'"}
-        if frequency not in _BUDGET_PER_YEAR:
-            return {"error": f"frequency must be one of {', '.join(_BUDGET_PER_YEAR)}"}
+        if frequency not in _BUDGET_FREQS:
+            return {"error": f"frequency must be one of {', '.join(sorted(_BUDGET_FREQS))}"}
         row = {
             "owner_id": bridge.discover_owner_id(),
             "kind": kind,
             "category": category or ("other_income" if kind == "income" else "other_expense"),
             "label": label,
             "amount": amount,
+            "currency": (currency or "AUD").upper(),
             "frequency": frequency,
+            "start_month": start_month,
+            "end_month": end_month,
             "active": True,
         }
         return _first(bridge.insert("budget_lines", row))
@@ -184,14 +232,42 @@ def add_budget_line(
 
 @mcp.tool()
 def update_budget_line(line_id: str, patch: dict) -> dict:
-    """Update a budget line (amount, frequency, label, category, active, kind).
-    Only the given fields change."""
+    """Update a budget line. Updatable: kind, category, label, amount, currency,
+    frequency, start_month, end_month, active, sort_order, notes."""
     try:
-        allowed = {"kind", "category", "label", "amount", "frequency", "active", "sort_order", "notes"}
+        allowed = {"kind", "category", "label", "amount", "currency", "frequency",
+                   "start_month", "end_month", "active", "sort_order", "notes"}
         clean = {k: v for k, v in patch.items() if k in allowed}
         if not clean:
             return {"error": "no updatable fields provided"}
         return _first(bridge.patch_row("budget_lines", line_id, clean))
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def set_fx_rate(currency: str, rate_to_aud: float) -> dict:
+    """Set the AUD conversion rate for a currency (e.g. currency='EUR',
+    rate_to_aud=1.64 means 1 EUR = 1.64 AUD). Upserts one row per currency."""
+    try:
+        row = {"owner_id": bridge.discover_owner_id(), "currency": currency.upper(), "rate_to_aud": rate_to_aud}
+        return _first(bridge.upsert("budget_fx_rates", row, on_conflict="owner_id,currency"))
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def add_budget_category(kind: str, label: str) -> dict:
+    """Add a custom budget category (extends the dropdown lists). kind is
+    'income' or 'expense'; label is a human name like 'Consulting income'."""
+    try:
+        if kind not in ("income", "expense"):
+            return {"error": "kind must be 'income' or 'expense'"}
+        import re
+
+        key = re.sub(r"[^a-z0-9]+", "_", label.strip().lower()).strip("_") or "custom"
+        row = {"owner_id": bridge.discover_owner_id(), "kind": kind, "key": key, "label": label.strip()}
+        return _first(bridge.insert("budget_categories", row))
     except bridge.FinancialBridgeError as e:
         return {"error": str(e)}
 

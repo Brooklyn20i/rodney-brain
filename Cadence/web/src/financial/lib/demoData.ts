@@ -10,6 +10,8 @@
 import type {
   AgentMessage,
   AllocationPolicy,
+  BudgetCategory,
+  BudgetFxRate,
   BudgetLine,
   CadenceFinancialData,
   Decision,
@@ -448,18 +450,29 @@ const propertyLedger: PropertyLedgerEntry[] = (() => {
   return rows;
 })();
 
-// Macro budget — fictional recurring plan. Income streams in, payments out.
+// Macro budget — fictional per-month plan. Income in (incl. a EUR salary),
+// payments out, one EUR→AUD rate, and a one-off December bonus.
+const bgBase = { ...base, currency: 'AUD', start_month: null, end_month: null };
 const budgetLines: BudgetLine[] = [
-  { ...base, id: 'bg-salary', kind: 'income', category: 'salary', label: 'Salary (after tax)', amount: 11_500, frequency: 'monthly', active: true, sort_order: 0, notes: '' },
-  { ...base, id: 'bg-rent-income', kind: 'income', category: 'rental_income', label: 'Rental income (net of agent)', amount: 1_450, frequency: 'weekly', active: true, sort_order: 1, notes: 'Across the property portfolio.' },
-  { ...base, id: 'bg-interest', kind: 'income', category: 'interest', label: 'Offset / savings interest', amount: 4_800, frequency: 'annual', active: true, sort_order: 2, notes: '' },
-  { ...base, id: 'bg-dividends', kind: 'income', category: 'dividends', label: 'Share dividends', amount: 2_100, frequency: 'quarterly', active: true, sort_order: 3, notes: '' },
-  { ...base, id: 'bg-mortgage', kind: 'expense', category: 'mortgage', label: 'Home + investment mortgages', amount: 7_800, frequency: 'monthly', active: true, sort_order: 4, notes: 'Interest + principal across loans.' },
-  { ...base, id: 'bg-cards', kind: 'expense', category: 'credit_card', label: 'Credit cards (paid in full)', amount: 2_600, frequency: 'monthly', active: true, sort_order: 5, notes: '' },
-  { ...base, id: 'bg-utilities', kind: 'expense', category: 'utilities', label: 'Power, water, internet, phone', amount: 720, frequency: 'monthly', active: true, sort_order: 6, notes: '' },
-  { ...base, id: 'bg-insurance', kind: 'expense', category: 'insurance', label: 'Insurances (life, home, motor)', amount: 5_400, frequency: 'annual', active: true, sort_order: 7, notes: '' },
-  { ...base, id: 'bg-subs', kind: 'expense', category: 'subscriptions', label: 'Subscriptions', amount: 180, frequency: 'monthly', active: true, sort_order: 8, notes: '' },
-  { ...base, id: 'bg-living', kind: 'expense', category: 'living', label: 'Groceries, fuel, everyday', amount: 900, frequency: 'fortnightly', active: true, sort_order: 9, notes: '' },
+  { ...bgBase, id: 'bg-salary', kind: 'income', category: 'salary', label: 'Salary (after tax)', amount: 6_200, currency: 'EUR', frequency: 'monthly', active: true, sort_order: 0, notes: 'Paid in EUR.' },
+  { ...bgBase, id: 'bg-rent-income', kind: 'income', category: 'rental_income', label: 'Rental income (net of agent)', amount: 1_450, frequency: 'weekly', active: true, sort_order: 1, notes: 'AUD, across the property portfolio.' },
+  { ...bgBase, id: 'bg-interest', kind: 'income', category: 'interest', label: 'Offset / savings interest', amount: 4_800, frequency: 'annual', active: true, sort_order: 2, notes: '' },
+  { ...bgBase, id: 'bg-dividends', kind: 'income', category: 'dividends', label: 'Share dividends', amount: 2_100, frequency: 'quarterly', active: true, sort_order: 3, notes: '' },
+  { ...bgBase, id: 'bg-bonus', kind: 'income', category: 'salary', label: 'Annual bonus', amount: 18_000, currency: 'EUR', frequency: 'one_off', start_month: '2025-12', active: true, sort_order: 4, notes: 'One-off, December.' },
+  { ...bgBase, id: 'bg-mortgage', kind: 'expense', category: 'mortgage', label: 'Home + investment mortgages', amount: 7_800, frequency: 'monthly', active: true, sort_order: 5, notes: 'Interest + principal across loans.' },
+  { ...bgBase, id: 'bg-cards', kind: 'expense', category: 'credit_card', label: 'Credit cards (paid in full)', amount: 2_600, frequency: 'monthly', active: true, sort_order: 6, notes: '' },
+  { ...bgBase, id: 'bg-utilities', kind: 'expense', category: 'utilities', label: 'Power, water, internet, phone', amount: 720, frequency: 'monthly', active: true, sort_order: 7, notes: '' },
+  { ...bgBase, id: 'bg-insurance', kind: 'expense', category: 'insurance', label: 'Insurances (life, home, motor)', amount: 5_400, frequency: 'annual', active: true, sort_order: 8, notes: '' },
+  { ...bgBase, id: 'bg-subs', kind: 'expense', category: 'subscriptions', label: 'Subscriptions', amount: 180, frequency: 'monthly', active: true, sort_order: 9, notes: '' },
+  { ...bgBase, id: 'bg-living', kind: 'expense', category: 'living', label: 'Groceries, fuel, everyday', amount: 900, frequency: 'fortnightly', active: true, sort_order: 10, notes: '' },
+];
+
+const budgetCategories: BudgetCategory[] = [
+  { ...base, id: 'bc-consulting', kind: 'income', key: 'consulting', label: 'Consulting / side work', sort_order: 0 },
+];
+
+const budgetFxRates: BudgetFxRate[] = [
+  { ...base, id: 'fx-eur', currency: 'EUR', rate_to_aud: 1.64 },
 ];
 
 export function loadDemoData(): CadenceFinancialData {
@@ -481,5 +494,7 @@ export function loadDemoData(): CadenceFinancialData {
     estate_items: estateItems,
     property_ledger: propertyLedger,
     budget_lines: budgetLines,
+    budget_categories: budgetCategories,
+    budget_fx_rates: budgetFxRates,
   };
 }

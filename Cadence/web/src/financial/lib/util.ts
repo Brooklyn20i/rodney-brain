@@ -34,7 +34,33 @@ export const BUDGET_FREQUENCY_LABEL: Record<string, string> = {
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   annual: 'Annual',
+  one_off: 'One-off',
 };
+
+// Currencies offered in the budget line editor. AUD is the base everything
+// converts to; the rest need a rate set on the Budget screen.
+export const BUDGET_CURRENCIES = ['AUD', 'EUR', 'USD', 'GBP', 'NZD', 'SGD', 'JPY', 'CHF', 'CAD'];
+
+// 'YYYY-MM' -> 'Jul' (short) or 'Jul 25' (with year)
+export function monthShort(period: string, withYear = false): string {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(y, m - 1, 1);
+  return withYear
+    ? d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' })
+    : d.toLocaleDateString('en-AU', { month: 'short' });
+}
+
+// 'YYYY-MM' one month later / earlier
+export function shiftMonth(period: string, delta: number): string {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function currentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 export const BUDGET_INCOME_CATEGORIES: { key: string; label: string }[] = [
   { key: 'salary', label: 'Salary / wages' },

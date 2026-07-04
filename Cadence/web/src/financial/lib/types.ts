@@ -389,11 +389,15 @@ export interface PropertyLedgerEntry {
 // (see lib/budgetCalc.ts). Amounts are always positive; `kind` decides sign.
 export type BudgetKind = 'income' | 'expense';
 
-export type BudgetFrequency = 'weekly' | 'fortnightly' | 'monthly' | 'quarterly' | 'annual';
+// 'one_off' lands the whole amount in a single month (its start_month) — for a
+// bonus, a one-time bill, etc. Every other frequency recurs and is amortised
+// to a monthly figure.
+export type BudgetFrequency = 'weekly' | 'fortnightly' | 'monthly' | 'quarterly' | 'annual' | 'one_off';
 
-// Grouping for the summary. Stored as free text (DB doesn't constrain it) so
-// new categories need no migration; the UI offers this preset list per kind.
-export type BudgetCategory =
+// Built-in grouping keys. Stored as free text (DB doesn't constrain it) so
+// owner-added categories need no migration; the UI merges these presets with
+// the owner's own BudgetCategory rows per kind.
+export type BudgetCategoryKey =
   // income
   | 'salary'
   | 'rental_income'
@@ -417,13 +421,44 @@ export interface BudgetLine {
   id: string;
   owner_id: string;
   kind: BudgetKind;
-  category: string; // BudgetCategory, but free text at the DB level
+  category: string; // BudgetCategory key, but free text at the DB level
   label: string;
-  amount: number; // always positive; kind decides income vs payment
+  amount: number; // always positive, in `currency`; kind decides income vs payment
+  currency: string; // 'AUD' | 'EUR' | ...; converted to AUD via budget_fx_rates
   frequency: BudgetFrequency;
+  // Optional month window, 'YYYY-MM' inclusive. null = unbounded. A line only
+  // contributes to months inside its window; one_off lands in start_month.
+  start_month: string | null;
+  end_month: string | null;
   active: boolean;
   sort_order: number;
   notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Owner-added category, extending the built-in income/expense dropdown lists.
+// Better classification now improves reporting later.
+export interface BudgetCategory {
+  id: string;
+  owner_id: string;
+  kind: BudgetKind;
+  key: string; // slug stored on budget_lines.category
+  label: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Currency → AUD conversion rate. AUD is the base (implicitly 1); a row exists
+// per foreign currency the owner uses. Rodney earns EUR, banks AUD.
+export interface BudgetFxRate {
+  id: string;
+  owner_id: string;
+  currency: string;
+  rate_to_aud: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -447,6 +482,8 @@ export interface CadenceFinancialData {
   estate_items: EstateItem[];
   property_ledger: PropertyLedgerEntry[];
   budget_lines: BudgetLine[];
+  budget_categories: BudgetCategory[];
+  budget_fx_rates: BudgetFxRate[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -467,6 +504,8 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'estate_items',
   'property_ledger',
   'budget_lines',
+  'budget_categories',
+  'budget_fx_rates',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -487,4 +526,6 @@ export const emptyData = (): CadenceFinancialData => ({
   estate_items: [],
   property_ledger: [],
   budget_lines: [],
+  budget_categories: [],
+  budget_fx_rates: [],
 });
