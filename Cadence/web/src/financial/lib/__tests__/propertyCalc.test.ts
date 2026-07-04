@@ -4,6 +4,7 @@ import {
   isIncome,
   monthlyPnL,
   portfolioMonth,
+  propertyAnnualRunRate,
   propertyFinancials,
   propertyYields,
   trailingAverages,
@@ -160,6 +161,34 @@ describe('propertyYields', () => {
 
   it('returns null yields when value is zero', () => {
     expect(propertyYields(2000, 1350, 0)).toEqual({ grossYield: null, netYield: null });
+  });
+});
+
+describe('propertyAnnualRunRate', () => {
+  it('treats water bills as quarterly rather than monthly recurring', () => {
+    const p: Property = { ...property('Q', 850_000), weekly_rent: 0 };
+    const rows = [entry('Q', '2026-07', 'water', 488.43)];
+    const trailing = trailingAverages(rows, 'Q');
+    const runRate = propertyAnnualRunRate(rows, p, trailing);
+
+    expect(trailing.avgNet).toBeCloseTo(-488.43, 2);
+    expect(trailing.avgNet * 12).toBeCloseTo(-5861.16, 2); // old false signal
+    expect(runRate.annualExpenses).toBeCloseTo(1953.72, 2); // 488.43 × 4 quarters
+    expect(runRate.annualNet).toBeCloseTo(-1953.72, 2);
+    expect(runRate.provisional).toBe(true);
+
+    const f = propertyFinancials(p, [], trailing, new Date('2026-07-04T00:00:00'), runRate);
+    expect(f.annualNet).toBeCloseTo(-1953.72, 2);
+    expect(f.weeklyCashflow).toBeCloseTo(-1953.72 / 52, 4);
+  });
+
+  it('keeps explicitly accrued quarterly bills as monthly accruals', () => {
+    const p = property('S', 600_000);
+    const rows = [
+      { ...entry('S', '2026-07', 'strata', 300), notes: 'Quarterly strata levy / 3 monthly accrual' },
+    ];
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.annualExpenses).toBeCloseTo(3600, 2); // 300 monthly accrual × 12
   });
 });
 

@@ -7,6 +7,7 @@ import {
   availablePeriods,
   monthlyPnL,
   portfolioMonth,
+  propertyAnnualRunRate,
   propertyFinancials,
   trailingAverages,
 } from '../lib/propertyCalc';
@@ -107,7 +108,10 @@ function PortfolioOverview({
   const [showForm, setShowForm] = useState(false);
   const pm = useMemo(() => portfolioMonth(ledger, properties, period), [ledger, properties, period]);
 
-  const fins = properties.map((p) => propertyFinancials(p, loansFor(p.id), trailingAverages(ledger, p.id)));
+  const fins = properties.map((p) => {
+    const trailing = trailingAverages(ledger, p.id);
+    return propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing));
+  });
   const totalValue = fins.reduce((s, f) => s + f.value, 0);
   const totalDebt = fins.reduce((s, f) => s + f.debt, 0);
   const totalEquity = totalValue - totalDebt;
@@ -184,7 +188,8 @@ function PortfolioOverview({
                   </thead>
                   <tbody>
                     {properties.map((p) => {
-                      const f = propertyFinancials(p, loansFor(p.id), trailingAverages(ledger, p.id));
+                      const trailing = trailingAverages(ledger, p.id);
+                      const f = propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing));
                       return (
                         <tr key={p.id}>
                           <td style={{ textAlign: 'left' }}>{p.address}</td>
@@ -220,7 +225,8 @@ function PortfolioOverview({
                 </table>
               </div>
               <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
-                Weekly cashflow and yields use your trailing-average P&amp;L (interest-only). Tap a
+                Weekly cashflow and yields use an annual run-rate: weekly rent where known, monthly costs as monthly,
+                quarterly bills as quarterly, annual bills as annual, and repairs as one-off. Tap a
                 property for its full returns dashboard, acquisition history and lease detail.
               </p>
             </Card>
@@ -257,7 +263,8 @@ function PropertyDetailPage({
 }) {
   const [tab, setTab] = useState<'none' | 'edit' | 'log'>('none');
   const trailing = trailingAverages(ledger, property.id);
-  const f = propertyFinancials(property, loans, trailing);
+  const runRate = propertyAnnualRunRate(ledger, property, trailing);
+  const f = propertyFinancials(property, loans, trailing, new Date(), runRate);
   const pnl = monthlyPnL(ledger, property.id, period);
   const propPeriods = availablePeriods(ledger.filter((e) => e.property_id === property.id));
 
@@ -340,6 +347,9 @@ function PropertyDetailPage({
             <KV label="Cash gearing" value={GEARING_LABEL[f.gearing]} tone={f.gearing === 'negative' ? 'bad' : f.gearing === 'positive' ? 'good' : undefined} />
             <KV label="Depreciation (non-cash)" value={f.depreciationAnnual ? `${formatMoney(f.depreciationAnnual)}/yr` : '—'} />
             <KV label="Taxable position" value={`${formatMoney(f.taxablePosition)}/yr`} tone={f.negativelyGeared ? 'bad' : 'good'} />
+            <p style={{ fontSize: 12, color: runRate.provisional ? 'var(--orange)' : 'var(--text2)', margin: '10px 0 0' }}>
+              Annual run-rate: {runRate.notes.join(' ')}
+            </p>
           </Card>
         </div>
 

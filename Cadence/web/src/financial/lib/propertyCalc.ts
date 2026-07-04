@@ -196,6 +196,89 @@ export interface PropertyYields {
   netYield: number | null; // annualised net cashflow / value
 }
 
+export interface PropertyAnnualRunRate {
+  months: number;
+  annualIncome: number;
+  annualExpenses: number;
+  annualNet: number;
+  provisional: boolean;
+  notes: string[];
+}
+
+const QUARTERLY_BILL_CATEGORIES = new Set<PropertyLedgerCategory>(['strata', 'water', 'council_rates']);
+const ANNUAL_BILL_CATEGORIES = new Set<PropertyLedgerCategory>(['insurance', 'land_tax']);
+const ONE_OFF_EXPENSE_CATEGORIES = new Set<PropertyLedgerCategory>(['repairs_maintenance']);
+
+function looksLikeMonthlyAccrual(e: PropertyLedgerEntry): boolean {
+  const text = `${e.source} ${e.notes}`.toLowerCase();
+  return /monthly|per month|\/\s*12|\/\s*3|accrual/.test(text);
+}
+
+function avgBillAnnualised(rows: PropertyLedgerEntry[], multiplier: number): number {
+  if (rows.length === 0) return 0;
+  const totalC = rows.reduce((s, e) => s + toCents(e.amount), 0);
+  return centsToDollars(Math.round((totalC / rows.length) * multiplier));
+}
+
+function monthlyAccrualAnnualised(rows: PropertyLedgerEntry[]): number {
+  const periods = availablePeriods(rows);
+  if (periods.length === 0) return 0;
+  const totalC = rows.reduce((s, e) => s + toCents(e.amount), 0);
+  return centsToDollars(Math.round((totalC / periods.length) * 12));
+}
+
+// Converts actual property-ledger lines into a sensible annual run-rate.
+// Important: not every ledger row is monthly. Water/council/body-corp bills are
+// usually quarterly; insurance/land tax are often annual; repairs are one-off.
+// The old trailing.avgNet × 12 approach treated one quarterly water bill as if
+// it recurred every month, which created false negative-gearing signals.
+export function propertyAnnualRunRate(
+  entries: PropertyLedgerEntry[],
+  property: Property,
+  trailing: TrailingAverages = trailingAverages(entries, property.id)
+): PropertyAnnualRunRate {
+  const rows = entries.filter((e) => e.property_id === property.id);
+  const months = availablePeriods(rows).length;
+  const weeklyRent = property.weekly_rent ?? 0;
+  const annualIncome = weeklyRent > 0 ? weeklyRent * 52 : trailing.avgIncome * 12;
+
+  let annualExpensesC = 0;
+  for (const cat of EXPENSE_CATEGORIES) {
+    const catRows = rows.filter((e) => e.category === cat);
+    if (catRows.length === 0) continue;
+
+    let annualised = 0;
+    if (catRows.some(looksLikeMonthlyAccrual)) {
+      annualised = monthlyAccrualAnnualised(catRows);
+    } else if (QUARTERLY_BILL_CATEGORIES.has(cat)) {
+      annualised = avgBillAnnualised(catRows, 4);
+    } else if (ANNUAL_BILL_CATEGORIES.has(cat)) {
+      annualised = avgBillAnnualised(catRows, 1);
+    } else if (ONE_OFF_EXPENSE_CATEGORIES.has(cat)) {
+      annualised = centsToDollars(catRows.reduce((s, e) => s + toCents(e.amount), 0));
+    } else {
+      annualised = monthlyAccrualAnnualised(catRows);
+    }
+    annualExpensesC += toCents(annualised);
+  }
+
+  const annualIncomeC = toCents(annualIncome);
+  const annualExpenses = centsToDollars(annualExpensesC);
+  const notes: string[] = [];
+  if (months < 3) notes.push(`Only ${months} ledger month${months === 1 ? '' : 's'} on file.`);
+  if (weeklyRent <= 0 && trailing.avgIncome <= 0) notes.push('No rent baseline on file.');
+  notes.push('Quarterly bills are annualised ×4; annual bills ×1; repairs are treated as one-off.');
+
+  return {
+    months,
+    annualIncome: centsToDollars(annualIncomeC),
+    annualExpenses,
+    annualNet: centsToDollars(annualIncomeC - annualExpensesC),
+    provisional: months < 3 || (weeklyRent <= 0 && trailing.avgIncome <= 0),
+    notes,
+  };
+}
+
 // Yields annualise a monthly income/net figure (×12) against property value.
 // Pass the trailing-average monthly figures for a smoothed read, or a single
 // month's for a point read. Null when value is zero.
@@ -264,6 +347,9 @@ export interface PropertyFinancials {
   weeklyRent: number;
   leaseEnd: string | null;
   daysToLeaseEnd: number | null;
+
+  // Basis used for annualised net-cashflow metrics when supplied by the UI.
+  annualRunRate: PropertyAnnualRunRate | null;
 }
 
 // trailing: the trailingAverages() result for this property (monthly figures).
@@ -273,7 +359,8 @@ export function propertyFinancials(
   property: Property,
   loans: Loan[],
   trailing: TrailingAverages,
-  asOf: Date = new Date()
+  asOf: Date = new Date(),
+  runRate: PropertyAnnualRunRate | null = null
 ): PropertyFinancials {
   const value = property.value;
   const debtC = loans.reduce((s, l) => s + toCents(l.balance), 0);
@@ -300,11 +387,11 @@ export function propertyFinancials(
   }
 
   const weeklyRent = property.weekly_rent ?? 0;
-  const annualRent = weeklyRent > 0 ? weeklyRent * 52 : trailing.avgIncome * 12;
+  const annualRent = runRate?.annualIncome ?? (weeklyRent > 0 ? weeklyRent * 52 : trailing.avgIncome * 12);
   const grossYield = value > 0 ? annualRent / value : null;
   const yieldOnCost = purchasePrice > 0 ? annualRent / purchasePrice : null;
 
-  const annualNet = trailing.avgNet * 12;
+  const annualNet = runRate?.annualNet ?? trailing.avgNet * 12;
   const netYield = value > 0 ? annualNet / value : null;
   const weeklyCashflow = annualNet / 52;
   const cashInvested = property.cash_invested ?? 0;
@@ -355,5 +442,6 @@ export function propertyFinancials(
     weeklyRent,
     leaseEnd: property.lease_end ?? null,
     daysToLeaseEnd,
+    annualRunRate: runRate,
   };
 }
