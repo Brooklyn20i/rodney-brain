@@ -14,6 +14,11 @@ assert(login.includes('type="email"'), 'Login must expose an email field.');
 const css = read('src/styles.css');
 assert(css.includes('input[type=password]'), 'Password inputs must use the same field styling as other inputs.');
 
+const vercelConfig = read('vercel.json');
+for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'X-Frame-Options']) {
+  assert(vercelConfig.includes(header), `vercel.json must set ${header}.`);
+}
+
 const inviteMigration = read('../backend/migrations/0015_workspace_invites.sql');
 assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites SELECT must not publicly expose invite tokens.');
 assert(inviteMigration.includes("cadence_workspace_access(workspace_id, 'admin')"), 'workspace_invites SELECT must be admin-scoped.');
