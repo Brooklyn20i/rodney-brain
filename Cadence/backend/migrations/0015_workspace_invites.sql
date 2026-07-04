@@ -35,15 +35,13 @@ create table if not exists public.workspace_invites (
 
 alter table public.workspace_invites enable row level security;
 
--- Workspace members can see invites for their workspace (to list pending ones).
+-- Workspace admins can see invites for their workspace (to list pending ones).
+-- Invite ids are bearer tokens, so never expose them publicly; invite
+-- acceptance is handled by accept_workspace_invite(token), not direct SELECT.
 drop policy if exists workspace_invites_select on public.workspace_invites;
 create policy workspace_invites_select on public.workspace_invites
   for select using (
-    -- The invitee can look up an invite by token (needed for acceptance).
-    true
-    -- RLS on the table means anyone can fetch a row, but only if they know the
-    -- UUID token. workspace_id is not filterable without the token.
-    -- After acceptance, only workspace members need to list them.
+    public.cadence_workspace_access(workspace_id, 'admin')
   );
 
 -- Only workspace admins (or workspace creators) can create invites.

@@ -447,7 +447,9 @@ alter table public.workspace_invites enable row level security;
 
 drop policy if exists workspace_invites_select on public.workspace_invites;
 create policy workspace_invites_select on public.workspace_invites
-  for select using (true);
+  for select using (
+    public.cadence_workspace_access(workspace_id, 'admin')
+  );
 
 drop policy if exists workspace_invites_insert on public.workspace_invites;
 create policy workspace_invites_insert on public.workspace_invites
