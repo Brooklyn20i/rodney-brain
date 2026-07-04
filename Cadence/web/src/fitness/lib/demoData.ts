@@ -292,19 +292,26 @@ export function loadDemoData(): CadenceFitnessData {
       )
     );
   }
-  for (let daysAgo = 14; daysAgo >= 0; daysAgo--) {
+  // ~2 years of daily Whoop history so the Recovery screen's long-range view
+  // has something to show: HRV drifts down (78→55) and resting HR up (52→60)
+  // over the span, mirroring a real multi-year decline, with seasonal wobble.
+  const REC_DAYS = 730;
+  for (let daysAgo = REC_DAYS; daysAgo >= 0; daysAgo--) {
     const date = addDays(today, -daysAgo);
+    const t = (REC_DAYS - daysAgo) / REC_DAYS; // 0 (oldest) → 1 (today)
+    const hrvBase = 78 - t * 23; // long decline
+    const rhrBase = 52 + t * 8; // long rise
     data.recovery_metrics.push(
       stamp(
         {
           id: id('rec'),
           date,
-          recovery_pct: Math.round(68 + wobble(daysAgo * 3, 22)),
-          strain: Math.round((13 + wobble(daysAgo * 2 + 1, 4)) * 10) / 10,
-          resting_hr: Math.round(52 + wobble(daysAgo + 5, 3)),
-          hrv_ms: Math.round(78 + wobble(daysAgo * 2, 14)),
-          sleep_hours: Math.round((7.2 + wobble(daysAgo + 2, 0.8)) * 10) / 10,
-          sleep_performance_pct: Math.round(84 + wobble(daysAgo * 4, 10)),
+          recovery_pct: Math.max(15, Math.min(99, Math.round(62 + wobble(daysAgo * 3, 24)))),
+          strain: Math.round(Math.max(3, 14 - t * 5 + wobble(daysAgo * 2 + 1, 4)) * 10) / 10,
+          resting_hr: Math.round(rhrBase + wobble(daysAgo + 5, 4)),
+          hrv_ms: Math.max(28, Math.round(hrvBase + wobble(daysAgo * 2, 12))),
+          sleep_hours: Math.round(Math.max(4, 6.6 + wobble(daysAgo + 2, 1.2)) * 10) / 10,
+          sleep_performance_pct: Math.round(83 + wobble(daysAgo * 4, 12)),
           active_energy_kcal: Math.round(680 + wobble(daysAgo * 5, 260)),
           steps: Math.round(9000 + wobble(daysAgo * 3 + 1, 3500)),
           source: 'whoop' as const,

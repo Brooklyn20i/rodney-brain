@@ -12,6 +12,7 @@ import type {
   NutritionTarget,
   Program,
   ProgramDay,
+  RecoveryMetric,
   Workout,
   WorkoutSet,
 } from './types';
@@ -158,6 +159,183 @@ export function trendDelta(points: TrendPoint[], days = 7): number | null {
   }
   if (ref.date === last.date) return null;
   return last.avg - ref.avg;
+}
+
+// ── Recovery analytics (long-range Whoop history) ───────────────────────────
+// Turns years of daily rows into something readable: trend series with a
+// rolling baseline, range stats vs a personal baseline, monthly aggregates,
+// and a then-vs-now trajectory. All computed, never stored.
+
+// Which recovery fields exist, and which direction is "better" — so the UI can
+// colour a rising HRV green but a rising resting HR red.
+export type RecoveryField =
+  | 'recovery_pct'
+  | 'hrv_ms'
+  | 'resting_hr'
+  | 'sleep_hours'
+  | 'sleep_performance_pct'
+  | 'strain';
+
+export const RECOVERY_HIGHER_BETTER: Record<RecoveryField, boolean> = {
+  recovery_pct: true,
+  hrv_ms: true,
+  resting_hr: false, // lower resting HR is better
+  sleep_hours: true,
+  sleep_performance_pct: true,
+  strain: true, // not strictly "better", but treated as up = more training
+};
+
+export interface MetricPoint {
+  date: string;
+  value: number;
+  avg: number; // trailing moving average over `window` readings
+}
+
+function fieldValue(r: RecoveryMetric, field: RecoveryField): number | null {
+  const v = r[field];
+  return v == null ? null : Number(v);
+}
+
+// Rows with a value for `field`, in [sinceISO, untilISO], oldest first, as a
+// series with a trailing moving average. sinceISO/untilISO are inclusive; pass
+// null for no bound.
+export function metricSeries(
+  rows: RecoveryMetric[],
+  field: RecoveryField,
+  window = 7,
+  sinceISO: string | null = null,
+  untilISO: string | null = null
+): MetricPoint[] {
+  const vals = rows
+    .filter((r) => !r.deleted_at && fieldValue(r, field) != null)
+    .filter((r) => (sinceISO ? r.date >= sinceISO : true) && (untilISO ? r.date <= untilISO : true))
+    .map((r) => ({ date: r.date, value: fieldValue(r, field)! }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return vals.map((p, i) => {
+    const slice = vals.slice(Math.max(0, i - window + 1), i + 1);
+    return { ...p, avg: slice.reduce((s, x) => s + x.value, 0) / slice.length };
+  });
+}
+
+export interface RangeStats {
+  field: RecoveryField;
+  count: number;
+  latest: number | null;
+  latestDate: string | null;
+  avg: number | null;
+  min: number | null;
+  max: number | null;
+  // Latest value minus the average over the range — "where you sit vs baseline".
+  vsAvg: number | null;
+  higherBetter: boolean;
+}
+
+function daysAgoISO(fromISO: string, days: number): string {
+  const d = new Date(fromISO + 'T12:00:00');
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Summary stats for `field` over the last `days` (relative to the newest row
+// present), plus the latest reading and how it compares to that window's mean.
+export function rangeStats(rows: RecoveryMetric[], field: RecoveryField, days: number | null): RangeStats {
+  const all = metricSeries(rows, field, 1);
+  const newest = all.length ? all[all.length - 1].date : null;
+  const since = days != null && newest ? daysAgoISO(newest, days) : null;
+  const pts = since ? all.filter((p) => p.date >= since) : all;
+  const values = pts.map((p) => p.value);
+  const latest = pts.length ? pts[pts.length - 1] : null;
+  const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+  return {
+    field,
+    count: pts.length,
+    latest: latest?.value ?? null,
+    latestDate: latest?.date ?? null,
+    avg,
+    min: values.length ? Math.min(...values) : null,
+    max: values.length ? Math.max(...values) : null,
+    vsAvg: latest && avg != null ? latest.value - avg : null,
+    higherBetter: RECOVERY_HIGHER_BETTER[field],
+  };
+}
+
+export interface MonthlyRecovery {
+  month: string; // 'YYYY-MM'
+  days: number;
+  recovery: number | null;
+  hrv: number | null;
+  rhr: number | null;
+  sleep: number | null;
+  strain: number | null;
+}
+
+const avgOf = (xs: (number | null)[]): number | null => {
+  const v = xs.filter((x): x is number => x != null);
+  return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+};
+
+// One row per calendar month with the month's average of each metric.
+export function monthlyRecovery(rows: RecoveryMetric[]): MonthlyRecovery[] {
+  const byMonth = new Map<string, RecoveryMetric[]>();
+  for (const r of rows) {
+    if (r.deleted_at) continue;
+    const m = r.date.slice(0, 7);
+    (byMonth.get(m) ?? byMonth.set(m, []).get(m)!).push(r);
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, rs]) => ({
+      month,
+      days: rs.length,
+      recovery: avgOf(rs.map((r) => fieldValue(r, 'recovery_pct'))),
+      hrv: avgOf(rs.map((r) => fieldValue(r, 'hrv_ms'))),
+      rhr: avgOf(rs.map((r) => fieldValue(r, 'resting_hr'))),
+      sleep: avgOf(rs.map((r) => fieldValue(r, 'sleep_hours'))),
+      strain: avgOf(rs.map((r) => fieldValue(r, 'strain'))),
+    }));
+}
+
+export interface Trajectory {
+  field: RecoveryField;
+  thenAvg: number | null; // mean of the first `window` days of history
+  nowAvg: number | null; // mean of the most recent `window` days
+  delta: number | null; // now − then
+  pctChange: number | null; // delta / then
+  spanDays: number; // days between the two windows' midpoints (context)
+  improved: boolean | null; // direction-aware (respects higher/lower-is-better)
+  higherBetter: boolean;
+}
+
+// Then-vs-now: mean of the first `window` days of history vs the most recent
+// `window` days — the headline "3-year trajectory" per metric.
+export function trajectory(rows: RecoveryMetric[], field: RecoveryField, window = 90): Trajectory {
+  const s = metricSeries(rows, field, 1);
+  const higherBetter = RECOVERY_HIGHER_BETTER[field];
+  if (s.length < 2) {
+    return { field, thenAvg: null, nowAvg: null, delta: null, pctChange: null, spanDays: 0, improved: null, higherBetter };
+  }
+  const first = s[0].date;
+  const last = s[s.length - 1].date;
+  const thenCut = daysAgoISO(first, -window); // first + window days
+  const nowCut = daysAgoISO(last, window); // last − window days
+  const thenPts = s.filter((p) => p.date <= thenCut).map((p) => p.value);
+  const nowPts = s.filter((p) => p.date >= nowCut).map((p) => p.value);
+  const thenAvg = thenPts.length ? thenPts.reduce((a, b) => a + b, 0) / thenPts.length : null;
+  const nowAvg = nowPts.length ? nowPts.reduce((a, b) => a + b, 0) / nowPts.length : null;
+  const delta = thenAvg != null && nowAvg != null ? nowAvg - thenAvg : null;
+  const spanDays = Math.round(
+    (new Date(last + 'T12:00:00').getTime() - new Date(first + 'T12:00:00').getTime()) / 86_400_000
+  );
+  return {
+    field,
+    thenAvg,
+    nowAvg,
+    delta,
+    pctChange: delta != null && thenAvg ? delta / thenAvg : null,
+    spanDays,
+    improved: delta == null || delta === 0 ? null : higherBetter ? delta > 0 : delta < 0,
+    higherBetter,
+  };
 }
 
 // ── Nutrition ───────────────────────────────────────────────────────────────

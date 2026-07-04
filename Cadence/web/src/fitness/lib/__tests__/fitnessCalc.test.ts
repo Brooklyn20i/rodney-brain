@@ -5,10 +5,14 @@ import {
   epley1RM,
   estimateTDEE,
   lastSetsForExercise,
+  metricSeries,
+  monthlyRecovery,
   nextProgramDay,
   prsByExercise,
+  rangeStats,
   recentPRs,
   targetFor,
+  trajectory,
   trendDelta,
   weekOf,
   weeklySetsByMuscle,
@@ -23,6 +27,7 @@ import type {
   NutritionTarget,
   Program,
   ProgramDay,
+  RecoveryMetric,
   Workout,
   WorkoutSet,
 } from '../types';
@@ -266,6 +271,79 @@ describe('estimateTDEE / weekReport', () => {
     expect(r.loggedDays).toBe(0);
     expect(r.avgIntake).toBeNull();
     expect(r.days.every((d) => !d.logged)).toBe(true);
+  });
+});
+
+describe('recovery analytics', () => {
+  // Build a synthetic history: HRV declines from ~75 to ~50, RHR rises from
+  // ~51 to ~60 over 300 days — the real-data shape.
+  const recovery: RecoveryMetric[] = Array.from({ length: 300 }, (_, i) => {
+    const d = new Date('2025-01-01T12:00:00');
+    d.setDate(d.getDate() + i);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return {
+      id: `r${i}`,
+      date,
+      recovery_pct: 60,
+      strain: 10,
+      resting_hr: Math.round(51 + (i / 299) * 9), // 51 → 60
+      hrv_ms: Math.round(75 - (i / 299) * 25), // 75 → 50
+      sleep_hours: 7,
+      sleep_performance_pct: 85,
+      active_energy_kcal: 600,
+      steps: 9000,
+      source: 'whoop' as const,
+      notes: '',
+      ...base,
+    };
+  });
+
+  it('metricSeries filters by field + range, oldest first, with a moving average', () => {
+    const s = metricSeries(recovery, 'hrv_ms', 7);
+    expect(s).toHaveLength(300);
+    expect(s[0].date < s[299].date).toBe(true);
+    expect(s[0].value).toBe(75);
+    expect(s[299].value).toBe(50);
+    // last-30-days slice
+    const recent = metricSeries(recovery, 'hrv_ms', 7, '2025-10-01');
+    expect(recent.every((p) => p.date >= '2025-10-01')).toBe(true);
+    expect(recent.length).toBeLessThan(300);
+  });
+
+  it('rangeStats reports latest, avg, min/max and vs-average', () => {
+    const st = rangeStats(recovery, 'hrv_ms', 90);
+    expect(st.latest).toBe(50);
+    expect(st.max).toBeGreaterThan(st.min!);
+    // latest (50) is below the 90-day mean, so vsAvg is negative
+    expect(st.vsAvg!).toBeLessThan(0);
+    expect(st.higherBetter).toBe(true);
+    expect(rangeStats(recovery, 'resting_hr', 90).higherBetter).toBe(false);
+  });
+
+  it('trajectory captures then-vs-now, direction-aware', () => {
+    const hrv = trajectory(recovery, 'hrv_ms', 60);
+    expect(hrv.thenAvg!).toBeGreaterThan(hrv.nowAvg!); // HRV fell
+    expect(hrv.delta!).toBeLessThan(0);
+    expect(hrv.improved).toBe(false); // falling HRV is worse
+    expect(hrv.spanDays).toBe(299);
+
+    const rhr = trajectory(recovery, 'resting_hr', 60);
+    expect(rhr.delta!).toBeGreaterThan(0); // RHR rose
+    expect(rhr.improved).toBe(false); // rising resting HR is worse
+  });
+
+  it('monthlyRecovery aggregates one row per month', () => {
+    const m = monthlyRecovery(recovery);
+    expect(m[0].month).toBe('2025-01');
+    expect(m.every((row) => row.days > 0)).toBe(true);
+    // HRV month-averages should decline over time
+    expect(m[0].hrv!).toBeGreaterThan(m[m.length - 1].hrv!);
+  });
+
+  it('handles empty / single-point history without throwing', () => {
+    expect(metricSeries([], 'hrv_ms')).toEqual([]);
+    expect(rangeStats([], 'hrv_ms', 30).latest).toBeNull();
+    expect(trajectory([], 'hrv_ms').improved).toBeNull();
   });
 });
 
