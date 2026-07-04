@@ -16,11 +16,6 @@ export default defineConfig({
         // Without this, opening the URL offline fails at the network level
         // before the service worker can intercept it.
         navigateFallback: '/index.html',
-        // /financial is a DIFFERENT app (Cadence Financial), reverse-proxied
-        // to its own Vercel project by vercel.json. Without this denylist the
-        // service worker serves the cached main-app shell for /financial
-        // navigations and the proxy never gets a chance.
-        navigateFallbackDenylist: [/^\/financial/],
         cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
@@ -53,12 +48,21 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('/node_modules/@react-pdf/') || id.includes('/node_modules/@react-pdf')) return 'react-pdf';
           if (id.includes('/node_modules/@tiptap/') || id.includes('/node_modules/@tiptap')) return 'tiptap';
           if (id.includes('/node_modules/@sentry/')) return 'sentry';
           if (id.includes('/node_modules/')) return 'vendor';
           if (id.includes('/src/screens/')) {
             const name = id.split('/src/screens/')[1].replace(/\.tsx?$/, '').toLowerCase();
             return `screen-${name}`;
+          }
+          if (id.includes('/src/financial/screens/')) {
+            const name = id.split('/src/financial/screens/')[1].replace(/\.tsx?$/, '').toLowerCase();
+            return `screen-financial-${name}`;
+          }
+          if (id.includes('/src/fitness/screens/')) {
+            const name = id.split('/src/fitness/screens/')[1].replace(/\.tsx?$/, '').toLowerCase();
+            return `screen-fitness-${name}`;
           }
         },
       },
@@ -74,7 +78,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['src/lib/**/*.ts'],
+      include: ['src/lib/**/*.ts', 'src/financial/lib/**/*.ts', 'src/fitness/lib/**/*.ts'],
     },
   },
 });

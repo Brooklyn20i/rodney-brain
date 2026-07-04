@@ -18,6 +18,84 @@ Supabase (cloud Postgres + Auth + RLS + Realtime)
 
 ---
 
+## The unified super app
+
+Cadence Work, Cadence Financial and Cadence Fitness were originally three
+separate deployments (each its own Supabase project + Vercel project). They
+are now merged into **one app, one login, one Supabase project** — a sidebar
+domain switcher (Work / Financial / Fitness) instead of three separate URLs.
+This was done because Supabase's free tier caps an org at 2 active projects,
+and because "one app" was the actual goal, not just a shared database.
+
+```
+Supabase (ONE project — Cadence Work's) — three schemas, one auth:
+  public.*      Work's tables (unchanged — workspace-aware, multi-tenant)
+  financial.*   Financial's tables (owner_id only, single-user, unchanged data model)
+  fitness.*     Fitness's tables (owner_id only, single-user, unchanged data model)
+       ▲
+  Cadence/web/  — ONE React app, ONE login
+    src/               Work's own screens/lib (untouched)
+    src/financial/     Financial's screens/lib, ported almost verbatim
+    src/fitness/       Fitness's screens/lib, ported almost verbatim
+```
+
+**Why schemas, not one flat `public` schema or three renamed-table sets**:
+Postgres schemas namespace table names for free — `financial.decisions` and
+`fitness.agent_messages` can coexist with Work's own `public.decisions` and
+`public.agent_messages` (all three domains happen to reuse those exact table
+names) with zero renaming. See `Cadence/backend/migrations/0022_financial_schema.sql`
+and `0023_fitness_schema.sql` — both are the original CadenceFinancial/
+CadenceFitness migrations, ported near-verbatim, just wrapped in
+`create schema if not exists <domain>; set search_path to <domain>, public;`
+plus the grants PostgREST needs on a non-public schema. **After running
+either migration, go to Supabase → Database → API Settings → "Exposed
+schemas" and add `financial` / `fitness`** — PostgREST only serves `public`
+by default.
+
+**Auth is unified**: Financial's and Fitness's own login/signup/password
+screens are gone — the single Login/SetPassword gate at the top of
+`Cadence/web/src/App.tsx` covers all three domains, since they now share one
+Supabase Auth. `src/financial/lib/store.tsx` and `src/fitness/lib/store.tsx`
+are *data-only* contexts now (no `ready`/`configured`/`signIn`/`signOut` —
+that's all Work's `useCadence()`); they just track the current user id to
+stamp `owner_id` on writes, and every Supabase call is schema-qualified via
+`supabase.schema('financial')` / `supabase.schema('fitness')`.
+
+**Routing**: the sidebar domain switcher and each domain's own nav render
+from `Cadence/web/src/components/Sidebar.tsx` (`WORK_NAV` / `FINANCIAL_NAV` /
+`FITNESS_NAV`). Financial's and Fitness's screen ids are prefixed
+(`financial:overview`, `fitness:dashboard`, …) in the shared `screen` state so
+they can never collide with Work's own bare ids (both Work and Fitness
+happen to have a `dashboard` and a `kobe` screen) — the active `domain` is
+*derived* from that prefix in `App.tsx`, never tracked as separate state, so
+it can't drift out of sync with what's on screen.
+
+**Agents**: each domain keeps its own Kobe/agent-chat screen (Work's is the
+rich tabbed hub; Financial's and Fitness's are simple message threads, using
+`.agent-thread`/`.agent-msg*` CSS — deliberately NOT `.kobe-*`, which is
+Work's own richer UI, so the two don't visually collide). `Cadence/agent/`
+now holds both `cadence_bridge.py`/`cadence_supabase_mcp.py` (Work, `public`
+schema) and `cadence_fitness_bridge.py`/`cadence_fitness_mcp.py` (Fitness,
+`fitness` schema via `Accept-Profile`/`Content-Profile: fitness` headers on
+every REST call) — same Supabase project, same URL/anon key, different
+schema profile header. Financial has no MCP bridge (chat-only), matching its
+original design.
+
+**Moving real Financial data**: if you already had real entries in the
+standalone Cadence Financial app's own Supabase project, that data does not
+move automatically — `Cadence/backend/FINANCIAL_DATA_MERGE_RUNBOOK.md` is an
+exact, careful runbook for pg_dump/restore-ing it into the new `financial`
+schema. Written for you to run yourself (it needs your database passwords);
+Fitness has no live data anywhere yet, so its schema just starts empty.
+
+The old standalone `CadenceFinancial/` and `CadenceFitness/` directories are
+kept in the repo (see their `SUPERSEDED.md`) as reference copies and as the
+data-migration source — they are not built or deployed once the unified app
+is live, and are safe to delete once you've verified the merge and (for
+Financial) migrated your real data.
+
+---
+
 ## Live components — use these
 
 | Path | Purpose |

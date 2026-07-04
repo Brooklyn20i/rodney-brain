@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import { CadenceProvider } from './lib/store';
 import { E2EProvider } from './lib/e2eProvider';
+import { CadenceFinancialProvider } from './financial/lib/store';
+import { CadenceFitnessProvider } from './fitness/lib/store';
 import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import './styles.css';
@@ -42,7 +44,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
       <SaveErrorBanner />
       <Provider>
-        <App />
+        {/* Financial and Fitness are mounted at the root (not per-domain) so
+            switching domains in the sidebar is instant, with no reload/spinner
+            -- all three data sets load once and stay live via realtime. */}
+        <CadenceFinancialProvider>
+          <CadenceFitnessProvider>
+            <App />
+          </CadenceFitnessProvider>
+        </CadenceFinancialProvider>
       </Provider>
     </ErrorBoundary>
   </React.StrictMode>,

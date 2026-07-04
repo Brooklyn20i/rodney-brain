@@ -4,8 +4,6 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
-    { "source": "/financial", "destination": "https://financial-orpin-alpha.vercel.app/financial" },
-    { "source": "/financial/:path*", "destination": "https://financial-orpin-alpha.vercel.app/financial/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ]
 }
