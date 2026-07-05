@@ -24,7 +24,11 @@ export function Login({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setEmail(localStorage.getItem(LAST_EMAIL_KEY) || '');
+    const params = new URLSearchParams(window.location.search);
+    const requestedAccess = params.get('request_access') === '1' || window.location.hash === '#access';
+    setEmail(params.get('email')?.trim().toLowerCase() || localStorage.getItem(LAST_EMAIL_KEY) || '');
+    setName(params.get('name')?.trim() || '');
+    if (requestedAccess) setStep('waitlist');
   }, []);
 
   if (!configured) return (

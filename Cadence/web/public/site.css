@@ -83,6 +83,8 @@ section { padding: 84px 0; }
 .fcard h4 { font-size: 16px; margin-bottom: 6px; }
 .fcard p { font-size: 14px; color: var(--ink2); }
 .fcard .k { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ink3); display: block; margin-bottom: 8px; }
+.for-section { background: #ECECE6; }
+.audience-grid .fcard { min-height: 190px; }
 
 /* Replace-the-stack table */
 .stack { max-width: 860px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
@@ -142,6 +144,13 @@ section { padding: 84px 0; }
 .cta .box { background: linear-gradient(180deg, #16321F, #0E2417); color: #fff; border-radius: 28px; padding: 60px 32px; }
 .cta h2 { font-size: clamp(26px, 4vw, 42px); letter-spacing: -1px; max-width: 700px; margin: 0 auto; line-height: 1.1; }
 .cta p { color: rgba(255,255,255,0.72); margin: 16px auto 28px; max-width: 520px; }
+.access-form { max-width: 640px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+.access-form label { display: block; text-align: left; }
+.access-form label span { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: rgba(255,255,255,0.62); margin: 0 0 6px 2px; }
+.access-form input { width: 100%; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); color: #fff; border-radius: 999px; padding: 13px 16px; font: inherit; outline: none; }
+.access-form input::placeholder { color: rgba(255,255,255,0.42); }
+.access-form input:focus { border-color: var(--aqua); box-shadow: 0 0 0 3px rgba(31,227,154,0.14); }
+@media (max-width: 760px) { .access-form { grid-template-columns: 1fr; } .access-form .btn { justify-content: center; } }
 footer { border-top: 1px solid var(--line); padding: 34px 0; margin-top: 24px; }
 .foot-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .foot-links { display: flex; gap: 20px; font-size: 14px; color: var(--ink2); flex-wrap: wrap; }
