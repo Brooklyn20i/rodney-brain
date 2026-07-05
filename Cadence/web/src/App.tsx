@@ -78,7 +78,7 @@ const DOMAIN_PATH: Record<Domain, string> = {
 };
 const DOMAIN_THEME_COLOR: Record<Domain, string> = {
   work: '#1A1F2E',
-  financial: '#0E3826',
+  financial: '#1A5E3A',
   fitness: '#0B0E0C',
 };
 
