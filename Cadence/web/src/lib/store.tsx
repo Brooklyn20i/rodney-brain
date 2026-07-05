@@ -16,6 +16,7 @@ export interface Ctx {
   workspace: Workspace | null;
   workspaceMembers: WorkspaceMember[];
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, name: string) => Promise<{ error?: string; needsConfirm?: boolean }>;
   setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -184,20 +185,36 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   // Keep the ref up to date so the online handler always calls the latest drain.
   useEffect(() => { drainQueueRef.current = drainQueue; }, [drainQueue]);
 
-  // Resolve workspace membership after login.
+  // Resolve workspace membership after login. A brand-new user (self-serve
+  // signup) has no membership yet, so we provision them their own workspace —
+  // giving them an isolated space (own owner_id + own workspace) that no other
+  // user can see. Existing users just load their workspace.
   useEffect(() => {
     if (!session || needsPasswordSet) { setWorkspace(null); setWorkspaceMembers([]); return; }
-    supabase
-      .from('workspace_members')
-      .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
-      .eq('user_id', session.user.id)
-      .limit(1)
-      .single()
-      .then(({ data: wm }) => {
-        if (wm) setWorkspace((wm as any).workspaces as Workspace ?? null);
+    let cancelled = false;
+    (async () => {
+      const { data: wm } = await supabase
+        .from('workspace_members')
+        .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      if ((wm as any)?.workspaces) { setWorkspace((wm as any).workspaces as Workspace); return; }
+      // No workspace — first login. Create one, named after the user if we have it.
+      const name = (session.user.user_metadata?.name as string | undefined)?.trim();
+      const { data: ws, error: wsErr } = await supabase
+        .from('workspaces')
+        .insert({ name: name ? `${name}'s Cadence` : 'My Cadence', created_by: session.user.id })
+        .select()
+        .single();
+      if (wsErr || !ws || cancelled) return; // pre-migration or RLS: owner_id still protects data
+      await supabase.from('workspace_members').insert({
+        workspace_id: ws.id, user_id: session.user.id, role: 'admin', email: session.user.email ?? '',
       });
-      // If the table doesn't exist yet (pre-migration), the error is silently
-      // ignored and workspace stays null — RLS still protects via owner_id.
+      if (!cancelled) setWorkspace(ws as Workspace);
+    })();
+    return () => { cancelled = true; };
   }, [session, needsPasswordSet]);
 
   // Fetch all workspace members whenever the workspace is resolved.
@@ -227,6 +244,24 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error?.message };
+  };
+
+  // Self-serve signup. Supabase requires email confirmation, so a fresh signup
+  // returns needsConfirm and no session until the link is clicked. On first
+  // sign-in the effect below provisions the user their own workspace, so their
+  // account is fully isolated (own owner_id + own workspace) from every other.
+  const signUp = async (email: string, password: string, name: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: { name: name.trim() },
+        emailRedirectTo: `${window.location.origin}/work`,
+      },
+    });
+    if (error) return { error: error.message };
+    // No session means a confirmation email was sent (email confirmation is on).
+    return { needsConfirm: !data.session };
   };
 
   const setPassword = async (password: string) => {
@@ -441,7 +476,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   return (
-    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, myRole, canEdit, syncError, clearSyncError, createWorkspace, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
+    <CadenceCtx.Provider value={{ ready, configured: isConfigured, session, needsPasswordSet, data, workspace, workspaceMembers, signIn, signUp, setPassword, resetPassword, signOut, insert, update, remove, reload, logActivity, myRole, canEdit, syncError, clearSyncError, createWorkspace, createInvite, removeWorkspaceMember, acceptInvite, pendingCount, isOffline, isSyncing }}>
       {children}
     </CadenceCtx.Provider>
   );

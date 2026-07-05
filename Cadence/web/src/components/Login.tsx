@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { supabase } from '../lib/supabase';
 
-type Step = 'login' | 'reset_sent' | 'waitlist' | 'waitlist_done';
+type Step = 'login' | 'reset_sent' | 'signup' | 'signup_sent' | 'waitlist' | 'waitlist_done';
 const LAST_EMAIL_KEY = 'cadence:last-email';
 
 export function Login({
@@ -14,7 +14,7 @@ export function Login({
   title?: string;
   tagline?: string;
 }) {
-  const { configured, signIn, resetPassword } = useCadence();
+  const { configured, signIn, signUp, resetPassword } = useCadence();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -28,7 +28,7 @@ export function Login({
     const requestedAccess = params.get('request_access') === '1' || window.location.hash === '#access';
     setEmail(params.get('email')?.trim().toLowerCase() || localStorage.getItem(LAST_EMAIL_KEY) || '');
     setName(params.get('name')?.trim() || '');
-    if (requestedAccess) setStep('waitlist');
+    if (requestedAccess) setStep('signup');
   }, []);
 
   if (!configured) return (
@@ -75,6 +75,72 @@ export function Login({
       setStep('waitlist_done');
     }
   };
+
+  const createAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password || !name.trim()) return;
+    if (password.length < 8) { setErr('Use at least 8 characters for your password.'); return; }
+    setBusy(true); setErr('');
+    const { error, needsConfirm } = await signUp(cleanEmail, password, name);
+    setBusy(false);
+    if (error) { setErr(/registered|already/i.test(error) ? 'That email already has an account — sign in instead.' : error); return; }
+    localStorage.setItem(LAST_EMAIL_KEY, cleanEmail);
+    if (needsConfirm) setStep('signup_sent');
+    // If confirmation is off, the session lands and the app takes over automatically.
+  };
+
+  if (step === 'signup') return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <h1>{title}</h1>
+        <p>Create your account. Your space is private to you.</p>
+        <form onSubmit={createAccount}>
+          <div className="form-group">
+            <label className="field">Name</label>
+            <input type="text" value={name} placeholder="Your name"
+              autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="field">Email</label>
+            <input type="email" required value={email} placeholder="you@example.com"
+              autoComplete="email" onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="field">Password</label>
+            <input type="password" required value={password} placeholder="At least 8 characters"
+              autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {err && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy}>
+            {busy ? 'Creating…' : 'Create account'}
+          </button>
+        </form>
+        <button type="button" className="btn btn-ghost"
+          style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+          onClick={() => { setStep('login'); setErr(''); }}>
+          Already have an account? Sign in
+        </button>
+      </div>
+    </div>
+  );
+
+  if (step === 'signup_sent') return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <h1>{title}</h1>
+        <p style={{ fontSize: 24, margin: '16px 0 8px' }}>✉️</p>
+        <p><strong>Confirm your email.</strong></p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+          We sent a confirmation link to <strong>{email}</strong>. Open it in this browser, then come back and sign in.
+        </p>
+        <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center', marginTop: 20 }}
+          onClick={() => { setStep('login'); setErr(''); }}>
+          Back to sign in
+        </button>
+      </div>
+    </div>
+  );
 
   if (step === 'reset_sent') return (
     <div className="login-wrap">
@@ -168,8 +234,8 @@ export function Login({
         <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 16, textAlign: 'center' }}>
           <button type="button" className="btn btn-ghost"
             style={{ width: '100%', justifyContent: 'center' }}
-            onClick={() => { setStep('waitlist'); setErr(''); setPassword(''); }}>
-            Don't have an account? Request access
+            onClick={() => { setStep('signup'); setErr(''); setPassword(''); }}>
+            Don't have an account? Create one
           </button>
         </div>
       </div>

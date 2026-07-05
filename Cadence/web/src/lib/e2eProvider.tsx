@@ -55,6 +55,7 @@ export function E2EProvider({ children }: { children: React.ReactNode }) {
     workspace: { id: 'ws', name: 'E2E Workspace' } as any,
     workspaceMembers: [],
     signIn: async () => ({}),
+    signUp: async () => ({}),
     setPassword: async () => ({}),
     resetPassword: async () => ({}),
     signOut: async () => {},
