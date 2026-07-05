@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { dayNutrition, estimateTDEE, targetFor, weekReport } from '../lib/fitnessCalc';
+import { filterSavedFoods, normalisePortion, quickLogFromSavedFood, scaleMacros } from '../lib/nutritionQuickLog';
 import { addDays, fmtDayShort, fmtNum, MEAL_LABEL, MEALS, PHASE_LABEL, todayISO } from '../lib/util';
 import type { MealType, NutritionPhase } from '../lib/types';
 
@@ -59,6 +60,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const [estimate, setEstimate] = useState<PhotoEstimate | null>(null);
   const [estMeal, setEstMeal] = useState<MealType>('lunch');
   const [preview, setPreview] = useState<string | null>(null);
+  const [saveEstimateAsFood, setSaveEstimateAsFood] = useState(false);
 
   const onPhotoPicked = async (file: File | undefined) => {
     if (!file) return;
@@ -93,8 +95,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
 
   const logEstimate = async () => {
     if (!estimate) return;
-    await insert('nutrition_logs', {
-      date,
+    const row = {
       meal: estMeal,
       name: estimate.name,
       calories: estimate.calories,
@@ -102,7 +103,10 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
       carbs_g: estimate.carbs_g,
       fat_g: estimate.fat_g,
       notes: estimate.notes ? `Photo estimate (${estimate.confidence}): ${estimate.notes}` : 'Photo estimate',
-    });
+    };
+    await insert('nutrition_logs', { date, ...row });
+    if (saveEstimateAsFood) await insert('saved_meals', row);
+    setSaveEstimateAsFood(false);
     clearPhoto();
   };
 
@@ -114,6 +118,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const [c, setC] = useState('');
   const [f, setF] = useState('');
   const [saveAsMeal, setSaveAsMeal] = useState(false);
+  const [savedFoodQuery, setSavedFoodQuery] = useState('');
+  const [savedFoodQty, setSavedFoodQty] = useState<Record<string, string>>({});
+  const savedFoods = useMemo(
+    () => filterSavedFoods(data.saved_meals, savedFoodQuery),
+    [data.saved_meals, savedFoodQuery]
+  );
   const quickAdd = async () => {
     if (!name.trim() || !Number(cals)) return;
     const row = {
@@ -138,16 +148,9 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const logSaved = async (id: string) => {
     const m = data.saved_meals.find((x) => x.id === id);
     if (!m) return;
-    await insert('nutrition_logs', {
-      date,
-      meal: m.meal,
-      name: m.name,
-      calories: m.calories,
-      protein_g: Number(m.protein_g),
-      carbs_g: Number(m.carbs_g),
-      fat_g: Number(m.fat_g),
-      notes: '',
-    });
+    const qty = normalisePortion(savedFoodQty[id] ?? '1');
+    await insert('nutrition_logs', quickLogFromSavedFood(m, date, qty));
+    setSavedFoodQty((prev) => ({ ...prev, [id]: '1' }));
   };
 
   // Targets editor
@@ -264,29 +267,66 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           )}
         </Card>
 
-        {data.saved_meals.length > 0 && (
-          <Card title="Saved meals — one tap to log">
-            {[...data.saved_meals]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((m) => (
-                <div key={m.id} className="pick-row">
-                  <div className="pick-main">
-                    <div className="pick-title">{m.name}</div>
-                    <div className="pick-sub">
-                      {MEAL_LABEL[m.meal]} · {m.calories} kcal · P{fmtNum(Number(m.protein_g))} C{fmtNum(Number(m.carbs_g))} F
-                      {fmtNum(Number(m.fat_g))}
-                    </div>
+        <Card title="Saved foods — quick log">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+            <input
+              type="search"
+              value={savedFoodQuery}
+              placeholder="Search foods, brands, notes…"
+              onChange={(e) => setSavedFoodQuery(e.target.value)}
+            />
+            {savedFoodQuery && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setSavedFoodQuery('')}>
+                Clear
+              </button>
+            )}
+          </div>
+          {data.saved_meals.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
+              No saved foods yet. Use <strong>Quick add</strong> with “Save to foods”, or save a reviewed photo estimate.
+            </p>
+          )}
+          {data.saved_meals.length > 0 && savedFoods.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>No saved foods match that search.</p>
+          )}
+          {savedFoods.map((m) => {
+            const qty = savedFoodQty[m.id] ?? '1';
+            const scaled = scaleMacros(m, qty);
+            return (
+              <div key={m.id} className="pick-row">
+                <div className="pick-main">
+                  <div className="pick-title">{m.name}</div>
+                  <div className="pick-sub">
+                    {MEAL_LABEL[m.meal]} · base {m.calories} kcal · P{fmtNum(Number(m.protein_g))} C
+                    {fmtNum(Number(m.carbs_g))} F{fmtNum(Number(m.fat_g))}
+                    {m.notes ? ` · ${m.notes}` : ''}
                   </div>
-                  <button className="btn btn-secondary btn-sm" onClick={() => logSaved(m.id)}>
-                    Log
-                  </button>
-                  <button className="btn btn-danger btn-sm" onClick={() => remove('saved_meals', m.id)}>
-                    ✕
-                  </button>
+                  <div className="pick-sub">
+                    Logging ×{normalisePortion(qty)}: {scaled.calories} kcal · P{fmtNum(scaled.protein_g)} C
+                    {fmtNum(scaled.carbs_g)} F{fmtNum(scaled.fat_g)}
+                  </div>
                 </div>
-              ))}
-          </Card>
-        )}
+                <input
+                  aria-label={`Quantity for ${m.name}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  max="10"
+                  step="0.5"
+                  value={qty}
+                  style={{ width: 70 }}
+                  onChange={(e) => setSavedFoodQty((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                />
+                <button className="btn btn-primary btn-sm" onClick={() => logSaved(m.id)}>
+                  Log
+                </button>
+                <button className="btn btn-danger btn-sm" aria-label={`Delete saved food ${m.name}`} onClick={() => remove('saved_meals', m.id)}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </Card>
 
         <Card
           title="Energy balance"
@@ -499,6 +539,15 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                 <Tag label={`${estimate.confidence} confidence`} tone={estimate.confidence === 'high' ? 'good' : estimate.confidence === 'low' ? 'warn' : 'info'} />{' '}
                 {estimate.notes}
               </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '0 0 10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  style={{ width: 'auto' }}
+                  checked={saveEstimateAsFood}
+                  onChange={(e) => setSaveEstimateAsFood(e.target.checked)}
+                />
+                Save this as a quick-log food for next time
+              </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary" onClick={logEstimate} disabled={!estimate.calories}>
                   Add to {fmtDayShort(date)}
@@ -549,7 +598,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, fontSize: 13 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" style={{ width: 'auto' }} checked={saveAsMeal} onChange={(e) => setSaveAsMeal(e.target.checked)} />
-                Save as meal
+                Save to foods
               </label>
             </div>
           </div>
