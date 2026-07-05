@@ -46,6 +46,16 @@ export default defineConfig({
     // Route-based code splitting: each screen ships in its own chunk,
     // cutting the initial JS payload from ~970KB to ~200KB.
     rollupOptions: {
+      // Per-domain HTML entry points. Each is the same SPA (loads main.tsx)
+      // but carries its own apple-touch-icon, title and static data-domain so
+      // the iPhone Home Screen shortcut gets a distinct icon and opens straight
+      // into that section with no theme flash. Vercel rewrites /financial and
+      // /health onto these (see vercel.json).
+      input: {
+        main: 'index.html',
+        financial: 'financial.html',
+        health: 'health.html',
+      },
       output: {
         manualChunks(id) {
           if (id.includes('/node_modules/@react-pdf/') || id.includes('/node_modules/@react-pdf')) return 'react-pdf';

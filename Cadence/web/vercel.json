@@ -4,6 +4,9 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
+    { "source": "/financial", "destination": "/financial.html" },
+    { "source": "/health", "destination": "/health.html" },
+    { "source": "/work", "destination": "/index.html" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

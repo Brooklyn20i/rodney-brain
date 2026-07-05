@@ -30,6 +30,51 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ── Per-domain theming ───────────────────────────────────────────────────
+   The whole app reads var(--accent) / var(--sidebar-*) / surface + text
+   tokens, so re-skinning a domain is purely a token swap. Applied via
+   html[data-domain="…"] (set by App.tsx from the active domain) so it
+   cascades to <body> too — no default-navy sliver behind the rounded #main.
+   Work keeps the :root defaults (navy). */
+html[data-domain="financial"] {
+  /* Old-money bottle green + brass. Content stays on the light canvas. */
+  --sidebar-bg: #0E3826;
+  --sidebar-active: #17492F;
+  --sidebar-icon-active: #C7A24A;
+  --accent: #1C6B45;
+  --accent-lt: #2E8A5E;
+}
+
+html[data-domain="fitness"] {
+  /* Health = the Whoop treatment: full dark canvas, electric recovery green. */
+  --app-bg: #0A0C0B;
+  --surface: #121815;
+  --surface2: #182420;
+  --border: rgba(255,255,255,0.09);
+  --text: #EAF2EE;
+  --text2: #9FB3AA;
+  --text3: #71847C;
+  --accent: #1FE39A;
+  --accent-lt: #57ECB6;
+  --sidebar-bg: #0B0E0C;
+  --sidebar-active: #182420;
+  --sidebar-active-text: #FFFFFF;
+  --sidebar-icon-active: #1FE39A;
+  --sidebar-text: rgba(255,255,255,0.6);
+  /* Dark variants of the role tints so tags / callouts / metrics stay legible. */
+  --green: #1FE39A;   --green-bg: #10241B;
+  --blue:  #57B8F0;   --blue-bg:  #0F2230;
+  --red:   #F87171;   --red-bg:   #2A1516;
+  --orange:#E7A83C;   --orange-bg:#2A2110;
+  --purple:#B694E6;   --purple-bg:#1E1930;
+  --teal:  #3BC7C0;   --teal-bg:  #0E2424;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.35);
+}
+/* The teal accent is light, so primary buttons need dark ink for contrast. */
+html[data-domain="fitness"] .btn-primary { color: #06110C; }
+
 html, body, #root { height: 100%; }
 body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   background: var(--sidebar-bg); color: var(--text); -webkit-font-smoothing: antialiased; }

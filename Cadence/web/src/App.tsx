@@ -66,6 +66,30 @@ const DEFAULT_SCREEN: Record<Domain, string> = {
   fitness: 'fitness:dashboard',
 };
 
+// Deep links: each domain has its own clean URL so a typed address or an
+// iPhone Home Screen shortcut opens straight into that section. The path is
+// mapped to the domain's default screen on boot, and kept in sync as the user
+// switches domains (see the effect in App). '/health' is the public name for
+// the fitness domain; '/fitness' is accepted as an alias.
+const DOMAIN_PATH: Record<Domain, string> = {
+  work: '/work',
+  financial: '/financial',
+  fitness: '/health',
+};
+const DOMAIN_THEME_COLOR: Record<Domain, string> = {
+  work: '#1A1F2E',
+  financial: '#0E3826',
+  fitness: '#0B0E0C',
+};
+
+function domainFromPath(): Domain {
+  const p = window.location.pathname.replace(/\/+$/, '');
+  if (p === '/financial') return 'financial';
+  if (p === '/health' || p === '/fitness') return 'fitness';
+  return 'work';
+}
+const initialScreenFromPath = (): string => DEFAULT_SCREEN[domainFromPath()];
+
 export function App() {
   const { ready, configured, session, needsPasswordSet, data, workspace, signOut, syncError, clearSyncError, acceptInvite, isOffline, pendingCount, isSyncing, canEdit } = useCadence();
   // Fitness/Financial have their own data stores; without this their save
@@ -79,7 +103,7 @@ export function App() {
     fitness.clearSyncError();
     financial.clearSyncError();
   };
-  const [screen, setScreen] = useState('today');
+  const [screen, setScreen] = useState(initialScreenFromPath);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviteBanner, setInviteBanner] = useState<string | null>(null);
@@ -88,6 +112,17 @@ export function App() {
   // tracked as separate state, so it can never drift out of sync with what's
   // actually on screen: 'financial:x' / 'fitness:x' / anything else -> work.
   const domain: Domain = screen.startsWith('financial:') ? 'financial' : screen.startsWith('fitness:') ? 'fitness' : 'work';
+
+  // Re-theme the whole app for the active domain and keep the URL honest so a
+  // reload / share / Home Screen shortcut re-opens the same section. Setting
+  // data-domain on <html> lets the token overrides cascade to <body> too.
+  useEffect(() => {
+    document.documentElement.dataset.domain = domain;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', DOMAIN_THEME_COLOR[domain]);
+    if (domainFromPath() !== domain) {
+      history.replaceState(null, '', DOMAIN_PATH[domain] + window.location.search + window.location.hash);
+    }
+  }, [domain]);
 
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
