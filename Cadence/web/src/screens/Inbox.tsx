@@ -30,13 +30,13 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // The Inbox is the triage queue: only unprocessed captures (inboxed) that
-  // haven't been given a person, project or date yet. Filing happens by adding
-  // any of those (here, or in the editor) — which clears the inboxed flag.
+  // The Inbox is the triage queue: unprocessed user-facing captures (inboxed)
+  // that haven't been given a person or project yet. Filing happens by adding
+  // one of those homes (or by explicitly marking the item as triaged).
   const grouped = useMemo(() => {
-    // Triage queue = inboxed AND still without context (person/project/date).
+    // Triage queue = inboxed AND still without a filing home (person/project).
     // The `!isFiled` guard keeps legacy items (older captures that were flagged
-    // inboxed but already have a person or date) out of the triage pile.
+    // inboxed but already have a person or project) out of the triage pile.
     const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed && !isFiled(w));
     const grouped: Record<BucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
     open.forEach((w) => grouped[bucketOf(w.due_date)].push(w));
