@@ -16,7 +16,7 @@ export interface Ctx {
   workspace: Workspace | null;
   workspaceMembers: WorkspaceMember[];
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string, name: string) => Promise<{ error?: string; needsConfirm?: boolean }>;
+  signUp: (email: string, password: string, name: string, code: string) => Promise<{ error?: string }>;
   setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -249,22 +249,20 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message };
   };
 
-  // Self-serve signup. Supabase requires email confirmation, so a fresh signup
-  // returns needsConfirm and no session until the link is clicked. On first
-  // sign-in the effect below provisions the user their own workspace, so their
-  // account is fully isolated (own owner_id + own workspace) from every other.
-  const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-      options: {
-        data: { name: name.trim() },
-        emailRedirectTo: `${window.location.origin}/work`,
-      },
+  // Gated self-serve signup via the `signup` edge function: it creates the
+  // account already email-confirmed behind a shared access code, so onboarding
+  // doesn't depend on the rate-limited built-in mailer or a confirm-email
+  // redirect. We then sign in immediately; the effect above provisions the user
+  // their own isolated workspace on first login.
+  const signUp = async (email: string, password: string, name: string, code: string) => {
+    const clean = email.trim().toLowerCase();
+    const { data, error } = await supabase.functions.invoke('signup', {
+      body: { email: clean, password, name: name.trim(), code },
     });
-    if (error) return { error: error.message };
-    // No session means a confirmation email was sent (email confirmation is on).
-    return { needsConfirm: !data.session };
+    if (error) return { error: 'Sign up failed. Please try again.' };
+    if ((data as { error?: string })?.error) return { error: (data as { error?: string }).error };
+    const { error: signErr } = await supabase.auth.signInWithPassword({ email: clean, password });
+    return { error: signErr?.message };
   };
 
   const setPassword = async (password: string) => {

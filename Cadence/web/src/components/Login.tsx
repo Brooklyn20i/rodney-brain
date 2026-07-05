@@ -18,6 +18,7 @@ export function Login({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [step, setStep] = useState<Step>('login');
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
@@ -28,7 +29,8 @@ export function Login({
     const requestedAccess = params.get('request_access') === '1' || window.location.hash === '#access';
     setEmail(params.get('email')?.trim().toLowerCase() || localStorage.getItem(LAST_EMAIL_KEY) || '');
     setName(params.get('name')?.trim() || '');
-    if (requestedAccess) setStep('signup');
+    setCode(params.get('code')?.trim() || '');
+    if (requestedAccess || params.get('code')) setStep('signup');
   }, []);
 
   if (!configured) return (
@@ -79,15 +81,14 @@ export function Login({
   const createAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !password || !name.trim()) return;
+    if (!cleanEmail || !password || !name.trim() || !code.trim()) return;
     if (password.length < 8) { setErr('Use at least 8 characters for your password.'); return; }
     setBusy(true); setErr('');
-    const { error, needsConfirm } = await signUp(cleanEmail, password, name);
+    const { error } = await signUp(cleanEmail, password, name, code);
     setBusy(false);
-    if (error) { setErr(/registered|already/i.test(error) ? 'That email already has an account — sign in instead.' : error); return; }
+    if (error) { setErr(error); return; }
     localStorage.setItem(LAST_EMAIL_KEY, cleanEmail);
-    if (needsConfirm) setStep('signup_sent');
-    // If confirmation is off, the session lands and the app takes over automatically.
+    // On success the session lands and the app takes over automatically.
   };
 
   if (step === 'signup') return (
@@ -110,6 +111,11 @@ export function Login({
             <label className="field">Password</label>
             <input type="password" required value={password} placeholder="At least 8 characters"
               autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="field">Access code</label>
+            <input type="text" required value={code} placeholder="Your invite code"
+              autoCapitalize="characters" autoComplete="off" onChange={(e) => setCode(e.target.value)} />
           </div>
           {err && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
           <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy}>
