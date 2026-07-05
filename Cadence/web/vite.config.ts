@@ -21,7 +21,7 @@ export default defineConfig({
         // isn't a precached URL, so workbox would serve work.html (the app)
         // instead of letting Vercel serve the marketing page. Deny those
         // routes (and the root landing page) so they always hit the network.
-        navigateFallbackDenylist: [/^\/$/, /^\/tour\//, /^\/kobe$/],
+        navigateFallbackDenylist: [/^\/$/, /^\/tour\//, /^\/kobe$/, /\.[^/]+$/],
         cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
