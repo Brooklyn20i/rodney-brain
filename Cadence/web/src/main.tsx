@@ -42,6 +42,16 @@ const Provider = import.meta.env.VITE_E2E === '1' ? E2EProvider : CadenceProvide
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
+      {/* iOS PWAs ignore the manifest's orientation lock, so this CSS-only guard
+          keeps Cadence upright on a phone held sideways (the workout logger is
+          built for one-handed portrait use). Hidden on tablets/desktop. */}
+      <div className="rotate-guard" aria-hidden="true">
+        <div className="rotate-guard-card">
+          <div className="rotate-guard-icon">📱</div>
+          <p>Turn your phone upright</p>
+          <span>Cadence works best in portrait.</span>
+        </div>
+      </div>
       <SaveErrorBanner />
       <Provider>
         {/* Financial and Fitness are mounted at the root (not per-domain) so

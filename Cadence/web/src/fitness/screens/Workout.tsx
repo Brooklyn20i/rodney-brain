@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Tag } from '../components/bits';
-import { cyclePosition, lastSetsForExercise, nextProgramDay } from '../lib/fitnessCalc';
-import { fmtDayShort, fmtKg, todayISO } from '../lib/util';
+import { programPosition, lastSetsForExercise, nextProgramDay } from '../lib/fitnessCalc';
+import { fmtDayShort, fmtKg, stripDayPrefix, todayISO } from '../lib/util';
 import type { ProgramDay, WorkoutSet } from '../lib/types';
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
@@ -48,10 +48,54 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   );
   const [focusIndex, setFocusIndex] = useState(0);
 
+  // ── Rest-finished chime ───────────────────────────────────────────────────
+  // A short ping when rest ends, so you can look away from the phone. Built on
+  // Web Audio with an "ambient" session so on iOS it MIXES over a podcast/music
+  // instead of pausing it. The context must be created/resumed inside a user
+  // gesture (a set tap), so we prime it there; by the time the timer fires it's
+  // already unlocked and the chime just plays.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const primeAudio = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      if (!audioCtxRef.current) {
+        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctx) return null;
+        // ambient = don't interrupt other audio, obey the mute switch.
+        const anyNav = navigator as unknown as { audioSession?: { type: string } };
+        if (anyNav.audioSession) anyNav.audioSession.type = 'ambient';
+        audioCtxRef.current = new Ctx();
+      }
+      if (audioCtxRef.current.state === 'suspended') void audioCtxRef.current.resume();
+      return audioCtxRef.current;
+    } catch {
+      return null;
+    }
+  };
+  const chime = () => {
+    const ctx = primeAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Two quick rising pings — distinct from a notification, easy over audio.
+    [ [0, 880], [0.16, 1175] ].forEach(([t, freq]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + t);
+      osc.stop(now + t + 0.16);
+    });
+  };
+
   // ── Rest timer ──────────────────────────────────────────────────────────
   const [restLeft, setRestLeft] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(0);
   const restEndsAt = useRef<number | null>(null);
+  const chimedRef = useRef(false);
   const [, forceTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => {
@@ -59,6 +103,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       if (restEndsAt.current !== null) {
         const left = Math.round((restEndsAt.current - Date.now()) / 1000);
         setRestLeft(left);
+        if (left <= 0 && !chimedRef.current) {
+          chimedRef.current = true;
+          chime();
+          if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+        }
         if (left <= -30) {
           restEndsAt.current = null;
           setRestLeft(null);
@@ -66,14 +115,18 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       }
     }, 1000);
     return () => clearInterval(t);
+    // chime is stable enough for this once-mounted interval; deps intentionally empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const startRest = (seconds: number) => {
     restEndsAt.current = Date.now() + seconds * 1000;
+    chimedRef.current = false;
     setRestTotal(seconds);
     setRestLeft(seconds);
   };
   const stopRest = () => {
     restEndsAt.current = null;
+    chimedRef.current = false;
     setRestLeft(null);
   };
 
@@ -84,13 +137,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   // ── Start a session ─────────────────────────────────────────────────────
   const startSession = async (day: ProgramDay | null) => {
-    const pos = activeProgram ? cyclePosition(activeProgram, today) : null;
+    const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
     const workout = await insert('workouts', {
       date: today,
       program_id: day ? day.program_id : null,
       program_day_id: day ? day.id : null,
       week_number: pos?.week ?? null,
-      name: day ? day.name : 'Ad-hoc session',
+      name: day ? stripDayPrefix(day.name) : 'Ad-hoc session',
       status: 'in_progress',
       started_at: new Date().toISOString(),
       completed_at: null,
@@ -150,12 +203,31 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setFocusIndex((i) => Math.min(i, Math.max(0, exerciseIds.length - 1)));
   }, [exerciseIds.length]);
 
+  // Entering a weight on an exercise's FIRST set carries it down to the sets
+  // below that are still blank — you rarely change load between straight sets,
+  // so this saves re-typing it three times. Only fills sets that are still 0 and
+  // not yet done, so it never clobbers a weight you deliberately set.
+  const propagateWeightToBlanks = async (set: WorkoutSet, weight: number) => {
+    if (weight <= 0) return;
+    const siblings = sessionSets.filter((s) => s.exercise_id === set.exercise_id);
+    const firstNum = Math.min(...siblings.map((s) => s.set_number));
+    if (set.set_number !== firstNum) return;
+    for (const s of siblings) {
+      if (s.id === set.id || s.done) continue;
+      const draftWeight = drafts[s.id]?.weight;
+      const cur = draftWeight !== undefined ? Number(draftWeight) || 0 : Number(s.weight_kg) || 0;
+      if (cur > 0) continue;
+      await update('workout_sets', s.id, { weight_kg: weight });
+    }
+  };
+
   const commitSet = async (set: WorkoutSet, extra?: Partial<WorkoutSet>) => {
     const d = drafts[set.id] || {};
     const patch: Partial<WorkoutSet> = { ...extra };
     if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
     if (d.reps !== undefined) patch.reps = Math.max(0, Math.round(Number(d.reps) || 0));
     if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
+    if (patch.weight_kg !== undefined) await propagateWeightToBlanks(set, patch.weight_kg);
   };
 
   // One-handed steppers: read draft-or-stored, apply the step, write through
@@ -166,6 +238,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const next = Math.max(0, Math.round((cur + delta) * 100) / 100);
     setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], weight: undefined } }));
     await update('workout_sets', set.id, { weight_kg: next });
+    await propagateWeightToBlanks(set, next);
   };
   const stepReps = async (set: WorkoutSet, delta: number) => {
     const d = drafts[set.id] || {};
@@ -177,6 +250,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   const toggleSet = async (set: WorkoutSet) => {
     const done = !set.done;
+    // This runs inside a tap (user gesture) — the one place we're allowed to
+    // unlock audio for the later, timer-driven chime.
+    primeAudio();
     await commitSet(set, { done });
     if (done) {
       const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
@@ -187,6 +263,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         const idx = exerciseIds.indexOf(set.exercise_id);
         if (idx >= 0 && idx < exerciseIds.length - 1) setFocusIndex(idx + 1);
       }
+    } else {
+      // Un-ticked by mistake → the rest you started for it no longer applies.
+      stopRest();
     }
   };
 
@@ -237,8 +316,22 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   const finishSession = async () => {
     if (!active) return;
-    // Untouched target rows don't count as training -- drop them.
-    for (const s of sessionSets.filter((x) => !x.done)) await remove('workout_sets', s.id);
+    // Fold in any weight/reps typed but not yet blurred, then decide each set's
+    // fate from its EFFECTIVE reps (draft beats stored). A set you filled in but
+    // forgot to tick still counts as trained — that was the "did 12, logged 11"
+    // bug. Only genuinely empty target rows (no reps) are dropped.
+    for (const s of sessionSets) {
+      const d = drafts[s.id] || {};
+      const reps = d.reps !== undefined ? Math.max(0, Math.round(Number(d.reps) || 0)) : s.reps;
+      const weight = d.weight !== undefined ? Number(d.weight) || 0 : Number(s.weight_kg) || 0;
+      if (reps > 0) {
+        if (!s.done || d.weight !== undefined || d.reps !== undefined) {
+          await update('workout_sets', s.id, { done: true, reps, weight_kg: weight });
+        }
+      } else if (!s.done) {
+        await remove('workout_sets', s.id);
+      }
+    }
     await update('workouts', active.id, { status: 'completed', completed_at: new Date().toISOString() });
     stopRest();
     setDrafts({});
@@ -262,7 +355,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           .sort((a, b) => a.day_order - b.day_order)
       : [];
     const suggested = activeProgram ? nextProgramDay(days, data.workouts, activeProgram.id) : null;
-    const pos = activeProgram ? cyclePosition(activeProgram, today) : null;
+    const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
     const switchable = data.programs.filter((p) => p.status === 'draft' || p.status === 'active');
 
     return (
@@ -292,11 +385,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               >
                 {suggested && (
                   <div className="cf-callout">
-                    Up next: <strong>{suggested.name}</strong>
+                    Up next: <strong>{stripDayPrefix(suggested.name)}</strong>
                     {suggested.focus ? ` — ${suggested.focus}` : ''}
                     <div style={{ marginTop: 10 }}>
                       <button className="btn btn-primary" onClick={() => startSession(suggested)}>
-                        ▶ Start {suggested.name}
+                        ▶ Start {stripDayPrefix(suggested.name)}
                       </button>
                     </div>
                   </div>
@@ -304,7 +397,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 {days.map((d) => (
                   <div key={d.id} className="pick-row">
                     <div className="pick-main">
-                      <div className="pick-title">{d.name}</div>
+                      <div className="pick-title">{stripDayPrefix(d.name)}</div>
                       {d.focus && <div className="pick-sub">{d.focus}</div>}
                     </div>
                     <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)}>
@@ -388,7 +481,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             <span className="wo-rest-note">{slot ? 'Saved to this exercise in your program' : 'Default for ad-hoc exercises'}</span>
           </div>
         )}
-        {slot?.notes && <div className="wo-note">{slot.notes}</div>}
         <div className={`wo-set-labels ${big ? 'gym' : ''}`}>
           <span>Set</span>
           <span style={{ textAlign: 'center' }}>Weight (kg)</span>
@@ -579,7 +671,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   return (
     <>
       <ScreenHeader
-        title={active.name || 'Session'}
+        title={stripDayPrefix(active.name || 'Session')}
         subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets · ${saving ? 'saving…' : 'saved ✓'}`}
         onMenu={onMenu}
       >

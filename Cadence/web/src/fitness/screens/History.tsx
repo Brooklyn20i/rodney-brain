@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
-import { weeklySetsByMuscle, weekOf, workoutTonnage } from '../lib/fitnessCalc';
-import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, todayISO } from '../lib/util';
+import { weeklySetsByMuscle, weeklyHardSets, weekOf, workoutTonnage } from '../lib/fitnessCalc';
+import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, stripDayPrefix, todayISO } from '../lib/util';
 import type { Workout, WorkoutSet } from '../lib/types';
 
 // Session log + weekly volume: what actually happened, week by week.
@@ -25,7 +25,9 @@ export function History({ onMenu }: { onMenu: () => void }) {
   const thisWeek = weekOf(today);
   const weekWorkouts = completed.filter((w) => w.date >= thisWeek.start && w.date <= thisWeek.end);
   const weekMuscle = weeklySetsByMuscle(data.workout_sets, data.workouts, data.exercises, thisWeek.start, thisWeek.end);
-  const weekSets = [...weekMuscle.values()].reduce((a, b) => a + b, 0);
+  // Headline count = every hard set logged this week. The per-muscle table below
+  // can read lower because it drops sets whose exercise has no muscle mapping.
+  const weekSets = weeklyHardSets(data.workout_sets, data.workouts, thisWeek.start, thisWeek.end);
   const weekCardio = data.cardio_sessions.filter((c) => c.date >= thisWeek.start && c.date <= thisWeek.end).length;
   const weekSauna = data.sauna_sessions.filter((s) => s.date >= thisWeek.start && s.date <= thisWeek.end).length;
 
@@ -77,7 +79,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
                 <div className="pick-row" style={{ cursor: 'pointer' }} onClick={() => setOpenId(openNow ? null : w.id)}>
                   <div className="pick-main">
                     <div className="pick-title">
-                      {w.name || 'Session'} {w.week_number ? <Tag label={`Wk ${w.week_number}`} tone="info" /> : null}
+                      {stripDayPrefix(w.name || 'Session')} {w.week_number ? <Tag label={`Wk ${w.week_number}`} tone="info" /> : null}
                     </div>
                     <div className="pick-sub">
                       {fmtDayShort(w.date)} · {sets.length} sets · {fmtNum(workoutTonnage(data.workout_sets, w.id))}kg total
