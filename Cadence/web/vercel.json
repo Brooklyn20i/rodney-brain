@@ -8,6 +8,10 @@
     { "source": "/financial", "destination": "/financial.html" },
     { "source": "/health", "destination": "/health.html" },
     { "source": "/work", "destination": "/work.html" },
+    { "source": "/tour/work", "destination": "/tour-work.html" },
+    { "source": "/tour/wealth", "destination": "/tour-wealth.html" },
+    { "source": "/tour/health", "destination": "/tour-health.html" },
+    { "source": "/kobe", "destination": "/kobe.html" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

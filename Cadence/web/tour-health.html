@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B0E0C" />
+  <meta name="description" content="Tour Cadence Health — gym mode, macros that auto-balance, TDEE from your real weight trend, and recovery analytics over years of Whoop data." />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="stylesheet" href="/site.css" />
+  <title>Cadence Health tour — train, eat and recover on numbers</title>
+  <style>
+    body.dark { background: var(--dark); color: #EAF2EE; }
+    body.dark .tour-hero p, body.dark .sec-head p { color: #9fb3aa; }
+    body.dark .tour-step:nth-child(even) { background: #0F1412; }
+    body.dark .tour-step { border-bottom: 1px solid var(--dark-line); }
+    body.dark .split-copy h3 { color: #fff; }
+    body.dark .split-copy p.lead { color: #9fb3aa; }
+    body.dark .split-copy li { color: #d7e6df; }
+    body.dark .step-num { color: #71847C; }
+    body.dark header.nav { background: rgba(10,12,11,0.85); border-bottom-color: var(--dark-line); }
+    body.dark .nav-links a { color: #9fb3aa; } body.dark .nav-links a:hover, body.dark .nav-links a.on { color: #fff; }
+    body.dark .brand { color: #fff; }
+    body.dark .btn-line { color: #fff; border-color: var(--dark-line); }
+    body.dark .btn-dark { background: var(--aqua); color: #06110C; }
+    body.dark footer { border-top-color: var(--dark-line); }
+    body.dark .foot-links, body.dark .foot-links a { color: #9fb3aa; }
+    body.dark .foot-copy { color: #71847C; }
+    body.dark .foot-in .brand { color: #fff; }
+  </style>
+</head>
+<body class="dark health-acc">
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="/">
+        <span class="mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 32 32"><path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#fff" stroke-width="3.6"/><circle cx="23.06" cy="9.64" r="2.4" fill="#fff"/><circle cx="23.06" cy="22.36" r="2.4" fill="#fff"/></svg>
+        </span>
+        Cadence
+      </a>
+      <nav class="nav-links">
+        <a href="/tour/work">Work</a>
+        <a href="/tour/wealth">Wealth</a>
+        <a class="on" href="/tour/health">Health</a>
+        <a href="/kobe">Kobe</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="btn btn-line" href="/health">Sign in</a>
+        <a class="btn btn-dark" href="/health">Open Health</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="tour-hero">
+    <div class="wrap">
+      <img class="d-mark" src="./icon-health-512.png?v=4" alt="" />
+      <h1 style="color:#fff;">The Whoop-and-MacroFactor loop, in one app.</h1>
+      <p>Training, nutrition and recovery are one system in your body — Cadence Health treats them as one system in software.</p>
+    </div>
+  </div>
+
+  <div class="tour-step">
+    <div class="wrap split">
+      <div class="split-copy">
+        <span class="step-num">01 · THE DAILY COCKPIT</span>
+        <h3>Open the app, see the day: workout and calories.</h3>
+        <p class="lead">The dashboard leads with your next session — exercises, sets and a start button — then your calories and macros against target. No dashboard theatre.</p>
+        <ul>
+          <li><strong>Gym mode</strong> — one-handed steppers, rest timer with +30s, PRs detected automatically</li>
+          <li><strong>Programs</strong> — cycles and weeks with your progression rules; switch programs without losing anything</li>
+          <li>Editable history — fix a weight or add a set after the fact</li>
+        </ul>
+      </div>
+      <div class="tour-phones">
+        <div class="phone"><img src="./shots/health-mobile.png" alt="The Health dashboard — next workout with exercises and a start button, calories and macros below" /></div>
+        <div class="phone"><img src="./shots/health-workout-mobile.png" alt="Workout — program day with sets, reps and weights ready to log" loading="lazy" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tour-step">
+    <div class="wrap split rev">
+      <div class="tour-phones">
+        <div class="phone"><img src="./shots/health-nutrition-mobile.png" alt="Nutrition — calories and macros against target with quick add and saved foods" loading="lazy" /></div>
+      </div>
+      <div class="split-copy">
+        <span class="step-num">02 · NUTRITION THAT DOES THE MATHS</span>
+        <h3>Set calories and protein. Carbs and fat balance themselves.</h3>
+        <p class="lead">Change your calorie goal and the macros rebalance to match — edit any one and the others adjust to hold the target. Then the honest part:</p>
+        <ul>
+          <li><strong>True maintenance</strong> — your TDEE inferred from what you actually ate vs how your trend weight actually moved. No formulas, no guessing.</li>
+          <li>Phased targets — cut, maintain, build — with history kept per phase</li>
+          <li>Saved foods with portions, one-tap logging, weekly adherence report</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="tour-step">
+    <div class="wrap split">
+      <div class="split-copy">
+        <span class="step-num">03 · RECOVERY, STATISTICALLY HONEST</span>
+        <h3>Years of your data, and what actually moves it.</h3>
+        <p class="lead">Import your full Whoop history and Cadence turns it into long-range analytics — then goes further: a recovery-drivers engine tests what correlates with <em>your</em> recovery, and only speaks when the sample is big enough to mean something.</p>
+        <ul>
+          <li>HRV, resting HR, sleep and strain over 30 days to all-time</li>
+          <li>Then-vs-now trajectory: see a multi-year trend in one card</li>
+          <li>Drivers like sleep ≥7h or prior-day strain — statistically tested, not vibes</li>
+        </ul>
+      </div>
+      <div class="tour-phones">
+        <div class="phone"><img src="./shots/health-recovery-mobile.png" alt="Recovery — long-range HRV, resting heart rate and recovery analytics" loading="lazy" /></div>
+        <div class="phone"><img src="./shots/health-sync-mobile.png" alt="Sync — Whoop history import and Apple Health shortcut setup" loading="lazy" /></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="cta">
+    <div class="wrap">
+      <div class="box">
+        <h2>Your body runs on data. Now your training does.</h2>
+        <p>Whoop history, Apple Health, weigh-ins and every session — one place.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <a class="btn btn-aqua" href="/health">Open Cadence Health</a>
+          <a class="btn" style="background:rgba(255,255,255,0.12);color:#fff;" href="/kobe">Meet Kobe →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-in">
+      <a class="brand" href="/" style="font-size:17px;">
+        <span class="mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 32 32"><path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#fff" stroke-width="3.6"/><circle cx="23.06" cy="9.64" r="2.4" fill="#fff"/><circle cx="23.06" cy="22.36" r="2.4" fill="#fff"/></svg>
+        </span>
+        Cadence
+      </a>
+      <div class="foot-links">
+        <a href="/tour/work">Work tour</a>
+        <a href="/tour/wealth">Wealth tour</a>
+        <a href="/tour/health">Health tour</a>
+        <a href="/kobe">Kobe</a>
+      </div>
+      <div class="foot-copy">© 2026 Cadence.</div>
+    </div>
+  </footer>
+</body>
+</html>

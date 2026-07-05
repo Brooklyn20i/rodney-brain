@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1A1F2E" />
+  <meta name="description" content="Kobe is Cadence's AI agent — 60+ typed MCP tools across work, wealth and health, a scoped row-level-secure account, and real writes to your system." />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="stylesheet" href="/site.css" />
+  <title>Kobe — the agent inside Cadence</title>
+  <style>
+    body.navy { background: var(--navy); color: #fff; }
+    body.navy header.nav { background: rgba(26,31,46,0.88); border-bottom-color: rgba(255,255,255,0.1); }
+    body.navy .brand, body.navy .nav-links a.on, body.navy .nav-links a:hover { color: #fff; }
+    body.navy .nav-links a { color: rgba(255,255,255,0.65); }
+    body.navy .btn-line { color: #fff; border-color: rgba(255,255,255,0.2); }
+    body.navy .btn-dark { background: var(--aqua); color: #06110C; }
+    body.navy .tour-hero h1 { color: #fff; }
+    body.navy .tour-hero p { color: rgba(255,255,255,0.72); }
+    body.navy .sec-head h2 { color: #fff; }
+    body.navy .sec-head p { color: rgba(255,255,255,0.72); }
+    body.navy .eyebrow { color: #7FE8C0; }
+    body.navy footer { border-top-color: rgba(255,255,255,0.1); }
+    body.navy .foot-links a { color: rgba(255,255,255,0.65); } body.navy .foot-links a:hover { color: #fff; }
+    body.navy .foot-copy { color: rgba(255,255,255,0.4); }
+    .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 860px) { .how { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body class="navy">
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="/">
+        <span class="mark" aria-hidden="true" style="background: rgba(255,255,255,0.12);">
+          <svg width="20" height="20" viewBox="0 0 32 32"><path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#1FE39A" stroke-width="3.6"/><circle cx="23.06" cy="9.64" r="2.4" fill="#1FE39A"/><circle cx="23.06" cy="22.36" r="2.4" fill="#1FE39A"/></svg>
+        </span>
+        Cadence
+      </a>
+      <nav class="nav-links">
+        <a href="/tour/work">Work</a>
+        <a href="/tour/wealth">Wealth</a>
+        <a href="/tour/health">Health</a>
+        <a class="on" href="/kobe">Kobe</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="btn btn-line" href="/#signin">Sign in</a>
+        <a class="btn btn-dark" href="/#access">Request access</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="tour-hero">
+    <div class="wrap">
+      <div class="eyebrow">Agent-native, not agent-washed</div>
+      <h1>Kobe works inside your system — with his own keys, on your terms.</h1>
+      <p>Most “AI features” are a chat box next to your data. Kobe is a teammate wired into Cadence through MCP: he reads your real records, writes real changes, and briefs you on what only you can decide.</p>
+    </div>
+  </div>
+
+  <section style="padding-top: 20px;">
+    <div class="wrap split rev">
+      <div class="phone" style="width:min(100%,300px);margin:0 auto;"><img src="./shots/kobe-mobile.png" alt="A real conversation with Kobe — Rodney asks for a sauna log; Kobe reports recovery is 74% and greenlights the day's training" /></div>
+      <div class="split-copy">
+        <span class="eyebrow">A real conversation</span>
+        <h3 style="color:#fff;">“Recovery is 74% — green light for Day 4 Upper.”</h3>
+        <p class="lead" style="color:rgba(255,255,255,0.72);">This is the app, not a mock-up. You ask for a sauna log; Kobe logs it. Overnight he reads your recovery and sleep, checks the program, and greenlights the session — with the progression call attached: “Bench moved up 2.5kg last week; if the top sets feel like RPE 8 or less, take the next jump.”</p>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-top:24px;">
+          <div class="kchip"><h4>Delegate like a teammate</h4><p>Mark any Work task “for Kobe” and it lands in his queue — visible on your Control screen until it's done.</p></div>
+          <div class="kchip"><h4>Cross-domain by design</h4><p>One agent across all three domains: he can connect your training load, your spend and your commitments, because it's one database.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">The real capability surface</div>
+        <h2>60+ typed tools. These are their actual names.</h2>
+        <p>Every domain exposes a typed MCP toolset. This isn't a roadmap — it's what runs today.</p>
+      </div>
+      <div class="tools">
+        <div class="toolcol">
+          <h4>Work</h4>
+          <code>get_morning_brief</code><code>list_open_work_items</code><code>triage_inbox_item</code><code>complete_work_item</code><code>get_person_brief</code><code>get_project_status</code><code>get_week_ahead</code><code>get_stale_items</code><code>list_waiting_items</code><code>add_decision</code><code>write_kobe_note</code><code>search_all</code>
+        </div>
+        <div class="toolcol">
+          <h4>Wealth</h4>
+          <code>get_net_worth_snapshot</code><code>get_portfolio_overview</code><code>list_investment_holdings</code><code>list_properties</code><code>list_loans</code><code>get_budget</code><code>add_budget_line</code><code>set_fx_rate</code><code>log_decision</code><code>list_evidence</code><code>list_monthly_metrics</code>
+        </div>
+        <div class="toolcol">
+          <h4>Health</h4>
+          <code>get_daily_brief</code><code>get_active_program</code><code>get_exercise_history</code><code>get_recovery_drivers</code><code>log_nutrition</code><code>log_cardio</code><code>log_sauna</code><code>log_completed_workout</code><code>bulk_upsert_recovery_metrics</code><code>bulk_upsert_body_metrics</code><code>get_week_summary</code>
+        </div>
+      </div>
+      <p class="shot-note" style="color:rgba(255,255,255,0.45);">Plus agent messaging in every domain — Kobe leaves briefs in the app; you reply from your phone.</p>
+    </div>
+  </section>
+
+  <section style="padding-top: 0;">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="eyebrow">Trust model</div>
+        <h2>Powerful, because it's constrained.</h2>
+      </div>
+      <div class="how">
+        <div class="kchip"><h4>His own account</h4><p>Kobe isn't you. He operates a dedicated non-owner account with a scoped grant — auditable and revocable at any time.</p></div>
+        <div class="kchip"><h4>Row-level security</h4><p>Database-enforced access limited to exactly your rows. The same RLS that protects you from other users constrains the agent.</p></div>
+        <div class="kchip"><h4>Typed tools, not raw SQL</h4><p>Every action goes through a typed MCP tool with validated inputs — he can log a workout; he can't drop a table.</p></div>
+        <div class="kchip"><h4>Evidence-stamped writes</h4><p>Agent actions land in the same evidence and activity regime as yours — you can always see what he did and when.</p></div>
+        <div class="kchip"><h4>Decisions stay yours</h4><p>Kobe flags and drafts; approval flows route the calls that matter back to you. “Needs Rodney” is a screen, not a hope.</p></div>
+        <div class="kchip"><h4>Bring your own agent</h4><p>The MCP servers aren't Kobe-specific — point your own agent at them and it gets the same typed, scoped capability surface.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" style="padding-top: 0;">
+    <div class="wrap">
+      <div class="box">
+        <h2>The first operating system built for you <em>and</em> your agent.</h2>
+        <p>Cadence is invite-only while we roll out. Request access and we'll be in touch.</p>
+        <a class="btn btn-aqua" href="/work">Request access</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-in">
+      <a class="brand" href="/" style="font-size:17px;">
+        <span class="mark" aria-hidden="true" style="background: rgba(255,255,255,0.12);">
+          <svg width="18" height="18" viewBox="0 0 32 32"><path d="M 23.06 9.64 A 9.5 9.5 0 1 0 23.06 22.36" fill="none" stroke="#1FE39A" stroke-width="3.6"/><circle cx="23.06" cy="9.64" r="2.4" fill="#1FE39A"/><circle cx="23.06" cy="22.36" r="2.4" fill="#1FE39A"/></svg>
+        </span>
+        Cadence
+      </a>
+      <div class="foot-links">
+        <a href="/tour/work">Work tour</a>
+        <a href="/tour/wealth">Wealth tour</a>
+        <a href="/tour/health">Health tour</a>
+        <a href="/kobe">Kobe</a>
+      </div>
+      <div class="foot-copy">© 2026 Cadence.</div>
+    </div>
+  </footer>
+</body>
+</html>
