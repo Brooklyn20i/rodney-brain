@@ -15,7 +15,7 @@ export default defineConfig({
         // Serve cached index.html for all navigation requests when offline.
         // Without this, opening the URL offline fails at the network level
         // before the service worker can intercept it.
-        navigateFallback: '/index.html',
+        navigateFallback: '/work.html',
         cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
@@ -52,7 +52,8 @@ export default defineConfig({
       // into that section with no theme flash. Vercel rewrites /financial and
       // /health onto these (see vercel.json).
       input: {
-        main: 'index.html',
+        main: 'index.html', // marketing landing page (sells Cadence)
+        work: 'work.html', // the Work app shell (root used to be this)
         financial: 'financial.html',
         health: 'health.html',
       },

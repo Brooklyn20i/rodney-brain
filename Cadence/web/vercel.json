@@ -4,9 +4,10 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
+    { "source": "/", "has": [{ "type": "query", "key": "invite" }], "destination": "/work.html" },
     { "source": "/financial", "destination": "/financial.html" },
     { "source": "/health", "destination": "/health.html" },
-    { "source": "/work", "destination": "/index.html" },
+    { "source": "/work", "destination": "/work.html" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [
