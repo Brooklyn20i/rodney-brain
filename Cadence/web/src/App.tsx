@@ -81,6 +81,25 @@ const DOMAIN_THEME_COLOR: Record<Domain, string> = {
   financial: '#1A5E3A',
   fitness: '#0B0E0C',
 };
+// Home Screen identity per domain. Set dynamically (below) as well as statically
+// in each per-path HTML, so "Add to Home Screen" shows the right name + icon
+// however the user arrived — deep link, in-app domain switch, or a service
+// worker serving the cached index.html shell.
+const DOMAIN_TITLE: Record<Domain, string> = {
+  work: 'Cadence Work',
+  financial: 'Cadence Wealth',
+  fitness: 'Cadence Health',
+};
+const DOMAIN_MANIFEST: Record<Domain, string> = {
+  work: '/manifest.json',
+  financial: '/manifest-financial.json',
+  fitness: '/manifest-health.json',
+};
+const DOMAIN_ICON: Record<Domain, string> = {
+  work: '/icon-work-180.png?v=3',
+  financial: '/icon-financial-180.png?v=3',
+  fitness: '/icon-health-180.png?v=3',
+};
 
 function domainFromPath(): Domain {
   const p = window.location.pathname.replace(/\/+$/, '');
@@ -118,7 +137,13 @@ export function App() {
   // data-domain on <html> lets the token overrides cascade to <body> too.
   useEffect(() => {
     document.documentElement.dataset.domain = domain;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', DOMAIN_THEME_COLOR[domain]);
+    document.title = DOMAIN_TITLE[domain];
+    const set = (sel: string, attr: string, val: string) =>
+      document.querySelector(sel)?.setAttribute(attr, val);
+    set('meta[name="theme-color"]', 'content', DOMAIN_THEME_COLOR[domain]);
+    set('meta[name="apple-mobile-web-app-title"]', 'content', DOMAIN_TITLE[domain]);
+    set('link[rel="apple-touch-icon"]', 'href', DOMAIN_ICON[domain]);
+    set('link[rel="manifest"]', 'href', DOMAIN_MANIFEST[domain]);
     if (domainFromPath() !== domain) {
       history.replaceState(null, '', DOMAIN_PATH[domain] + window.location.search + window.location.hash);
     }
