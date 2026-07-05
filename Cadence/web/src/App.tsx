@@ -90,6 +90,11 @@ const DOMAIN_TITLE: Record<Domain, string> = {
   financial: 'Cadence Wealth',
   fitness: 'Cadence Health',
 };
+const DOMAIN_TAGLINE: Record<Domain, string> = {
+  work: 'Sign in to your executive cockpit.',
+  financial: 'Sign in to your wealth command centre.',
+  fitness: 'Sign in to your health cockpit.',
+};
 const DOMAIN_MANIFEST: Record<Domain, string> = {
   work: '/manifest.json',
   financial: '/manifest-financial.json',
@@ -190,7 +195,7 @@ export function App() {
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
-  if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} />;
+  if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} title={DOMAIN_TITLE[domain]} tagline={DOMAIN_TAGLINE[domain]} />;
   if (needsPasswordSet) return <SetPassword />;
 
   const navigate = (id: string, entityId?: string | null) => {

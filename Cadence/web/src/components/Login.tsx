@@ -5,7 +5,15 @@ import { supabase } from '../lib/supabase';
 type Step = 'login' | 'reset_sent' | 'waitlist' | 'waitlist_done';
 const LAST_EMAIL_KEY = 'cadence:last-email';
 
-export function Login({ inviteHint }: { inviteHint?: boolean }) {
+export function Login({
+  inviteHint,
+  title = 'Cadence',
+  tagline = 'Sign in to Cadence.',
+}: {
+  inviteHint?: boolean;
+  title?: string;
+  tagline?: string;
+}) {
   const { configured, signIn, resetPassword } = useCadence();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +30,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (!configured) return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Work</h1>
+        <h1>{title}</h1>
         <p>Not connected to backend. Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env</code> and rebuild.</p>
       </div>
     </div>
@@ -67,7 +75,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'reset_sent') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Work</h1>
+        <h1>{title}</h1>
         <p>Password reset email sent to <strong>{email}</strong>. Open the link in the same browser, set your password, then come back and sign in.</p>
         <button className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}
           onClick={() => { setStep('login'); setErr(''); }}>
@@ -80,7 +88,7 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'waitlist_done') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Work</h1>
+        <h1>{title}</h1>
         <p style={{ fontSize: 24, margin: '16px 0 8px' }}>✓</p>
         <p><strong>You're on the list.</strong></p>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -97,8 +105,8 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   if (step === 'waitlist') return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Work</h1>
-        <p>Request early access to your executive cockpit.</p>
+        <h1>{title}</h1>
+        <p>Request early access.</p>
         <form onSubmit={joinWaitlist}>
           <div className="form-group">
             <label className="field">Name</label>
@@ -127,10 +135,10 @@ export function Login({ inviteHint }: { inviteHint?: boolean }) {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Cadence Work</h1>
+        <h1>{title}</h1>
         {inviteHint
           ? <p>Sign in (or create an account) to accept your team invite.</p>
-          : <p>Sign in to your executive cockpit.</p>
+          : <p>{tagline}</p>
         }
         <form onSubmit={submit}>
           <div className="form-group">
