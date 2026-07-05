@@ -530,6 +530,29 @@ export function cyclePosition(program: Program, dateISO: string): CyclePosition 
   };
 }
 
+// Sequential program position — advances by *sessions actually completed*, not
+// by the calendar. This is the honest model for "I'll just go in order": miss a
+// week and you're still on the next session, not fast-forwarded past a block.
+// One "week" = one full rotation through the program's day slots.
+export function programPosition(program: Program, days: ProgramDay[], workouts: Workout[]): CyclePosition {
+  const perWeek = days.filter((d) => d.program_id === program.id).length || 1;
+  const done = workouts.filter(
+    (w) => w.program_id === program.id && w.status === 'completed' && w.program_day_id
+  ).length;
+  const weeks = program.weeks > 0 ? program.weeks : 1;
+  const weekIndex = Math.floor(done / perWeek);
+  return { cycle: Math.floor(weekIndex / weeks) + 1, week: (weekIndex % weeks) + 1 };
+}
+
+// Total hard (working) sets logged in [start, end] — every ticked, non-warmup
+// set, whether or not its exercise maps to a tracked muscle group. The per-
+// muscle breakdown can undercount (unmapped movements drop out); this is the
+// honest headline number.
+export function weeklyHardSets(sets: WorkoutSet[], workouts: Workout[], start: string, end: string): number {
+  const inWeek = new Set(workouts.filter((w) => w.date >= start && w.date <= end).map((w) => w.id));
+  return workingSets(sets).filter((s) => inWeek.has(s.workout_id)).length;
+}
+
 // The program day to run next: the one after the most recently *completed*
 // program-day session, wrapping around; the first day if there's no history.
 export function nextProgramDay(days: ProgramDay[], workouts: Workout[], programId: string): ProgramDay | null {

@@ -8,6 +8,7 @@ import {
   metricSeries,
   monthlyRecovery,
   nextProgramDay,
+  programPosition,
   prsByExercise,
   rangeStats,
   recentPRs,
@@ -15,6 +16,7 @@ import {
   trajectory,
   trendDelta,
   weekOf,
+  weeklyHardSets,
   weeklySetsByMuscle,
   weekReport,
   weightTrend,
@@ -360,6 +362,56 @@ describe('cyclePosition', () => {
   it('returns null before the start or without a start date', () => {
     expect(cyclePosition(program, '2026-05-31')).toBeNull();
     expect(cyclePosition({ ...program, start_date: null }, '2026-06-05')).toBeNull();
+  });
+});
+
+describe('programPosition', () => {
+  const program: Program = {
+    id: 'p1', name: 'Block', description: '', weeks: 4, status: 'active',
+    start_date: '2026-06-01', notes: '', ...base,
+  };
+  const days: ProgramDay[] = [1, 2, 3].map((n) => ({
+    id: `d${n}`, program_id: 'p1', day_order: n, name: `Day ${n}`, focus: '', ...base,
+  }));
+  const dayWorkout = (id: string, dayId: string) =>
+    workout(id, '2026-06-01', { program_id: 'p1', program_day_id: dayId, status: 'completed' });
+
+  it('starts at cycle 1, week 1 with no completed sessions', () => {
+    expect(programPosition(program, days, [])).toEqual({ cycle: 1, week: 1 });
+  });
+  it('advances a week only after a full rotation of days — regardless of calendar', () => {
+    // Two of three days done → still week 1.
+    expect(programPosition(program, days, [dayWorkout('a', 'd1'), dayWorkout('b', 'd2')]))
+      .toEqual({ cycle: 1, week: 1 });
+    // Three done → one full rotation → week 2.
+    expect(programPosition(program, days, [dayWorkout('a', 'd1'), dayWorkout('b', 'd2'), dayWorkout('c', 'd3')]))
+      .toEqual({ cycle: 1, week: 2 });
+  });
+  it('rolls into the next cycle after `weeks` rotations', () => {
+    // 4 weeks × 3 days = 12 sessions → cycle 2, week 1.
+    const done = Array.from({ length: 12 }, (_, i) => dayWorkout(`w${i}`, days[i % 3].id));
+    expect(programPosition(program, days, done)).toEqual({ cycle: 2, week: 1 });
+  });
+  it('ignores in-progress and non-program sessions', () => {
+    const noise = [
+      workout('x', '2026-06-01', { program_id: 'p1', program_day_id: 'd1', status: 'in_progress' }),
+      workout('y', '2026-06-01', { program_id: 'other', program_day_id: 'd1', status: 'completed' }),
+    ];
+    expect(programPosition(program, days, noise)).toEqual({ cycle: 1, week: 1 });
+  });
+});
+
+describe('weeklyHardSets', () => {
+  it('counts every ticked non-warmup set in range, unmapped exercises included', () => {
+    const workouts = [workout('w1', '2026-06-22'), workout('w2', '2026-06-30')];
+    const sets = [
+      set('s1', 'w1', 'ex1', 40, 10),
+      set('s2', 'w1', 'ex-unmapped', 0, 12), // still a hard set
+      set('s3', 'w1', 'ex1', 40, 8, { is_warmup: true }), // warmup — excluded
+      set('s4', 'w1', 'ex1', 40, 8, { done: false }), // not done — excluded
+      set('s5', 'w2', 'ex1', 45, 6), // outside the week window
+    ];
+    expect(weeklyHardSets(sets, workouts, '2026-06-22', '2026-06-28')).toBe(2);
   });
 });
 

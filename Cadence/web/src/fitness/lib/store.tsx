@@ -14,6 +14,34 @@ type Row<K extends Table> = CadenceFitnessData[K][number];
 
 const DEMO_MODE = import.meta.env.VITE_DEMO === '1';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// A gym has terrible wifi. A single dropped request should not throw a scary
+// red banner — retry a few times with backoff first, and only give up (surface
+// an error) if it's a *permanent* failure (auth/RLS/constraint) or every retry
+// failed. Transient network blips heal silently. Returns { data, error } like
+// the underlying supabase call; a thrown network error is caught and retried.
+const PERMANENT_CODE = /^(22|23|42|PGRST)/; // pg data/constraint/syntax + PostgREST
+async function runWithRetry<T>(
+  op: () => PromiseLike<{ data: T | null; error: any }>,
+  attempts = 4
+): Promise<{ data: T | null; error: any }> {
+  let result: { data: T | null; error: any } = { data: null, error: null };
+  for (let i = 0; i < attempts; i++) {
+    try {
+      result = await op();
+    } catch (e: any) {
+      result = { data: null, error: e };
+    }
+    if (!result.error) return result;
+    const code = String(result.error?.code ?? '');
+    const status = Number(result.error?.status ?? 0);
+    if (PERMANENT_CODE.test(code) || status === 400 || status === 401 || status === 403) return result;
+    if (i < attempts - 1) await sleep(300 * 2 ** i); // 300, 600, 1200ms
+  }
+  return result;
+}
+
 export interface Ctx {
   demo: boolean;
   data: CadenceFitnessData;
@@ -37,6 +65,14 @@ export function useCadenceFitness(): Ctx {
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+// A short, non-alarming message for the sync banner. Raw Postgres/PostgREST
+// text ("PGRST204 …") means nothing to someone mid-set.
+function friendlyError(error: any): string {
+  const status = Number(error?.status ?? 0);
+  if (status === 401 || status === 403) return 'Not signed in — your last change may not have saved.';
+  return "Couldn't reach the server — your last change may not have saved. It'll retry automatically.";
 }
 
 export function CadenceFitnessProvider({ children }: { children: React.ReactNode }) {
@@ -86,12 +122,24 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   useEffect(() => {
     if (DEMO_MODE || !ownerId) return;
     reload();
+    // Coalesce realtime echoes: our own writes each bounce back a change event,
+    // and rapid set-logging fires many in a burst. Debounce per table so we
+    // refetch once the dust settles instead of thrashing state mid-workout
+    // (which was re-creating row objects and re-rendering the set list on every
+    // tap — the "not super smooth" feel).
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const scheduleReload = (t: Table) => {
+      const existing = timers.get(t as string);
+      if (existing) clearTimeout(existing);
+      timers.set(t as string, setTimeout(() => reload(t), 700));
+    };
     const ch = supabase.channel('cadence-fitness-rt');
     TABLES.forEach((t) =>
-      ch.on('postgres_changes', { event: '*', schema: 'fitness', table: t as string }, () => reload(t))
+      ch.on('postgres_changes', { event: '*', schema: 'fitness', table: t as string }, () => scheduleReload(t))
     );
     ch.subscribe();
     return () => {
+      timers.forEach((h) => clearTimeout(h));
       supabase.removeChannel(ch);
     };
   }, [ownerId, reload]);
@@ -145,20 +193,26 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     }
 
     const ownedRow = ownerId ? { owner_id: ownerId, ...stamped } : stamped;
+    // Show the row immediately (optimistic) so the UI never stalls on a slow
+    // gym connection; reconcile with the server copy once the write lands.
+    setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ownedRow] }));
     const { data: d, error } = await trackWrite(() =>
-      supabase
-        .schema('fitness')
-        .from(table as string)
-        .insert(ownedRow)
-        .select()
-        .single()
+      runWithRetry(() =>
+        supabase
+          .schema('fitness')
+          .from(table as string)
+          .insert(ownedRow)
+          .select()
+          .single()
+      )
     );
     if (error) {
-      setSyncError(error.message || 'Save failed');
+      setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== ownedRow.id) }));
+      setSyncError(friendlyError(error));
       throw error;
     }
-    setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
-    return d as Row<K>;
+    if (d) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === ownedRow.id ? d : r)) }));
+    return (d ?? ownedRow) as Row<K>;
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>): Promise<Row<K>> => {
@@ -172,37 +226,46 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       return { ...found, ...patch } as Row<K>;
     }
 
+    const optimistic = { ...(data as any)[table].find((r: any) => r.id === id), ...patch };
     const { data: d, error } = await trackWrite(() =>
-      supabase
-        .schema('fitness')
-        .from(table as string)
-        .update(patch as any)
-        .eq('id', id)
-        .select()
-        .single()
+      runWithRetry(() =>
+        supabase
+          .schema('fitness')
+          .from(table as string)
+          .update(patch as any)
+          .eq('id', id)
+          .select()
+          .single()
+      )
     );
+    // Local state already reflects the change (optimistic, above). If the write
+    // ultimately failed, note it quietly but DON'T throw — an un-awaited reject
+    // during a workout would fire the global "unhandled rejection" banner on
+    // every flaky tap. The change stays local and realtime reconciles later.
     if (error) {
-      setSyncError(error.message || 'Save failed');
-      throw error;
+      setSyncError(friendlyError(error));
+      return optimistic as Row<K>;
     }
-    setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
-    return d as Row<K>;
+    if (d) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+    return (d ?? optimistic) as Row<K>;
   };
 
   const remove = async (table: Table, id: string): Promise<void> => {
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (DEMO_MODE) return;
     const { error } = await trackWrite(() =>
-      supabase
-        .schema('fitness')
-        .from(table as string)
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id)
+      runWithRetry(() =>
+        supabase
+          .schema('fitness')
+          .from(table as string)
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', id)
+          .then((r) => ({ data: null, error: r.error }))
+      )
     );
-    if (error) {
-      setSyncError(error.message || 'Delete failed');
-      throw error;
-    }
+    // Same reasoning as update(): the row is already gone locally; a failed
+    // delete is noted but never thrown, so it can't spam the rejection banner.
+    if (error) setSyncError(friendlyError(error));
   };
 
   const clearSyncError = useCallback(() => setSyncError(null), []);

@@ -4,7 +4,7 @@
   "description": "Executive operating system for high-consequence work",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#1A1F2E",
   "theme_color": "#1A1F2E",
   "icons": [

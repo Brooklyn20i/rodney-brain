@@ -20,6 +20,18 @@ export function addDays(iso: string, days: number): string {
   return toISODate(d);
 }
 
+// Drop a leading weekday from a program-day / session name so a schedule that
+// was authored as "Monday — Upper A" just reads "Upper A". Cadence doesn't
+// assume you train on any given weekday — you go in order — so the weekday is
+// noise (and wrong the moment you train on a different day). Only strips when a
+// separator follows, so a legitimate name like "Sunday Long Run" is left alone.
+const DAY_PREFIX_RE =
+  /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\s*[—–\-:·]\s*/i;
+export function stripDayPrefix(name: string): string {
+  const stripped = (name || '').replace(DAY_PREFIX_RE, '').trim();
+  return stripped || name;
+}
+
 export function fmtDMY(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso.length === 10 ? iso + 'T12:00:00' : iso);
