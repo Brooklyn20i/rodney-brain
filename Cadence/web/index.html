@@ -11,27 +11,38 @@
   <title>Cadence — one operating system for work, wealth and health</title>
   <style>
     :root {
-      --bg: #F4F4F0; --surface: #FFFFFF; --ink: #1A1A1A; --ink2: #55605A; --ink3: #8A928C;
+      --bg: #F4F4F0; --surface: #FFFFFF; --ink: #16181A; --ink2: #55605A; --ink3: #8A928C;
       --line: rgba(0,0,0,0.09);
-      --navy: #1A1F2E; --pine: #124A2C; --aqua: #1FE39A; --brass: #C7A24A;
-      --radius: 16px; --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.06);
-      --maxw: 1120px;
+      --navy: #1A1F2E; --navy2: #2C3654; --pine: #124A2C; --aqua: #1FE39A; --brass: #C7A24A;
+      --dark: #0A0C0B; --dark-card: #121815; --dark-line: #1f2b26;
+      --radius: 16px;
+      --shadow-lg: 0 2px 6px rgba(20,25,22,0.06), 0 24px 64px rgba(20,25,22,0.14);
+      --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.07);
+      --maxw: 1140px;
       --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Segoe UI, sans-serif;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
-    body { font-family: var(--font); background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; line-height: 1.55; }
+    body { font-family: var(--font); background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; line-height: 1.55; overflow-x: hidden; }
     a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
     .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
-    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink3); }
-    .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; padding: 13px 22px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: transform .12s, opacity .12s; white-space: nowrap; }
+    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--ink3); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; padding: 13px 24px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: transform .12s, opacity .12s, border-color .12s; white-space: nowrap; }
     .btn:active { transform: scale(0.98); }
     .btn-dark { background: var(--navy); color: #fff; }
     .btn-line { background: transparent; color: var(--ink); border-color: var(--line); }
     .btn-line:hover { border-color: var(--ink); }
 
+    /* Device frames */
+    .browser { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-lg); }
+    .browser .bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #FAFAF8; }
+    .browser .dot { width: 10px; height: 10px; border-radius: 50%; background: #E3E3DE; }
+    .browser .url { margin-left: 10px; font-size: 11px; color: var(--ink3); background: #F1F1EC; border-radius: 8px; padding: 3px 12px; }
+    .phone { border-radius: 34px; overflow: hidden; border: 6px solid #101312; box-shadow: var(--shadow-lg); background: #0A0C0B; }
+
     /* Nav */
-    header.nav { position: sticky; top: 0; z-index: 20; background: rgba(244,244,240,0.82); backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--line); }
+    header.nav { position: sticky; top: 0; z-index: 20; background: rgba(244,244,240,0.85); backdrop-filter: saturate(180%) blur(12px); border-bottom: 1px solid var(--line); }
     .nav-in { display: flex; align-items: center; gap: 20px; height: 64px; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; letter-spacing: -0.3px; }
     .brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--navy); display: grid; place-items: center; }
@@ -39,57 +50,69 @@
     .nav-links a { font-size: 14px; font-weight: 500; color: var(--ink2); }
     .nav-links a:hover { color: var(--ink); }
     .nav-cta { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-    @media (max-width: 760px) { .nav-links { display: none; } }
+    @media (max-width: 760px) { .nav-links { display: none; } .nav-cta .btn-line { display: none; } }
 
     /* Hero */
-    .hero { padding: 76px 0 48px; text-align: center; }
-    .hero h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.04; letter-spacing: -1.4px; font-weight: 700; max-width: 900px; margin: 18px auto 0; }
-    .hero h1 .g { color: var(--pine); } .hero h1 .a { color: #0E9E6E; } .hero h1 .n { color: var(--navy); }
-    .hero p.sub { font-size: clamp(16px, 2.4vw, 20px); color: var(--ink2); max-width: 640px; margin: 22px auto 0; }
+    .hero { padding: 72px 0 0; text-align: center; }
+    .hero h1 { font-size: clamp(36px, 6vw, 64px); line-height: 1.03; letter-spacing: -1.8px; font-weight: 700; max-width: 940px; margin: 18px auto 0; }
+    .hero h1 .n { color: var(--navy2); } .hero h1 .g { color: var(--pine); } .hero h1 .a { color: #0E9E6E; }
+    .hero p.sub { font-size: clamp(16px, 2.4vw, 20px); color: var(--ink2); max-width: 660px; margin: 22px auto 0; }
     .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; }
     .hero-note { margin-top: 14px; font-size: 13px; color: var(--ink3); }
+    .hero-stage { position: relative; max-width: 980px; margin: 56px auto -80px; padding: 0 24px; }
+    .hero-stage .browser { transform: translateX(-24px); }
+    .hero-stage .phone { position: absolute; right: 8px; bottom: -40px; width: min(24%, 218px); }
+    @media (max-width: 700px) { .hero-stage { margin-bottom: -30px; } .hero-stage .phone { display: none; } .hero-stage .browser { transform: none; } }
+    .hero-under { background: linear-gradient(180deg, var(--bg) 0%, #ECECE6 100%); height: 180px; }
 
-    .devices { display: flex; justify-content: center; gap: 18px; margin: 54px auto 0; flex-wrap: wrap; }
-    .device { width: 150px; border-radius: 22px; padding: 10px; box-shadow: var(--shadow); border: 1px solid var(--line); }
-    .device img { width: 56px; height: 56px; border-radius: 14px; display: block; margin: 4px auto 10px; }
-    .device .d-name { font-size: 13px; font-weight: 700; text-align: center; }
-    .device .d-sub { font-size: 11px; color: var(--ink3); text-align: center; margin-top: 2px; }
-    .device.work { background: #fff; } .device.wealth { background: #fff; } .device.health { background: #0A0C0B; }
-    .device.health .d-name { color: #fff; } .device.health .d-sub { color: #7C8B84; }
+    /* Sections */
+    section { padding: 84px 0; }
+    .sec-head { max-width: 680px; margin: 0 auto 48px; text-align: center; }
+    .sec-head h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1px; font-weight: 700; margin-top: 10px; line-height: 1.1; }
+    .sec-head p { color: var(--ink2); font-size: 17px; margin-top: 14px; }
 
-    /* Section shells */
-    section { padding: 64px 0; }
-    .sec-head { text-align: center; max-width: 660px; margin: 0 auto 40px; }
-    .sec-head h2 { font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.8px; font-weight: 700; margin-top: 10px; }
-    .sec-head p { color: var(--ink2); font-size: 17px; margin-top: 12px; }
+    /* Split feature rows */
+    .split { display: grid; grid-template-columns: 5fr 7fr; gap: 56px; align-items: center; }
+    .split.rev { grid-template-columns: 7fr 5fr; }
+    @media (max-width: 900px) { .split, .split.rev { grid-template-columns: 1fr; gap: 30px; } .split.rev .split-copy { order: -1; } }
+    .split-copy .d-tag { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; display: inline-flex; align-items: center; gap: 8px; }
+    .split-copy .d-tag img { width: 22px; height: 22px; border-radius: 6px; }
+    .split-copy h3 { font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.8px; line-height: 1.12; margin: 14px 0 12px; }
+    .split-copy p.lead { color: var(--ink2); font-size: 16.5px; }
+    .split-copy ul { list-style: none; margin: 20px 0 24px; display: flex; flex-direction: column; gap: 11px; }
+    .split-copy li { font-size: 15px; position: relative; padding-left: 19px; }
+    .split-copy li strong { font-weight: 600; }
+    .split-copy li::before { content: ''; width: 7px; height: 7px; border-radius: 50%; position: absolute; left: 0; top: 8px; }
+    .work-sec li::before { background: var(--navy2); } .work-sec .d-tag { color: var(--navy2); }
+    .wealth-sec li::before { background: var(--pine); } .wealth-sec .d-tag { color: var(--pine); }
+    .split-copy .open { font-weight: 600; font-size: 15px; }
+    .work-sec .open { color: var(--navy2); } .wealth-sec .open { color: var(--pine); }
+    .shot-note { text-align: center; font-size: 12px; color: var(--ink3); margin-top: 12px; }
 
-    /* Domains */
-    .domains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    @media (max-width: 860px) { .domains { grid-template-columns: 1fr; } }
-    .dcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
-    .dcard .cap { display: flex; align-items: center; gap: 12px; }
-    .dcard .cap img { width: 46px; height: 46px; border-radius: 12px; }
-    .dcard h3 { font-size: 20px; letter-spacing: -0.3px; }
-    .dcard .tag { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
-    .dcard .lead { color: var(--ink2); font-size: 14px; margin: 14px 0 12px; }
-    .dcard ul { list-style: none; display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-    .dcard li { font-size: 14px; color: var(--ink); display: flex; gap: 9px; align-items: flex-start; }
-    .dcard li::before { content: ''; width: 7px; height: 7px; border-radius: 50%; margin-top: 7px; flex: 0 0 auto; }
-    .dcard.work li::before { background: var(--navy); } .dcard.wealth li::before { background: var(--pine); } .dcard.health li::before { background: #0E9E6E; }
-    .dcard .open { margin-top: auto; font-weight: 600; font-size: 15px; display: inline-flex; gap: 6px; align-items: center; }
-    .dcard.work .open, .dcard.work .tag { color: var(--navy); }
-    .dcard.wealth .open, .dcard.wealth .tag { color: var(--pine); }
-    .dcard.health .open, .dcard.health .tag { color: #0E9E6E; }
+    /* Health dark band */
+    .health-band { background: var(--dark); color: #fff; padding: 84px 0; }
+    .health-band .eyebrow { color: #0E9E6E; }
+    .health-band .d-tag { color: var(--aqua); }
+    .health-band h3 { color: #fff; }
+    .health-band p.lead { color: #9fb3aa; }
+    .health-band li { color: #d7e6df; }
+    .health-band li::before { background: var(--aqua); }
+    .health-band .open { color: var(--aqua); }
+    .health-phones { display: flex; gap: 22px; justify-content: center; align-items: flex-start; }
+    .health-phones .phone { width: min(42%, 250px); }
+    .health-phones .phone:nth-child(2) { margin-top: 44px; }
 
     /* Kobe */
-    .kobe { background: var(--navy); color: #fff; border-radius: 28px; padding: 56px 40px; }
-    .kobe .eyebrow { color: #7FE8C0; }
-    .kobe h2 { font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.8px; margin: 10px 0 14px; max-width: 620px; }
-    .kobe p.lead { color: rgba(255,255,255,0.72); font-size: 17px; max-width: 620px; }
-    .kobe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 36px; }
-    @media (max-width: 860px) { .kobe { padding: 40px 24px; } .kobe-grid { grid-template-columns: 1fr; } }
-    .kchip { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 18px; }
-    .kchip h4 { font-size: 15px; color: var(--aqua); margin-bottom: 6px; }
+    .kobe-band { background: var(--navy); color: #fff; padding: 84px 0; }
+    .kobe-band .eyebrow { color: #7FE8C0; }
+    .kobe-band h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1px; line-height: 1.12; margin: 12px 0 14px; }
+    .kobe-band p.lead { color: rgba(255,255,255,0.72); font-size: 17px; max-width: 560px; }
+    .kobe-split { display: grid; grid-template-columns: 6fr 5fr; gap: 56px; align-items: center; }
+    @media (max-width: 900px) { .kobe-split { grid-template-columns: 1fr; } }
+    .kobe-split .phone { width: min(100%, 300px); margin: 0 auto; }
+    .kchips { display: flex; flex-direction: column; gap: 14px; margin-top: 28px; }
+    .kchip { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 16px 18px; }
+    .kchip h4 { font-size: 15px; color: var(--aqua); margin-bottom: 4px; }
     .kchip p { font-size: 13.5px; color: rgba(255,255,255,0.66); line-height: 1.5; }
 
     /* Features */
@@ -110,12 +133,12 @@
     .slog img { width: 40px; height: 40px; border-radius: 10px; }
     .slog .l-name { font-size: 15px; } .slog .l-sub { font-size: 12px; color: var(--ink3); font-weight: 500; }
 
-    /* CTA band + footer */
+    /* CTA + footer */
     .cta { text-align: center; }
-    .cta .box { background: linear-gradient(180deg, #16321F, #0E2417); color: #fff; border-radius: 28px; padding: 56px 32px; }
-    .cta h2 { font-size: clamp(26px, 4vw, 40px); letter-spacing: -0.8px; max-width: 680px; margin: 0 auto; }
-    .cta p { color: rgba(255,255,255,0.72); margin: 14px auto 26px; max-width: 520px; }
-    .cta .btn-dark { background: var(--aqua); color: #06110C; }
+    .cta .box { background: linear-gradient(180deg, #16321F, #0E2417); color: #fff; border-radius: 28px; padding: 60px 32px; }
+    .cta h2 { font-size: clamp(26px, 4vw, 42px); letter-spacing: -1px; max-width: 700px; margin: 0 auto; line-height: 1.1; }
+    .cta p { color: rgba(255,255,255,0.72); margin: 16px auto 28px; max-width: 520px; }
+    .cta .btn { background: var(--aqua); color: #06110C; }
     footer { border-top: 1px solid var(--line); padding: 34px 0; margin-top: 24px; }
     .foot-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
     .foot-links { display: flex; gap: 20px; font-size: 14px; color: var(--ink2); }
@@ -133,9 +156,10 @@
         Cadence
       </a>
       <nav class="nav-links">
-        <a href="#domains">Domains</a>
+        <a href="#work">Work</a>
+        <a href="#wealth">Wealth</a>
+        <a href="#health">Health</a>
         <a href="#kobe">Kobe</a>
-        <a href="#features">Features</a>
       </nav>
       <div class="nav-cta">
         <a class="btn btn-line" href="#signin">Sign in</a>
@@ -145,7 +169,7 @@
   </header>
 
   <a id="top"></a>
-  <section class="hero">
+  <div class="hero">
     <div class="wrap">
       <div class="eyebrow">One system · every domain</div>
       <h1>Run your <span class="n">work</span>, your <span class="g">wealth</span> and your <span class="a">health</span> from one command centre.</h1>
@@ -154,75 +178,100 @@
         <a class="btn btn-dark" href="#access">Request access</a>
         <a class="btn btn-line" href="#signin">Sign in →</a>
       </div>
-      <div class="hero-note">One login. Real-time sync. On your iPhone, iPad and desktop.</div>
-
-      <div class="devices">
-        <div class="device work"><img src="./icon-work-512.png?v=4" alt="Cadence Work" /><div class="d-name">Work</div><div class="d-sub">Operating board</div></div>
-        <div class="device wealth"><img src="./icon-financial-512.png?v=4" alt="Cadence Wealth" /><div class="d-name">Wealth</div><div class="d-sub">Financial cockpit</div></div>
-        <div class="device health"><img src="./icon-health-512.png?v=4" alt="Cadence Health" /><div class="d-name">Health</div><div class="d-sub">Train &amp; recover</div></div>
-      </div>
+      <div class="hero-note">One login. Real-time sync. iPhone, iPad and desktop.</div>
     </div>
-  </section>
-
-  <section id="domains">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">Three domains, one Cadence</div>
-        <h2>Everything you operate, under one roof.</h2>
-        <p>Each domain is a full product in its own right — switch between them with a tap, share one secure account, and let Kobe act across all three.</p>
+    <div class="hero-stage">
+      <div class="browser">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cadence-agent.com/financial</span></div>
+        <img src="./shots/wealth-desktop.png" alt="Cadence Wealth — the financial Overview: net worth, operating vs market movement, goal runway and a needs-attention list" />
       </div>
-      <div class="domains">
-        <div class="dcard work">
-          <div class="cap"><img src="./icon-work-512.png?v=4" alt="" /><div><div class="tag">CADENCE WORK</div><h3>Your operating board</h3></div></div>
-          <p class="lead">The executive cockpit for high-consequence work — plan the day, run projects, and never drop a commitment.</p>
-          <ul>
-            <li>Board, projects &amp; milestones with a live Gantt</li>
-            <li>Today control, horizon planning &amp; calendar</li>
-            <li>Meetings, people &amp; waiting-for tracking</li>
-            <li>Weekly review that closes the loop</li>
-          </ul>
-          <a class="open" href="/work">Open Work →</a>
-        </div>
-        <div class="dcard wealth">
-          <div class="cap"><img src="./icon-financial-512.png?v=4" alt="" /><div><div class="tag">CADENCE WEALTH</div><h3>Your financial command centre</h3></div></div>
-          <p class="lead">Know exactly where you stand and where you're headed — net worth, cashflow and risk in one honest picture.</p>
-          <ul>
-            <li>Net-worth bridge, budget &amp; runway to your goal</li>
-            <li>Free-cash engine &amp; monthly close</li>
-            <li>Property, allocation &amp; performance</li>
-            <li>Risk dashboard, stress tests &amp; protection</li>
-          </ul>
-          <a class="open" href="/financial">Open Wealth →</a>
-        </div>
-        <div class="dcard health">
-          <div class="cap"><img src="./icon-health-512.png?v=4" alt="" /><div><div class="tag">CADENCE HEALTH</div><h3>Your training &amp; recovery cockpit</h3></div></div>
-          <p class="lead">Run your programs, hit your macros and understand your recovery — the Whoop-and-MacroFactor loop in one place.</p>
-          <ul>
-            <li>Gym mode: programs, logging &amp; PRs</li>
-            <li>Nutrition &amp; macros with auto-balanced targets</li>
-            <li>Recovery analytics &amp; weight-trend energy balance</li>
-            <li>Whoop, Renpho &amp; Apple Health sync</li>
-          </ul>
-          <a class="open" href="/health">Open Health →</a>
+      <div class="phone"><img src="./shots/health-mobile.png" alt="Cadence Health on iPhone — today's workout and calories" loading="lazy" /></div>
+    </div>
+  </div>
+  <div class="hero-under"></div>
+
+  <section id="work" class="work-sec">
+    <div class="wrap split">
+      <div class="split-copy">
+        <span class="d-tag"><img src="./icon-work-512.png?v=4" alt="" />Cadence Work</span>
+        <h3>Your whole day on one screen — decisions, delegations and what you're owed.</h3>
+        <p class="lead">Control is the executive cockpit: what needs you, what you're waiting on from others, and what's already handed to your agent.</p>
+        <ul>
+          <li><strong>Decisions first</strong> — the calls only you can make, flagged and dated</li>
+          <li><strong>Waiting on others</strong> — every commitment owed to you, by person</li>
+          <li><strong>With Kobe</strong> — work delegated to your agent, tracked like any teammate</li>
+          <li>Board, projects, milestones, meetings and a weekly review that closes the loop</li>
+        </ul>
+        <a class="open" href="/work">Open Work →</a>
+      </div>
+      <div>
+        <div class="browser">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cadence-agent.com/work</span></div>
+          <img src="./shots/work-desktop.png" alt="Cadence Work Control screen — my to-do with decisions, waiting on others, and tasks delegated to Kobe" loading="lazy" />
         </div>
       </div>
     </div>
   </section>
 
-  <section id="kobe">
-    <div class="wrap">
-      <div class="kobe">
+  <section id="wealth" class="wealth-sec" style="padding-top: 20px;">
+    <div class="wrap split rev">
+      <div>
+        <div class="browser">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cadence-agent.com/financial</span></div>
+          <img src="./shots/wealth-budget.png" alt="Cadence Wealth Budget — a per-month financial-year plan with income, payments and free cash in multiple currencies" loading="lazy" />
+        </div>
+      </div>
+      <div class="split-copy">
+        <span class="d-tag"><img src="./icon-financial-512.png?v=4" alt="" />Cadence Wealth</span>
+        <h3>Know exactly where the money went — and when you hit your number.</h3>
+        <p class="lead">A monthly flash report separates what <em>you</em> did from what markets did, and a runway shows the date you reach your goal at your real pace.</p>
+        <ul>
+          <li><strong>Net-worth bridge</strong> — operating vs market movement, every month</li>
+          <li><strong>Budget over the financial year</strong> — multi-currency, per-month, honest</li>
+          <li><strong>Needs attention</strong> — allocation out of band, risk flags, decisions waiting</li>
+          <li>Property portfolio, free-cash engine, stress tests and protection register</li>
+        </ul>
+        <a class="open" href="/financial">Open Wealth →</a>
+      </div>
+    </div>
+  </section>
+
+  <div id="health" class="health-band">
+    <div class="wrap split">
+      <div class="split-copy">
+        <span class="d-tag"><img src="./icon-health-512.png?v=4" alt="" />Cadence Health</span>
+        <h3>Train, eat and recover on numbers — not vibes.</h3>
+        <p class="lead">A workout-first daily cockpit, macros that auto-balance to your calorie goal, and recovery analytics over years of data.</p>
+        <ul>
+          <li><strong>Gym mode</strong> — programs, one-handed logging, rest timer, PRs</li>
+          <li><strong>Macros that do the maths</strong> — set calories + protein, the rest auto-fills</li>
+          <li><strong>True maintenance</strong> — TDEE inferred from your real intake vs weight trend</li>
+          <li>Whoop, Renpho and Apple Health history — recovery drivers included</li>
+        </ul>
+        <a class="open" href="/health">Open Health →</a>
+      </div>
+      <div class="health-phones">
+        <div class="phone"><img src="./shots/health-recovery-mobile.png" alt="Cadence Health recovery analytics — HRV, resting heart rate and recovery trends over years" loading="lazy" /></div>
+        <div class="phone"><img src="./shots/health-nutrition-mobile.png" alt="Cadence Health nutrition — calories and macros against target" loading="lazy" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="kobe" class="kobe-band">
+    <div class="wrap kobe-split">
+      <div>
         <div class="eyebrow">Agent-native</div>
         <h2>Meet Kobe — your chief of staff across every domain.</h2>
-        <p class="lead">Cadence isn't just dashboards you fill in. Kobe is an AI agent wired into the system through MCP, so it acts <em>inside</em> Cadence — reading your data, doing the work, and briefing you back.</p>
-        <div class="kobe-grid">
-          <div class="kchip"><h4>Works, not chats</h4><p>Kobe logs workouts and meals, backfills years of Whoop history, adds budget lines and drafts your notes — real writes, not suggestions.</p></div>
-          <div class="kchip"><h4>Sees the whole picture</h4><p>One agent across work, wealth and health — so it can connect your training load, your spend and your commitments.</p></div>
-          <div class="kchip"><h4>Briefs you back</h4><p>Recovery drivers, what moved your net worth, what needs you today — Kobe surfaces the signal and flags what only you can decide.</p></div>
+        <p class="lead">Kobe is wired into Cadence through MCP with his own scoped, row-level-secure account. He doesn't suggest — he does, then briefs you back. That conversation on the right is the product, not a mock-up.</p>
+        <div class="kchips">
+          <div class="kchip"><h4>Works, not chats</h4><p>Logs workouts and meals, backfills years of Whoop history, adds budget lines, drafts announcements — real writes to your system.</p></div>
+          <div class="kchip"><h4>Sees the whole picture</h4><p>One agent across work, wealth and health — it connects your recovery, your spend and your commitments.</p></div>
+          <div class="kchip"><h4>Delegate like a teammate</h4><p>Mark any task “for Kobe” on your Work board and it shows up in his queue — visible, tracked, done.</p></div>
         </div>
       </div>
+      <div class="phone"><img src="./shots/kobe-mobile.png" alt="A real conversation with Kobe — Rodney asks for a sauna log; Kobe reports recovery is 74% and greenlights the day's training" loading="lazy" /></div>
     </div>
-  </section>
+  </div>
 
   <section id="features">
     <div class="wrap">
@@ -241,7 +290,7 @@
     </div>
   </section>
 
-  <section id="signin">
+  <section id="signin" style="padding-top: 0;">
     <div class="wrap">
       <div class="signin">
         <h2>Open your Cadence</h2>
@@ -255,12 +304,12 @@
     </div>
   </section>
 
-  <section id="access" class="cta">
+  <section id="access" class="cta" style="padding-top: 0;">
     <div class="wrap">
       <div class="box">
-        <h2>Commercialise your life's operating system.</h2>
+        <h2>One operating system. Every domain of your life.</h2>
         <p>Cadence is invite-only while we roll out. Request access and we'll be in touch.</p>
-        <a class="btn btn-dark" href="/work">Request access</a>
+        <a class="btn" href="/work">Request access</a>
       </div>
     </div>
   </section>
