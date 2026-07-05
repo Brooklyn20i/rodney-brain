@@ -3,8 +3,21 @@ import { useCadenceFitness } from '../lib/store';
 import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { dayNutrition, estimateTDEE, targetFor, weekReport } from '../lib/fitnessCalc';
-import { filterSavedFoods, normalisePortion, quickLogFromSavedFood, scaleMacros } from '../lib/nutritionQuickLog';
-import { addDays, fmtDayShort, fmtNum, MEAL_LABEL, MEALS, PHASE_LABEL, todayISO } from '../lib/util';
+import {
+  buildSavedFoodPicker,
+  normalisePortion,
+  quickLogFromSavedFood,
+  scaleMacros,
+} from '../lib/nutritionQuickLog';
+import {
+  addDays,
+  fmtDayShort,
+  fmtNum,
+  MEAL_LABEL,
+  MEALS,
+  PHASE_LABEL,
+  todayISO,
+} from '../lib/util';
 import type { MealType, NutritionPhase } from '../lib/types';
 
 interface PhotoEstimate {
@@ -51,7 +64,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   // (MacroFactor's loop), and a weekly review with per-day adherence.
   const energy = estimateTDEE(data.nutrition_logs, data.body_metrics, date);
   const [weekAnchor, setWeekAnchor] = useState(todayISO());
-  const week = weekReport(data.nutrition_logs, data.nutrition_targets, data.body_metrics, weekAnchor);
+  const week = weekReport(
+    data.nutrition_logs,
+    data.nutrition_targets,
+    data.body_metrics,
+    weekAnchor
+  );
 
   // ── Photo logging ─────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -79,7 +97,11 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
       const hour = new Date().getHours();
       setEstMeal(hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 20 ? 'dinner' : 'snack');
     } catch (e) {
-      setPhotoError(e instanceof Error ? e.message : 'Could not read the photo — try again or enter it manually.');
+      setPhotoError(
+        e instanceof Error
+          ? e.message
+          : 'Could not read the photo — try again or enter it manually.'
+      );
     } finally {
       setPhotoBusy(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -102,7 +124,9 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
       protein_g: estimate.protein_g,
       carbs_g: estimate.carbs_g,
       fat_g: estimate.fat_g,
-      notes: estimate.notes ? `Photo estimate (${estimate.confidence}): ${estimate.notes}` : 'Photo estimate',
+      notes: estimate.notes
+        ? `Photo estimate (${estimate.confidence}): ${estimate.notes}`
+        : 'Photo estimate',
     };
     await insert('nutrition_logs', { date, ...row });
     if (saveEstimateAsFood) await insert('saved_meals', row);
@@ -120,9 +144,15 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const [saveAsMeal, setSaveAsMeal] = useState(false);
   const [savedFoodQuery, setSavedFoodQuery] = useState('');
   const [savedFoodQty, setSavedFoodQty] = useState<Record<string, string>>({});
-  const savedFoods = useMemo(
-    () => filterSavedFoods(data.saved_meals, savedFoodQuery),
-    [data.saved_meals, savedFoodQuery]
+  const savedFoodPicker = useMemo(
+    () =>
+      buildSavedFoodPicker({
+        meals: data.saved_meals,
+        logs: data.nutrition_logs,
+        query: savedFoodQuery,
+        limit: 8,
+      }),
+    [data.saved_meals, data.nutrition_logs, savedFoodQuery]
   );
   const quickAdd = async () => {
     if (!name.trim() || !Number(cals)) return;
@@ -174,7 +204,13 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
     setShowTargets(false);
   };
 
-  const macroRow = (label: string, cls: string, value: number, max: number | undefined, unit: string) => (
+  const macroRow = (
+    label: string,
+    cls: string,
+    value: number,
+    max: number | undefined,
+    unit: string
+  ) => (
     <div className="macro-row">
       <span className="macro-label">{label}</span>
       <div className="macro-track">
@@ -196,8 +232,17 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
         <button className="btn btn-secondary btn-sm" onClick={() => setDate(addDays(date, -1))}>
           ←
         </button>
-        <input type="date" value={date} style={{ width: 150 }} onChange={(e) => setDate(e.target.value)} />
-        <button className="btn btn-secondary btn-sm" onClick={() => setDate(addDays(date, 1))} disabled={date >= todayISO()}>
+        <input
+          type="date"
+          value={date}
+          style={{ width: 150 }}
+          onChange={(e) => setDate(e.target.value)}
+        />
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setDate(addDays(date, 1))}
+          disabled={date >= todayISO()}
+        >
           →
         </button>
       </ScreenHeader>
@@ -206,16 +251,37 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           title={`${fmtDayShort(date)} — totals`}
           actions={
             target ? (
-              <Tag label={`${PHASE_LABEL[target.phase]} · ${fmtNum(target.calories)} kcal target`} tone="info" />
+              <Tag
+                label={`${PHASE_LABEL[target.phase]} · ${fmtNum(target.calories)} kcal target`}
+                tone="info"
+              />
             ) : (
               <Tag label="No target set" tone="warn" />
             )
           }
         >
           {macroRow('Calories', '', totals.calories, target?.calories, 'kcal')}
-          {macroRow('Protein', 'macro-protein', totals.protein_g, target ? Number(target.protein_g) : undefined, 'g')}
-          {macroRow('Carbs', 'macro-carbs', totals.carbs_g, target ? Number(target.carbs_g) : undefined, 'g')}
-          {macroRow('Fat', 'macro-fat', totals.fat_g, target ? Number(target.fat_g) : undefined, 'g')}
+          {macroRow(
+            'Protein',
+            'macro-protein',
+            totals.protein_g,
+            target ? Number(target.protein_g) : undefined,
+            'g'
+          )}
+          {macroRow(
+            'Carbs',
+            'macro-carbs',
+            totals.carbs_g,
+            target ? Number(target.carbs_g) : undefined,
+            'g'
+          )}
+          {macroRow(
+            'Fat',
+            'macro-fat',
+            totals.fat_g,
+            target ? Number(target.fat_g) : undefined,
+            'g'
+          )}
           {target && (
             <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
               {totals.calories <= target.calories
@@ -224,7 +290,11 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               Protein {fmtNum(Math.max(0, Number(target.protein_g) - totals.protein_g))}g to go.
             </p>
           )}
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setShowTargets(!showTargets)}>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: 6 }}
+            onClick={() => setShowTargets(!showTargets)}
+          >
             {showTargets ? 'Hide targets' : 'Set targets'}
           </button>
           {showTargets && (
@@ -232,7 +302,10 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               <div className="form-grid">
                 <div>
                   <label className="field">Phase</label>
-                  <select value={tPhase} onChange={(e) => setTPhase(e.target.value as NutritionPhase)}>
+                  <select
+                    value={tPhase}
+                    onChange={(e) => setTPhase(e.target.value as NutritionPhase)}
+                  >
                     {(Object.keys(PHASE_LABEL) as NutritionPhase[]).map((x) => (
                       <option key={x} value={x}>
                         {PHASE_LABEL[x]}
@@ -242,208 +315,54 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                 </div>
                 <div>
                   <label className="field">Calories</label>
-                  <input type="number" inputMode="numeric" value={tCals} onChange={(e) => setTCals(e.target.value)} />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={tCals}
+                    onChange={(e) => setTCals(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label className="field">Protein (g)</label>
-                  <input type="number" inputMode="numeric" value={tP} onChange={(e) => setTP(e.target.value)} />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={tP}
+                    onChange={(e) => setTP(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label className="field">Carbs (g)</label>
-                  <input type="number" inputMode="numeric" value={tC} onChange={(e) => setTC(e.target.value)} />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={tC}
+                    onChange={(e) => setTC(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label className="field">Fat (g)</label>
-                  <input type="number" inputMode="numeric" value={tF} onChange={(e) => setTF(e.target.value)} />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={tF}
+                    onChange={(e) => setTF(e.target.value)}
+                  />
                 </div>
               </div>
-              <button className="btn btn-primary btn-sm" onClick={saveTargets} disabled={!Number(tCals)}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={saveTargets}
+                disabled={!Number(tCals)}
+              >
                 Save targets from {fmtDayShort(date)}
               </button>
               <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-                Targets are phased: the newest row on or before a day applies, so past days keep their old targets.
+                Targets are phased: the newest row on or before a day applies, so past days keep
+                their old targets.
               </p>
             </div>
           )}
-        </Card>
-
-        <Card title="Saved foods — quick log">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-            <input
-              type="search"
-              value={savedFoodQuery}
-              placeholder="Search foods, brands, notes…"
-              onChange={(e) => setSavedFoodQuery(e.target.value)}
-            />
-            {savedFoodQuery && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setSavedFoodQuery('')}>
-                Clear
-              </button>
-            )}
-          </div>
-          {data.saved_meals.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
-              No saved foods yet. Use <strong>Quick add</strong> with “Save to foods”, or save a reviewed photo estimate.
-            </p>
-          )}
-          {data.saved_meals.length > 0 && savedFoods.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>No saved foods match that search.</p>
-          )}
-          {savedFoods.map((m) => {
-            const qty = savedFoodQty[m.id] ?? '1';
-            const scaled = scaleMacros(m, qty);
-            return (
-              <div key={m.id} className="pick-row">
-                <div className="pick-main">
-                  <div className="pick-title">{m.name}</div>
-                  <div className="pick-sub">
-                    {MEAL_LABEL[m.meal]} · base {m.calories} kcal · P{fmtNum(Number(m.protein_g))} C
-                    {fmtNum(Number(m.carbs_g))} F{fmtNum(Number(m.fat_g))}
-                    {m.notes ? ` · ${m.notes}` : ''}
-                  </div>
-                  <div className="pick-sub">
-                    Logging ×{normalisePortion(qty)}: {scaled.calories} kcal · P{fmtNum(scaled.protein_g)} C
-                    {fmtNum(scaled.carbs_g)} F{fmtNum(scaled.fat_g)}
-                  </div>
-                </div>
-                <input
-                  aria-label={`Quantity for ${m.name}`}
-                  type="number"
-                  inputMode="decimal"
-                  min="0.1"
-                  max="10"
-                  step="0.5"
-                  value={qty}
-                  style={{ width: 70 }}
-                  onChange={(e) => setSavedFoodQty((prev) => ({ ...prev, [m.id]: e.target.value }))}
-                />
-                <button className="btn btn-primary btn-sm" onClick={() => logSaved(m.id)}>
-                  Log
-                </button>
-                <button className="btn btn-danger btn-sm" aria-label={`Delete saved food ${m.name}`} onClick={() => remove('saved_meals', m.id)}>
-                  ✕
-                </button>
-              </div>
-            );
-          })}
-        </Card>
-
-        <Card
-          title="Energy balance"
-          actions={
-            energy?.reliable ? (
-              <Tag label={`Maintenance ≈ ${fmtNum(energy.tdee)} kcal`} tone="info" />
-            ) : undefined
-          }
-        >
-          {energy?.reliable ? (
-            (() => {
-              const balance = totals.calories - energy.tdee;
-              const cutting = balance < 0;
-              return (
-                <>
-                  <p style={{ fontSize: 14, margin: '0 0 6px' }}>
-                    {date === todayISO() ? 'Today so far' : fmtDayShort(date)}:{' '}
-                    <strong style={{ color: cutting ? 'var(--green)' : 'var(--red)' }}>
-                      {cutting ? `${fmtNum(-balance)} kcal deficit` : `${fmtNum(balance)} kcal surplus`}
-                    </strong>{' '}
-                    vs your estimated maintenance.
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--text2)', margin: 0 }}>
-                    Estimated from {energy.loggedDays} logged days and your weight trend over the last{' '}
-                    {energy.spanDays} days (avg intake {fmtNum(energy.avgIntake)} kcal,{' '}
-                    {energy.weightDeltaKg <= 0 ? '' : '+'}
-                    {fmtNum(energy.weightDeltaKg, 2)}kg trend). A steady 500 kcal daily deficit ≈ −0.45kg/week.
-                  </p>
-                </>
-              );
-            })()
-          ) : (
-            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
-              Log food most days and weigh in regularly and Cadence will infer your true maintenance
-              calories from intake vs weight trend — no formulas.{' '}
-              {energy
-                ? `So far: ${energy.loggedDays} logged days across ${energy.spanDays} days of weigh-ins.`
-                : 'No weigh-in trend yet — add weight on the Body screen (or via Sync).'}
-            </p>
-          )}
-        </Card>
-
-        <Card
-          title="This week"
-          actions={
-            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setWeekAnchor(addDays(week.start, -1))}>
-                ←
-              </button>
-              <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
-                {fmtDayShort(week.start)} – {fmtDayShort(week.end)}
-              </span>
-              <button
-                className="btn btn-secondary btn-sm"
-                disabled={week.end >= todayISO()}
-                onClick={() => setWeekAnchor(addDays(week.end, 1))}
-              >
-                →
-              </button>
-            </span>
-          }
-        >
-          <div className="nu-week-bars">
-            {week.days.map((d) => {
-              const max = Math.max(d.target ?? 0, d.calories, 1);
-              const pct = Math.round((d.calories / max) * 100);
-              const over = d.delta !== null && d.delta > 0;
-              return (
-                <div key={d.date} className="nu-week-day" title={`${fmtDayShort(d.date)}: ${fmtNum(d.calories)} kcal${d.target ? ` / ${fmtNum(d.target)}` : ''}`}>
-                  <div className="nu-week-track">
-                    <div
-                      className={`nu-week-fill ${!d.logged ? 'empty' : over ? 'over' : 'under'}`}
-                      style={{ height: `${d.logged ? Math.max(6, pct) : 0}%` }}
-                    />
-                    {d.target !== null && <div className="nu-week-goal" style={{ bottom: `${Math.min(100, (d.target / max) * 100)}%` }} />}
-                  </div>
-                  <span className="nu-week-label">{fmtDayShort(d.date).slice(0, 2)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="cf-table-wrap">
-            <table className="cf-table">
-              <tbody>
-                <tr>
-                  <td>Days logged</td>
-                  <td>{week.loggedDays}/7</td>
-                </tr>
-                <tr>
-                  <td>Average intake</td>
-                  <td>{week.avgIntake !== null ? `${fmtNum(week.avgIntake)} kcal · P${fmtNum(week.avgProtein ?? 0)}g` : '—'}</td>
-                </tr>
-                <tr>
-                  <td>Days at/under target</td>
-                  <td>{week.loggedDays ? `${week.onTargetDays}/${week.loggedDays}` : '—'}</td>
-                </tr>
-                <tr>
-                  <td>Weight trend this week</td>
-                  <td>
-                    {week.weightDeltaKg !== null
-                      ? `${week.weightDeltaKg >= 0 ? '+' : ''}${fmtNum(week.weightDeltaKg, 2)}kg`
-                      : '—'}
-                  </td>
-                </tr>
-                <tr className="cf-total">
-                  <td>Average daily balance</td>
-                  <td>
-                    {week.avgDailyBalance !== null
-                      ? `${week.avgDailyBalance >= 0 ? '+' : ''}${fmtNum(week.avgDailyBalance)} kcal (${
-                          week.projectedKgPerWeek! >= 0 ? '+' : ''
-                        }${fmtNum(week.projectedKgPerWeek!, 2)}kg/wk)`
-                      : 'needs maintenance estimate'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </Card>
 
         <Card title="Log from a photo">
@@ -457,7 +376,10 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           />
           {!estimate && !photoBusy && (
             <>
-              <button className="btn btn-primary nu-photo-btn" onClick={() => fileRef.current?.click()}>
+              <button
+                className="btn btn-primary nu-photo-btn"
+                onClick={() => fileRef.current?.click()}
+              >
                 📷 Snap your meal
               </button>
               <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
@@ -472,9 +394,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
             </div>
           )}
           {photoError && (
-            <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 8 }}>
-              {photoError}
-            </p>
+            <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 8 }}>{photoError}</p>
           )}
           {estimate && (
             <div className="nu-photo-review">
@@ -504,7 +424,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={estimate.calories || ''}
-                    onChange={(e) => setEstimate({ ...estimate, calories: Math.round(Number(e.target.value) || 0) })}
+                    onChange={(e) =>
+                      setEstimate({
+                        ...estimate,
+                        calories: Math.round(Number(e.target.value) || 0),
+                      })
+                    }
                   />
                 </div>
                 <div>
@@ -513,7 +438,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={estimate.protein_g || ''}
-                    onChange={(e) => setEstimate({ ...estimate, protein_g: Math.round(Number(e.target.value) || 0) })}
+                    onChange={(e) =>
+                      setEstimate({
+                        ...estimate,
+                        protein_g: Math.round(Number(e.target.value) || 0),
+                      })
+                    }
                   />
                 </div>
                 <div>
@@ -522,7 +452,9 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={estimate.carbs_g || ''}
-                    onChange={(e) => setEstimate({ ...estimate, carbs_g: Math.round(Number(e.target.value) || 0) })}
+                    onChange={(e) =>
+                      setEstimate({ ...estimate, carbs_g: Math.round(Number(e.target.value) || 0) })
+                    }
                   />
                 </div>
                 <div>
@@ -531,15 +463,35 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={estimate.fat_g || ''}
-                    onChange={(e) => setEstimate({ ...estimate, fat_g: Math.round(Number(e.target.value) || 0) })}
+                    onChange={(e) =>
+                      setEstimate({ ...estimate, fat_g: Math.round(Number(e.target.value) || 0) })
+                    }
                   />
                 </div>
               </div>
               <p style={{ fontSize: 12, color: 'var(--text2)', margin: '2px 0 10px' }}>
-                <Tag label={`${estimate.confidence} confidence`} tone={estimate.confidence === 'high' ? 'good' : estimate.confidence === 'low' ? 'warn' : 'info'} />{' '}
+                <Tag
+                  label={`${estimate.confidence} confidence`}
+                  tone={
+                    estimate.confidence === 'high'
+                      ? 'good'
+                      : estimate.confidence === 'low'
+                        ? 'warn'
+                        : 'info'
+                  }
+                />{' '}
                 {estimate.notes}
               </p>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '0 0 10px', cursor: 'pointer' }}>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 13,
+                  margin: '0 0 10px',
+                  cursor: 'pointer',
+                }}
+              >
                 <input
                   type="checkbox"
                   style={{ width: 'auto' }}
@@ -549,7 +501,11 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                 Save this as a quick-log food for next time
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary" onClick={logEstimate} disabled={!estimate.calories}>
+                <button
+                  className="btn btn-primary"
+                  onClick={logEstimate}
+                  disabled={!estimate.calories}
+                >
                   Add to {fmtDayShort(date)}
                 </button>
                 <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
@@ -567,7 +523,12 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           <div className="form-grid">
             <div style={{ gridColumn: 'span 2' }}>
               <label className="field">What</label>
-              <input type="text" value={name} placeholder="e.g. Chicken, rice & greens" onChange={(e) => setName(e.target.value)} />
+              <input
+                type="text"
+                value={name}
+                placeholder="e.g. Chicken, rice & greens"
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div>
               <label className="field">Meal</label>
@@ -581,30 +542,143 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
             </div>
             <div>
               <label className="field">Calories</label>
-              <input type="number" inputMode="numeric" value={cals} onChange={(e) => setCals(e.target.value)} />
+              <input
+                type="number"
+                inputMode="numeric"
+                value={cals}
+                onChange={(e) => setCals(e.target.value)}
+              />
             </div>
             <div>
               <label className="field">Protein (g)</label>
-              <input type="number" inputMode="decimal" value={p} onChange={(e) => setP(e.target.value)} />
+              <input
+                type="number"
+                inputMode="decimal"
+                value={p}
+                onChange={(e) => setP(e.target.value)}
+              />
             </div>
             <div>
               <label className="field">Carbs (g)</label>
-              <input type="number" inputMode="decimal" value={c} onChange={(e) => setC(e.target.value)} />
+              <input
+                type="number"
+                inputMode="decimal"
+                value={c}
+                onChange={(e) => setC(e.target.value)}
+              />
             </div>
             <div>
               <label className="field">Fat (g)</label>
-              <input type="number" inputMode="decimal" value={f} onChange={(e) => setF(e.target.value)} />
+              <input
+                type="number"
+                inputMode="decimal"
+                value={f}
+                onChange={(e) => setF(e.target.value)}
+              />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, fontSize: 13 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" style={{ width: 'auto' }} checked={saveAsMeal} onChange={(e) => setSaveAsMeal(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  style={{ width: 'auto' }}
+                  checked={saveAsMeal}
+                  onChange={(e) => setSaveAsMeal(e.target.checked)}
+                />
                 Save to foods
               </label>
             </div>
           </div>
-          <button className="btn btn-primary" onClick={quickAdd} disabled={!name.trim() || !Number(cals)}>
+          <button
+            className="btn btn-primary"
+            onClick={quickAdd}
+            disabled={!name.trim() || !Number(cals)}
+          >
             Add to {fmtDayShort(date)}
           </button>
+        </Card>
+
+        <Card
+          title="Saved foods"
+          actions={<Tag label={`${data.saved_meals.length} saved`} tone="info" />}
+        >
+          <p className="nu-saved-help">
+            Showing recent foods only. Search to find anything else in the full saved-food library.
+          </p>
+          <div className="nu-saved-search">
+            <input
+              type="search"
+              value={savedFoodQuery}
+              placeholder="Search saved foods…"
+              onChange={(e) => setSavedFoodQuery(e.target.value)}
+            />
+            {savedFoodQuery && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setSavedFoodQuery('')}>
+                Clear
+              </button>
+            )}
+          </div>
+          {data.saved_meals.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
+              No saved foods yet. Use <strong>Quick add</strong> with “Save to foods”, or save a
+              reviewed photo estimate.
+            </p>
+          )}
+          {data.saved_meals.length > 0 && savedFoodPicker.total === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
+              No saved foods match that search.
+            </p>
+          )}
+          {savedFoodPicker.visible.length > 0 && (
+            <div className="nu-saved-list">
+              {savedFoodPicker.visible.map((m) => {
+                const qty = savedFoodQty[m.id] ?? '1';
+                const scaled = scaleMacros(m, qty);
+                const portion = normalisePortion(qty);
+                return (
+                  <div key={m.id} className="nu-saved-row">
+                    <div className="nu-saved-main" title={m.notes || undefined}>
+                      <div className="nu-saved-title">{m.name}</div>
+                      <div className="nu-saved-meta">
+                        {MEAL_LABEL[m.meal]} · {scaled.calories} kcal · P{fmtNum(scaled.protein_g)}{' '}
+                        C{fmtNum(scaled.carbs_g)} F{fmtNum(scaled.fat_g)}
+                        {portion !== 1 ? ` · ×${portion}` : ''}
+                      </div>
+                    </div>
+                    <div className="nu-saved-actions">
+                      <input
+                        aria-label={`Quantity for ${m.name}`}
+                        type="number"
+                        inputMode="decimal"
+                        min="0.1"
+                        max="10"
+                        step="0.5"
+                        value={qty}
+                        onChange={(e) =>
+                          setSavedFoodQty((prev) => ({ ...prev, [m.id]: e.target.value }))
+                        }
+                      />
+                      <button className="btn btn-primary btn-sm" onClick={() => logSaved(m.id)}>
+                        Log
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        aria-label={`Delete saved food ${m.name}`}
+                        onClick={() => remove('saved_meals', m.id)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {savedFoodPicker.hasMore && (
+            <p className="nu-saved-help">
+              Showing {savedFoodPicker.visible.length} of {savedFoodPicker.total}. Search to narrow
+              the list.
+            </p>
+          )}
         </Card>
 
         <Card title="Logged">
@@ -613,8 +687,13 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               <div className="cf-card-title nu-meal-head" style={{ margin: '8px 0 2px' }}>
                 <span>{MEAL_LABEL[m]}</span>
                 <span className="nu-meal-total">
-                  {fmtNum(logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.calories), 0))} kcal · P
-                  {fmtNum(logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.protein_g), 0))}
+                  {fmtNum(
+                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.calories), 0)
+                  )}{' '}
+                  kcal · P
+                  {fmtNum(
+                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.protein_g), 0)
+                  )}
                 </span>
               </div>
               {logs
@@ -624,17 +703,160 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     <div className="pick-main">
                       <div className="pick-title">{l.name}</div>
                       <div className="pick-sub">
-                        {l.calories} kcal · P{fmtNum(Number(l.protein_g))} C{fmtNum(Number(l.carbs_g))} F{fmtNum(Number(l.fat_g))}
+                        {l.calories} kcal · P{fmtNum(Number(l.protein_g))} C
+                        {fmtNum(Number(l.carbs_g))} F{fmtNum(Number(l.fat_g))}
                       </div>
                     </div>
-                    <button className="btn btn-danger btn-sm" onClick={() => remove('nutrition_logs', l.id)}>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => remove('nutrition_logs', l.id)}
+                    >
                       ✕
                     </button>
                   </div>
                 ))}
             </div>
           ))}
-          {logs.length === 0 && <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nothing logged for this day.</p>}
+          {logs.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nothing logged for this day.</p>
+          )}
+        </Card>
+
+        <Card
+          title="Energy balance"
+          actions={
+            energy?.reliable ? (
+              <Tag label={`Maintenance ≈ ${fmtNum(energy.tdee)} kcal`} tone="info" />
+            ) : undefined
+          }
+        >
+          {energy?.reliable ? (
+            (() => {
+              const balance = totals.calories - energy.tdee;
+              const cutting = balance < 0;
+              return (
+                <>
+                  <p style={{ fontSize: 14, margin: '0 0 6px' }}>
+                    {date === todayISO() ? 'Today so far' : fmtDayShort(date)}:{' '}
+                    <strong style={{ color: cutting ? 'var(--green)' : 'var(--red)' }}>
+                      {cutting
+                        ? `${fmtNum(-balance)} kcal deficit`
+                        : `${fmtNum(balance)} kcal surplus`}
+                    </strong>{' '}
+                    vs your estimated maintenance.
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text2)', margin: 0 }}>
+                    Estimated from {energy.loggedDays} logged days and your weight trend over the
+                    last {energy.spanDays} days (avg intake {fmtNum(energy.avgIntake)} kcal,{' '}
+                    {energy.weightDeltaKg <= 0 ? '' : '+'}
+                    {fmtNum(energy.weightDeltaKg, 2)}kg trend). A steady 500 kcal daily deficit ≈
+                    −0.45kg/week.
+                  </p>
+                </>
+              );
+            })()
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
+              Log food most days and weigh in regularly and Cadence will infer your true maintenance
+              calories from intake vs weight trend — no formulas.{' '}
+              {energy
+                ? `So far: ${energy.loggedDays} logged days across ${energy.spanDays} days of weigh-ins.`
+                : 'No weigh-in trend yet — add weight on the Body screen (or via Sync).'}
+            </p>
+          )}
+        </Card>
+
+        <Card
+          title="This week"
+          actions={
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setWeekAnchor(addDays(week.start, -1))}
+              >
+                ←
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
+                {fmtDayShort(week.start)} – {fmtDayShort(week.end)}
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={week.end >= todayISO()}
+                onClick={() => setWeekAnchor(addDays(week.end, 1))}
+              >
+                →
+              </button>
+            </span>
+          }
+        >
+          <div className="nu-week-bars">
+            {week.days.map((d) => {
+              const max = Math.max(d.target ?? 0, d.calories, 1);
+              const pct = Math.round((d.calories / max) * 100);
+              const over = d.delta !== null && d.delta > 0;
+              return (
+                <div
+                  key={d.date}
+                  className="nu-week-day"
+                  title={`${fmtDayShort(d.date)}: ${fmtNum(d.calories)} kcal${d.target ? ` / ${fmtNum(d.target)}` : ''}`}
+                >
+                  <div className="nu-week-track">
+                    <div
+                      className={`nu-week-fill ${!d.logged ? 'empty' : over ? 'over' : 'under'}`}
+                      style={{ height: `${d.logged ? Math.max(6, pct) : 0}%` }}
+                    />
+                    {d.target !== null && (
+                      <div
+                        className="nu-week-goal"
+                        style={{ bottom: `${Math.min(100, (d.target / max) * 100)}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="nu-week-label">{fmtDayShort(d.date).slice(0, 2)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="cf-table-wrap">
+            <table className="cf-table">
+              <tbody>
+                <tr>
+                  <td>Days logged</td>
+                  <td>{week.loggedDays}/7</td>
+                </tr>
+                <tr>
+                  <td>Average intake</td>
+                  <td>
+                    {week.avgIntake !== null
+                      ? `${fmtNum(week.avgIntake)} kcal · P${fmtNum(week.avgProtein ?? 0)}g`
+                      : '—'}
+                  </td>
+                </tr>
+                <tr>
+                  <td>Days at/under target</td>
+                  <td>{week.loggedDays ? `${week.onTargetDays}/${week.loggedDays}` : '—'}</td>
+                </tr>
+                <tr>
+                  <td>Weight trend this week</td>
+                  <td>
+                    {week.weightDeltaKg !== null
+                      ? `${week.weightDeltaKg >= 0 ? '+' : ''}${fmtNum(week.weightDeltaKg, 2)}kg`
+                      : '—'}
+                  </td>
+                </tr>
+                <tr className="cf-total">
+                  <td>Average daily balance</td>
+                  <td>
+                    {week.avgDailyBalance !== null
+                      ? `${week.avgDailyBalance >= 0 ? '+' : ''}${fmtNum(week.avgDailyBalance)} kcal (${
+                          week.projectedKgPerWeek! >= 0 ? '+' : ''
+                        }${fmtNum(week.projectedKgPerWeek!, 2)}kg/wk)`
+                      : 'needs maintenance estimate'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </Card>
       </div>
     </>

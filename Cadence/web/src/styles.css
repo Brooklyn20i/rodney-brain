@@ -1778,6 +1778,24 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .nu-meal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .nu-meal-total { font-size: 11px; font-weight: 600; color: var(--text3); font-variant-numeric: tabular-nums; }
 
+/* ── Nutrition saved-food picker ── */
+.nu-saved-help { font-size: 12px; color: var(--text3); margin: 0 0 10px; line-height: 1.35; }
+.nu-saved-search { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.nu-saved-search input { min-width: 0; }
+.nu-saved-list { border-top: 1px solid var(--border); }
+.nu-saved-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.nu-saved-row:last-child { border-bottom: none; }
+.nu-saved-main { min-width: 0; }
+.nu-saved-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nu-saved-meta { margin-top: 2px; font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.nu-saved-actions { display: flex; gap: 6px; align-items: center; }
+.nu-saved-actions input { width: 58px; min-width: 58px; padding: 7px 8px; text-align: center; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .nu-saved-row { grid-template-columns: 1fr; gap: 7px; }
+  .nu-saved-actions { justify-content: flex-end; }
+  .nu-saved-actions input { width: 64px; }
+}
+
 /* ── Nutrition macro bars (Fitness) ── */
 .macro-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; }
 .macro-label { width: 64px; color: var(--text2); flex-shrink: 0; }
