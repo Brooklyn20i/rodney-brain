@@ -78,7 +78,7 @@ const DOMAIN_PATH: Record<Domain, string> = {
 };
 const DOMAIN_THEME_COLOR: Record<Domain, string> = {
   work: '#1A1F2E',
-  financial: '#1A5E3A',
+  financial: '#124A2C',
   fitness: '#0B0E0C',
 };
 // Home Screen identity per domain. Set dynamically (below) as well as statically
@@ -96,9 +96,9 @@ const DOMAIN_MANIFEST: Record<Domain, string> = {
   fitness: '/manifest-health.json',
 };
 const DOMAIN_ICON: Record<Domain, string> = {
-  work: '/icon-work-180.png?v=3',
-  financial: '/icon-financial-180.png?v=3',
-  fitness: '/icon-health-180.png?v=3',
+  work: '/icon-work-180.png?v=4',
+  financial: '/icon-financial-180.png?v=4',
+  fitness: '/icon-health-180.png?v=4',
 };
 
 function domainFromPath(): Domain {

@@ -38,10 +38,10 @@
    cascades to <body> too — no default-navy sliver behind the rounded #main.
    Work keeps the :root defaults (navy). */
 html[data-domain="financial"] {
-  /* Old-money hunter green + brass. Deep, but light enough to read as green
+  /* Old-money pine green + brass. Deep and rich, but still reads as green
      at Home Screen icon size (bottle green #0E3826 rendered near-black). */
-  --sidebar-bg: #1A5E3A;
-  --sidebar-active: #256B47;
+  --sidebar-bg: #124A2C;
+  --sidebar-active: #1E5A38;
   --sidebar-icon-active: #C7A24A;
   --accent: #1C6B45;
   --accent-lt: #2E8A5E;
