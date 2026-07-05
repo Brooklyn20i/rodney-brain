@@ -1864,3 +1864,43 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .form-grid { grid-template-columns: 1fr 1fr; }
   .wo-set-row input { font-size: 16px; } /* keep >=16px so iOS doesn't zoom */
 }
+
+/* ── Health dashboard (workout-first redesign) ── */
+.dash-hero { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 13px; }
+.dash-hero-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dash-hero-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); }
+.dash-hero-meta { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.dash-hero-title { font-size: 19px; font-weight: 700; color: var(--text); margin-top: 3px; letter-spacing: -0.3px; }
+.dash-hero-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.dash-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.dash-chip { font-size: 11px; color: var(--text); background: var(--surface2); border: 1px solid var(--border); padding: 4px 9px; border-radius: 10px; }
+.dash-chip-more { font-size: 11px; color: var(--text3); padding: 4px 2px; align-self: center; }
+.dash-hero-actions { display: flex; gap: 8px; }
+.dash-hero-btn { flex: 1; width: 100%; margin-top: 13px; background: var(--accent); color: #06110C; border: none; border-radius: 12px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }
+.dash-hero-btn:active { opacity: 0.85; }
+.dash-hero-btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+.dash-cal-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.dash-cal-num { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+.dash-cal-unit { font-size: 14px; color: var(--text3); }
+.dash-cal-left { text-align: right; }
+.dash-cal-left-num { font-size: 15px; font-weight: 700; color: var(--accent); }
+.dash-cal-left-num.over { color: var(--orange); }
+.dash-cal-left-lbl { font-size: 10px; color: var(--text3); }
+.dash-bar { height: 6px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); overflow: hidden; }
+.dash-bar.big { height: 9px; border-radius: 5px; margin-bottom: 14px; }
+.dash-bar-fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width 0.3s ease; }
+.dash-bar-fill.over { background: var(--orange); }
+.dash-bar-fill.m-c { background: var(--blue); }
+.dash-bar-fill.m-f { background: var(--orange); }
+.dash-macros { display: flex; flex-direction: column; gap: 10px; }
+.dash-macro-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--text); margin-bottom: 4px; }
+.dash-macro-val { color: var(--text2); }
+.dash-muted { font-size: 12px; color: var(--text2); margin: 4px 0 0; }
+.dash-log-btn { width: 100%; margin-top: 14px; border-radius: 12px; justify-content: center; }
+.dash-metric-unit { font-size: 12px; color: var(--text3); font-weight: 500; }
+.cf-metric-grid.dash-two { grid-template-columns: 1fr 1fr; }
+.dash-strip { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.dash-strip-cell { text-align: center; padding: 12px 2px; }
+.dash-strip-cell + .dash-strip-cell { border-left: 1px solid var(--border); }
+.dash-strip-num { font-size: 18px; font-weight: 700; color: var(--text); }
+.dash-strip-lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }

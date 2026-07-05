@@ -1,5 +1,5 @@
 import { useCadenceFitness } from '../lib/store';
-import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
+import { ScreenHeader, Card, Tag } from '../components/bits';
 import {
   cyclePosition,
   dayNutrition,
@@ -13,8 +13,9 @@ import {
 } from '../lib/fitnessCalc';
 import { addDays, fmtDayShort, fmtKg, fmtNum, todayISO } from '../lib/util';
 
-// The morning glance: recovery, weight trend, calories so far, today's
-// session -- then this week's training volume and any recent PRs.
+// The morning glance, reoriented around what actually gets used daily: today's
+// workout first, then calories + macros. Whoop recovery is intentionally not
+// here (no daily Whoop feed) — it lives on the Recovery screen.
 export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
   const { data } = useCadenceFitness();
   const today = todayISO();
@@ -27,13 +28,25 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
   const upNext = activeProgram ? nextProgramDay(days, data.workouts, activeProgram.id) : null;
   const trainedToday = data.workouts.some((w) => w.date === today && w.status === 'completed');
 
-  const recovery = data.recovery_metrics.find((r) => r.date === today) || null;
+  const upNextExercises = upNext
+    ? data.program_exercises
+        .filter((pe) => pe.program_day_id === upNext.id)
+        .sort((a, b) => a.ex_order - b.ex_order)
+    : [];
+  const upNextSets = upNextExercises.reduce((s, pe) => s + pe.target_sets, 0);
+  const estMin = upNextSets > 0 ? Math.round(upNextSets * 3.5) : null;
+  const exName = (id: string) => data.exercises.find((e) => e.id === id)?.name || '?';
+
   const trend = weightTrend(data.body_metrics);
   const latestWeight = trend[trend.length - 1];
   const delta7 = trendDelta(trend, 7);
 
   const totals = dayNutrition(data.nutrition_logs, today);
   const target = targetFor(data.nutrition_targets, today);
+  const calPct = target && target.calories > 0 ? Math.min(100, (totals.calories / target.calories) * 100) : 0;
+  const calOver = target ? totals.calories > target.calories : false;
+  const calLeft = target ? target.calories - totals.calories : null;
+  const macroPct = (val: number, tgt: number) => (tgt > 0 ? Math.min(100, (val / tgt) * 100) : 0);
 
   const weekWorkouts = data.workouts.filter((w) => w.status === 'completed' && w.date >= week.start && w.date <= week.end);
   const weekMuscle = weeklySetsByMuscle(data.workout_sets, data.workouts, data.exercises, week.start, week.end);
@@ -43,149 +56,134 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
 
   const prs = recentPRs(data.workout_sets, data.workouts, addDays(today, -14));
   const unread = data.agent_messages.filter((m) => m.sender_type !== 'user' && m.status === 'unread');
-  const exName = (id: string) => data.exercises.find((e) => e.id === id)?.name || '?';
-
-  const recoveryTone: 'good' | 'bad' | 'neutral' =
-    recovery?.recovery_pct == null ? 'neutral' : recovery.recovery_pct >= 67 ? 'good' : recovery.recovery_pct >= 34 ? 'neutral' : 'bad';
 
   return (
     <>
-      <ScreenHeader title="Dashboard" subtitle={fmtDayShort(today)} onMenu={onMenu}>
-        {activeProgram && pos && <Tag label={`${activeProgram.name} · Cycle ${pos.cycle}, week ${pos.week}/${activeProgram.weeks}`} tone="info" />}
+      <ScreenHeader title="Today" subtitle={fmtDayShort(today)} onMenu={onMenu}>
+        {activeProgram && pos && <Tag label={`${activeProgram.name} · wk ${pos.week}/${activeProgram.weeks}`} tone="info" />}
       </ScreenHeader>
       <div className="screen-content">
         {unread.length > 0 && (
           <div className="cf-callout" style={{ cursor: 'pointer' }} onClick={() => onNavigate('kobe')}>
-            ⚡ <strong>{unread.length}</strong> unread from Kobe — “{unread[unread.length - 1].body.slice(0, 90)}
-            {unread[unread.length - 1].body.length > 90 ? '…' : ''}”
+            ⚡ <strong>{unread.length}</strong> unread from Kobe — “{unread[unread.length - 1].body.slice(0, 80)}
+            {unread[unread.length - 1].body.length > 80 ? '…' : ''}”
           </div>
         )}
 
-        <div className="cf-metric-grid">
-          <Metric
-            label="Whoop recovery"
-            value={recovery?.recovery_pct != null ? `${recovery.recovery_pct}%` : '—'}
-            delta={recovery?.sleep_hours != null ? `${fmtNum(Number(recovery.sleep_hours), 1)}h sleep` : 'not logged'}
-            tone={recoveryTone}
-          />
-          <Metric
-            label="Weight trend"
-            value={latestWeight ? fmtKg(latestWeight.avg) : '—'}
-            delta={delta7 !== null ? `${delta7 >= 0 ? '+' : ''}${fmtNum(delta7, 2)}kg / wk` : undefined}
-            tone={delta7 === null ? 'neutral' : delta7 <= 0 ? 'good' : 'bad'}
-          />
-          <Metric
-            label="Calories today"
-            value={fmtNum(totals.calories)}
-            delta={target ? `${fmtNum(Math.max(0, target.calories - totals.calories))} left · P${fmtNum(totals.protein_g)}g` : 'no target'}
-            tone={target && totals.calories > target.calories ? 'bad' : 'neutral'}
-          />
-          <Metric label="Sessions this week" value={`${weekWorkouts.length}`} delta={`${weekSets} hard sets`} />
+        {/* Hero — today's workout is the primary daily action */}
+        <div className="dash-hero">
+          {inProgress ? (
+            <>
+              <div className="dash-hero-eyebrow">In progress</div>
+              <div className="dash-hero-title">{inProgress.name}</div>
+              <button className="dash-hero-btn" onClick={() => onNavigate('workout')}>▶ Resume workout</button>
+            </>
+          ) : trainedToday ? (
+            <>
+              <div className="dash-hero-eyebrow">Done for today ✓</div>
+              <div className="dash-hero-title">Session complete</div>
+              <button className="dash-hero-btn ghost" onClick={() => onNavigate('history')}>Review in History</button>
+            </>
+          ) : upNext ? (
+            <>
+              <div className="dash-hero-head">
+                <span className="dash-hero-eyebrow">Next workout</span>
+                <span className="dash-hero-meta">
+                  {upNextExercises.length > 0 ? `${upNextExercises.length} exercises` : 'ready'}
+                  {estMin ? ` · ~${estMin} min` : ''}
+                </span>
+              </div>
+              <div className="dash-hero-title">{upNext.name}</div>
+              {upNext.focus && <div className="dash-hero-sub">{upNext.focus}</div>}
+              {upNextExercises.length > 0 && (
+                <div className="dash-chips">
+                  {upNextExercises.slice(0, 3).map((pe) => (
+                    <span className="dash-chip" key={pe.id}>
+                      {exName(pe.exercise_id)} {pe.target_sets}×{pe.rep_min}
+                    </span>
+                  ))}
+                  {upNextExercises.length > 3 && <span className="dash-chip-more">+{upNextExercises.length - 3}</span>}
+                </div>
+              )}
+              <button className="dash-hero-btn" onClick={() => onNavigate('workout')}>▶ Start workout</button>
+            </>
+          ) : (
+            <>
+              <div className="dash-hero-eyebrow">No active program</div>
+              <div className="dash-hero-sub" style={{ marginBottom: 4 }}>Build a program, or start an ad-hoc session.</div>
+              <div className="dash-hero-actions">
+                <button className="dash-hero-btn" onClick={() => onNavigate('workout')}>▶ Start workout</button>
+                <button className="dash-hero-btn ghost" onClick={() => onNavigate('programs')}>Programs</button>
+              </div>
+            </>
+          )}
         </div>
 
-        {recovery?.active_energy_kcal != null && (
-          <Card title="Energy balance today">
-            <div className="cf-table-wrap">
-              <table className="cf-table">
-                <tbody>
-                  <tr>
-                    <td>Calories in (food)</td>
-                    <td>{fmtNum(totals.calories)}</td>
-                  </tr>
-                  <tr>
-                    <td>Calories out (active energy)</td>
-                    <td>{fmtNum(recovery.active_energy_kcal)}</td>
-                  </tr>
-                  <tr className="cf-total">
-                    <td>Food − active burn</td>
-                    <td>
-                      {totals.calories - recovery.active_energy_kcal >= 0 ? '+' : ''}
-                      {fmtNum(totals.calories - recovery.active_energy_kcal)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+        {/* Calories + macros — the second daily focus */}
+        <div className="cf-card">
+          <div className="dash-cal-top">
+            <div>
+              <span className="dash-cal-num">{fmtNum(totals.calories)}</span>
+              <span className="dash-cal-unit">{target ? ` / ${fmtNum(target.calories)} kcal` : ' kcal'}</span>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-              Active energy synced from Apple Health / Whoop. This is food minus active burn only — it
-              doesn't include your resting metabolism, so it isn't your full daily deficit.
-            </p>
-          </Card>
-        )}
-
-        <Card title="Today's training">
-          {inProgress ? (
-            <div className="cf-callout">
-              Session <strong>{inProgress.name}</strong> is in progress.
-              <div style={{ marginTop: 10 }}>
-                <button className="btn btn-primary" onClick={() => onNavigate('workout')}>
-                  ▶ Resume session
-                </button>
+            {calLeft !== null && (
+              <div className="dash-cal-left">
+                <div className={`dash-cal-left-num ${calOver ? 'over' : ''}`}>
+                  {calOver ? `+${fmtNum(-calLeft)}` : fmtNum(calLeft)}
+                </div>
+                <div className="dash-cal-left-lbl">{calOver ? 'over' : 'left'}</div>
               </div>
+            )}
+          </div>
+          {target && (
+            <div className="dash-bar big">
+              <div className={`dash-bar-fill ${calOver ? 'over' : ''}`} style={{ width: `${calPct}%` }} />
             </div>
-          ) : trainedToday ? (
-            <p style={{ fontSize: 13 }}>
-              ✅ Done for today.{' '}
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('history')}>
-                Review it in History
-              </button>
-            </p>
-          ) : upNext ? (
-            <div className="cf-callout">
-              Up next: <strong>{upNext.name}</strong>
-              {upNext.focus ? ` — ${upNext.focus}` : ''}
-              <div style={{ marginTop: 10 }}>
-                <button className="btn btn-primary" onClick={() => onNavigate('workout')}>
-                  ▶ Go train
-                </button>
-              </div>
+          )}
+          {target ? (
+            <div className="dash-macros">
+              <MacroBar label="Protein" val={totals.protein_g} tgt={target.protein_g} cls="p" pct={macroPct(totals.protein_g, target.protein_g)} />
+              <MacroBar label="Carbs" val={totals.carbs_g} tgt={target.carbs_g} cls="c" pct={macroPct(totals.carbs_g, target.carbs_g)} />
+              <MacroBar label="Fat" val={totals.fat_g} tgt={target.fat_g} cls="f" pct={macroPct(totals.fat_g, target.fat_g)} />
             </div>
           ) : (
-            <p style={{ fontSize: 13, color: 'var(--text2)' }}>
-              No active program.{' '}
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('programs')}>
-                Build one
-              </button>{' '}
-              or{' '}
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('workout')}>
-                start an ad-hoc session
-              </button>
-            </p>
+            <p className="dash-muted">No calorie target set · {fmtNum(totals.protein_g)}g protein logged today.</p>
           )}
-        </Card>
+          <button className="btn btn-secondary dash-log-btn" onClick={() => onNavigate('nutrition')}>+ Log food</button>
+        </div>
 
-        <Card title="This week">
-          <div className="cf-table-wrap">
-            <table className="cf-table">
-              <tbody>
-                <tr>
-                  <td>Lifting sessions</td>
-                  <td>{weekWorkouts.length}</td>
-                </tr>
-                <tr>
-                  <td>Hard sets</td>
-                  <td>{weekSets}</td>
-                </tr>
-                <tr>
-                  <td>Cardio</td>
-                  <td>
-                    {weekCardio.length} ({fmtNum(weekCardio.reduce((s, c) => s + Number(c.duration_min), 0))} min)
-                  </td>
-                </tr>
-                <tr>
-                  <td>Sauna</td>
-                  <td>
-                    {weekSauna.length} ({fmtNum(weekSauna.reduce((s, x) => s + Number(x.duration_min), 0))} min)
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        {/* Weight trend + week sessions */}
+        <div className="cf-metric-grid dash-two">
+          <div className="cf-metric">
+            <div className="cf-metric-label">Weight trend</div>
+            <div className="cf-metric-value">{latestWeight ? fmtKg(latestWeight.avg) : '—'}</div>
+            {delta7 !== null && (
+              <div className={`cf-metric-delta ${delta7 <= 0 ? 'cf-tone-good' : 'cf-tone-bad'}`}>
+                {delta7 >= 0 ? '+' : ''}{fmtNum(delta7, 2)}kg / wk
+              </div>
+            )}
           </div>
-        </Card>
+          <div className="cf-metric">
+            <div className="cf-metric-label">This week</div>
+            <div className="cf-metric-value">
+              {weekWorkouts.length}
+              <span className="dash-metric-unit"> sessions</span>
+            </div>
+            <div className="cf-metric-delta cf-tone-neutral">{weekSets} hard sets</div>
+          </div>
+        </div>
+
+        {/* Week at a glance */}
+        <div className="dash-strip">
+          <div className="dash-strip-cell"><div className="dash-strip-num">{weekWorkouts.length}</div><div className="dash-strip-lbl">Lifts</div></div>
+          <div className="dash-strip-cell"><div className="dash-strip-num">{weekSets}</div><div className="dash-strip-lbl">Sets</div></div>
+          <div className="dash-strip-cell"><div className="dash-strip-num">{weekCardio.length}</div><div className="dash-strip-lbl">Cardio</div></div>
+          <div className="dash-strip-cell"><div className="dash-strip-num">{weekSauna.length}</div><div className="dash-strip-lbl">Sauna</div></div>
+        </div>
 
         {prs.length > 0 && (
-          <Card title="PRs in the last 14 days">
-            {prs.slice(0, 6).map((pr) => (
+          <Card title="Recent PRs">
+            {prs.slice(0, 5).map((pr) => (
               <div key={pr.exercise_id + pr.date} className="pick-row">
                 <div className="pick-main">
                   <div className="pick-title">{exName(pr.exercise_id)}</div>
@@ -200,5 +198,17 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
         )}
       </div>
     </>
+  );
+}
+
+function MacroBar({ label, val, tgt, pct, cls }: { label: string; val: number; tgt: number; pct: number; cls: string }) {
+  return (
+    <div className="dash-macro">
+      <div className="dash-macro-head">
+        <span>{label}</span>
+        <span className="dash-macro-val">{fmtNum(val)} / {fmtNum(tgt)} g</span>
+      </div>
+      <div className="dash-bar"><div className={`dash-bar-fill m-${cls}`} style={{ width: `${pct}%` }} /></div>
+    </div>
   );
 }
