@@ -201,18 +201,21 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
       if (cancelled) return;
       if ((wm as any)?.workspaces) { setWorkspace((wm as any).workspaces as Workspace); return; }
-      // No workspace — first login. Create one, named after the user if we have it.
+      // No workspace — first login. Provision one server-side: an atomic,
+      // idempotent SECURITY DEFINER function creates the workspace + admin
+      // membership (a direct client insert is blocked by a column grant on
+      // workspaces.created_by). The new user gets their own isolated space.
       const name = (session.user.user_metadata?.name as string | undefined)?.trim();
-      const { data: ws, error: wsErr } = await supabase
-        .from('workspaces')
-        .insert({ name: name ? `${name}'s Cadence` : 'My Cadence', created_by: session.user.id })
-        .select()
-        .single();
-      if (wsErr || !ws || cancelled) return; // pre-migration or RLS: owner_id still protects data
-      await supabase.from('workspace_members').insert({
-        workspace_id: ws.id, user_id: session.user.id, role: 'admin', email: session.user.email ?? '',
+      const { data: wid, error: rpcErr } = await supabase.rpc('provision_workspace', {
+        ws_name: name ? `${name}'s Cadence` : 'My Cadence',
       });
-      if (!cancelled) setWorkspace(ws as Workspace);
+      if (rpcErr || !wid || cancelled) return; // pre-migration: owner_id still protects data
+      const { data: ws } = await supabase
+        .from('workspaces')
+        .select('id, name, created_by, plan, created_at, updated_at, deleted_at')
+        .eq('id', wid as string)
+        .maybeSingle();
+      if (ws && !cancelled) setWorkspace(ws as Workspace);
     })();
     return () => { cancelled = true; };
   }, [session, needsPasswordSet]);
