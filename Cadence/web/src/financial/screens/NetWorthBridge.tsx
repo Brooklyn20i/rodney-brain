@@ -11,7 +11,7 @@ export function NetWorthBridge({ onMenu }: { onMenu: () => void }) {
     <>
       <ScreenHeader
         title="Net Worth Bridge"
-        subtitle="What Rodney controlled this month vs. what markets did."
+        subtitle="What you controlled this month vs. what markets did."
         onMenu={onMenu}
       />
       <div className="screen-content">

@@ -121,7 +121,7 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
           </p>
         </Card>
 
-        <Card title="Needs Rodney">
+        <Card title="Needs you">
           {openDecisions.length === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nothing open right now.</p>
           ) : (

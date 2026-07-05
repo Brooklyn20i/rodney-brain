@@ -153,7 +153,7 @@ export function MonthlyAssessmentDocument({ sections }: { sections: MonthlyAsses
         <Text style={styles.h1}>Investment Deployment</Text>
         <Table headers={['Investment buys captured', 'Amount']} rows={sections.investments.map((r) => [r.label, r.value])} />
 
-        <Text style={styles.h1}>Needs Rodney</Text>
+        <Text style={styles.h1}>Needs you</Text>
         {sections.needsRodney.length === 0 ? (
           <Text style={styles.cell}>Nothing open this month.</Text>
         ) : (

@@ -19,7 +19,7 @@ export function Kobe({ onMenu }: { onMenu: () => void }) {
     if (!draft.trim()) return;
     await insert('agent_messages', {
       sender_type: 'user',
-      sender_label: 'Rodney',
+      sender_label: 'You',
       body: draft.trim(),
       status: 'processed',
       linked_decision_id: null,

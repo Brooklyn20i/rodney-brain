@@ -39,7 +39,7 @@ function generatePlainText(data: MeetingData, title: string, person: Person, cre
   if (tab !== 'agenda' && data.actions.length) {
     lines.push('ACTION ITEMS', '');
     data.actions.forEach((a) => {
-      const owner = a.owner === 'me' ? 'Rodney' : firstName;
+      const owner = a.owner === 'me' ? 'You' : firstName;
       const due = a.due ? ` — Due ${fmtDM(a.due)}` : '';
       lines.push(`${a.done ? '✓' : '☐'} ${a.title}`);
       lines.push(`   ${owner}${due}`);
@@ -91,7 +91,7 @@ function generateHtml(data: MeetingData, title: string, person: Person, createdA
     if (tab === 'agenda' || !data.actions.length) return '';
     const rows = data.actions.map((a) => {
       const isMe = a.owner === 'me';
-      const ownerName = isMe ? 'Rodney' : firstName;
+      const ownerName = isMe ? 'You' : firstName;
       const ownerColor = isMe ? '#6B3FA0' : '#1A7F37';
       const ownerBg = isMe ? '#F3EEFA' : '#EDFAF1';
       const borderColor = isMe ? '#1B5E9E' : '#217346';
@@ -157,7 +157,7 @@ function generateOneNoteHtml(data: MeetingData, person: Person, createdAt: strin
     parts.push(`<p style="${f}font-size:13px;font-weight:700;margin:4px 0;"><b>Actions</b></p>`);
     parts.push(`<ul style="${f}font-size:13px;margin:0;padding-left:18px;">`);
     data.actions.forEach((a) => {
-      const owner = a.owner === 'me' ? 'Rodney' : firstName;
+      const owner = a.owner === 'me' ? 'You' : firstName;
       const due = a.due ? ` (Due ${fmtDM(a.due)})` : '';
       parts.push(`<li>${a.done ? '✓' : '☐'} <b>${escapeHtml(owner)}</b> — ${escapeHtml(a.title)}${due}</li>`);
     });
@@ -194,7 +194,7 @@ function generateOneNotePlain(data: MeetingData, person: Person, createdAt: stri
   if (data.actions.length) {
     lines.push('', 'Actions');
     data.actions.forEach((a) => {
-      const owner = a.owner === 'me' ? 'Rodney' : firstName;
+      const owner = a.owner === 'me' ? 'You' : firstName;
       const due = a.due ? ` (Due ${fmtDM(a.due)})` : '';
       lines.push(`${a.done ? '✓' : '☐'} ${owner} — ${a.title}${due}`);
     });

@@ -59,7 +59,7 @@ export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
   ]},
   { section: 'Govern', items: [
     { id: 'financial:evidence', label: 'Evidence Register', icon: '☑' },
-    { id: 'financial:decisions', label: 'Needs Rodney', icon: '!' },
+    { id: 'financial:decisions', label: 'Needs you', icon: '!' },
     { id: 'financial:kobe', label: 'Kobe', icon: '⚡' },
   ]},
 ];

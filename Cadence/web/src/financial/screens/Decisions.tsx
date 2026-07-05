@@ -38,7 +38,7 @@ export function Decisions({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Needs Rodney" subtitle="Decisions, missing approvals and evidence gates." onMenu={onMenu}>
+      <ScreenHeader title="Needs you" subtitle="Decisions, missing approvals and evidence gates." onMenu={onMenu}>
         <button className="btn btn-primary btn-sm" onClick={() => setShowForm((s) => !s)}>
           {showForm ? 'Cancel' : '+ New decision'}
         </button>
@@ -71,7 +71,7 @@ export function Decisions({ onMenu }: { onMenu: () => void }) {
         )}
 
         {sorted.length === 0 ? (
-          <Card>Nothing needs Rodney right now.</Card>
+          <Card>Nothing needs you right now.</Card>
         ) : (
           sorted.map((d) => (
             <Card key={d.id}>
