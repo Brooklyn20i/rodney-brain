@@ -108,6 +108,16 @@ section { padding: 84px 0; }
 .tour-phones .phone { width: min(44%, 260px); }
 .tour-phones .phone:nth-child(2) { margin-top: 40px; }
 
+/* Kobe identity */
+.kobe-avatar { border-radius: 50%; display: block; flex: 0 0 auto; box-shadow: 0 0 0 3px rgba(31,227,154,0.25); }
+.kobe-card { display: inline-flex; align-items: center; gap: 18px; text-align: left; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 18px 26px 18px 18px; margin: 0 auto 26px; }
+.kobe-card .k-name { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.3px; line-height: 1.1; }
+.kobe-card .k-role { font-size: 13px; font-weight: 600; color: #E8C84A; margin-top: 2px; }
+.kobe-card .k-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 7px; }
+.kobe-card .k-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--aqua); }
+.kobe-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+.kobe-chips span { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 100px; padding: 6px 14px; }
+
 /* Kobe tools grid */
 .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 @media (max-width: 860px) { .tools { grid-template-columns: 1fr; } }
