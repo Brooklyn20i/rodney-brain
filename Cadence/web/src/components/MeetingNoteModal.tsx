@@ -9,7 +9,7 @@ import { SharePanel } from './SharePanel';
 import { useMeetingDates } from '../lib/meetings';
 import { parseMeeting, serializeMeeting, uid } from '../lib/meetingData';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
-import { buildTaskFromAction } from '../lib/tasks';
+import { buildTaskFromAction, isLinkedToPerson } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 import { sanitizeHtml } from '../lib/sanitize';
 import { PrepBriefPanel } from './PrepBriefPanel';
@@ -454,7 +454,11 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
       { agenda: agendaRef.current, actions: actionsRef.current, notes: notesRef.current },
       rawRef.current,
     );
-    update('notes', noteIdRef.current, { body } as Partial<Note>);
+    // Fire-and-forget (runs on unmount, where we can't await): catch the promise
+    // so a failed final save can't raise an unhandled rejection. Real failures
+    // still surface via the store's sync-error banner, and network drops are
+    // queued for offline replay — so the edit isn't silently lost.
+    void update('notes', noteIdRef.current, { body } as Partial<Note>).catch(() => {});
   }, [update]);
 
   const scheduleSave = useCallback(() => {
@@ -520,12 +524,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   // Import from Topics — includes tasks linked via related_entities so multi-person
   // tasks appear in both people's meeting note import lists.
-  const openTopics = data.work_items.filter((w) =>
-    !w.done && (
-      w.person_id === person.id ||
-      (w.related_entities || []).some((re) => re.type === 'person' && re.id === person.id)
-    )
-  );
+  const openTopics = data.work_items.filter((w) => !w.done && isLinkedToPerson(w, person.id));
   // Track items already pulled into the agenda — by source ID (preferred) or title fallback.
   const importedSourceIds = new Set(agenda.map((a) => a.source_item_id).filter(Boolean) as string[]);
   const alreadyInAgenda = new Set(agenda.map((a) => a.title.toLowerCase()));

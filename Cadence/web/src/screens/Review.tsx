@@ -7,10 +7,17 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
   const { data, insert, update } = useCadence();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const reviewNoteRef = useRef<string | null>(null);
+  // Holds the in-flight create so two saves that fire before the first insert
+  // resolves share one note instead of each creating a duplicate __review__.
+  const creatingRef = useRef<Promise<string> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const reviewNote = data.notes.find((n) => n.title === '__review__');
+    // Deterministically pick the oldest live note if duplicates already exist,
+    // so the checklist can't split between reloads.
+    const reviewNote = data.notes
+      .filter((n) => n.title === '__review__' && !n.deleted_at)
+      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))[0];
     if (reviewNote) {
       reviewNoteRef.current = reviewNote.id;
       try {
@@ -20,31 +27,42 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Persist the checklist to the single __review__ system note. The first save
+  // creates the note behind an in-flight guard; any save that races it waits on
+  // the same create and then writes its own latest state (last write wins) —
+  // never a second note.
+  const persist = async (next: Record<string, boolean>) => {
+    const body = JSON.stringify(next);
+    if (reviewNoteRef.current) {
+      await update('notes', reviewNoteRef.current, { body } as any);
+      return;
+    }
+    if (!creatingRef.current) {
+      creatingRef.current = insert('notes', { title: '__review__', body, folder: '' } as any)
+        .then((n) => { reviewNoteRef.current = n.id; return n.id; })
+        .catch((e) => { creatingRef.current = null; throw e; }); // let a transient failure retry
+    }
+    const id = await creatingRef.current;
+    await update('notes', id, { body } as any);
+  };
+
   const toggle = (k: string) => {
     setChecked((c) => {
       const next = { ...c, [k]: !c[k] };
-      // Debounce-save to the __review__ system note
+      // Debounce-save to the __review__ system note.
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(async () => {
-        try {
-          if (reviewNoteRef.current) {
-            await update('notes', reviewNoteRef.current, { body: JSON.stringify(next) } as any);
-          } else {
-            const n = await insert('notes', { title: '__review__', body: JSON.stringify(next), folder: '' } as any);
-            reviewNoteRef.current = n.id;
-          }
-        } catch { /* non-critical */ }
-      }, 1000);
+      saveTimerRef.current = setTimeout(() => { persist(next).catch(() => {}); }, 1000);
       return next;
     });
   };
 
   const counts = useMemo(() => {
-    const open = data.work_items.filter((w) => !w.done);
+    // Exclude soft-deleted rows so counts match WeeklyReview and don't inflate.
+    const open = data.work_items.filter((w) => !w.done && !w.deleted_at);
     return {
       inbox: open.filter((w) => w.inboxed).length,
       overdue: open.filter((w) => isOverdue(w.due_date)).length,
-      decisions: data.decisions.filter((d) => d.status === 'pending').length + open.filter((w) => w.type === 'decision').length,
+      decisions: data.decisions.filter((d) => d.status === 'pending' && !d.deleted_at).length + open.filter((w) => w.type === 'decision').length,
       waiting: open.filter((w) => w.type === 'waitingFor').length,
     };
   }, [data]);

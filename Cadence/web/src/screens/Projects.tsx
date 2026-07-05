@@ -12,6 +12,7 @@ import {
 } from '../lib/strategy';
 import type { StrategyContent, WinState } from '../lib/strategy';
 import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason, getHealthEvidence } from '../lib/selectors';
+import { isLinkedToProject } from '../lib/tasks';
 import { ProjectGantt, PortfolioTimeline } from '../components/Gantt';
 
 const WIN_STATE_TITLE = '__win_state__';
@@ -204,7 +205,7 @@ const HEALTH_LABEL: Record<Health, string> = { green: 'On track', amber: 'At ris
 function ProjectCard({ project, onClick, strategy }: { project: Project; onClick: () => void; strategy: StrategyContent }) {
   const { data } = useCadence();
   const topActions = useMemo(() => getProjectTopActions(project.id, data.work_items), [data.work_items, project.id]);
-  const totalOpen = useMemo(() => data.work_items.filter((w) => w.project_id === project.id && !w.done).length, [data.work_items, project.id]);
+  const totalOpen = useMemo(() => data.work_items.filter((w) => isLinkedToProject(w, project.id) && !w.done).length, [data.work_items, project.id]);
   const healthReason = useMemo(() => inferHealthReason(project, data.project_updates, data.work_items), [project, data.project_updates, data.work_items]);
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
 
@@ -341,8 +342,7 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
   const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
   const phases = useMemo(() => data.project_phases.filter((p) => p.project_id === project.id).sort((a, b) => a.sort - b.sort), [data.project_phases, project.id]);
   const items = useMemo(() => data.work_items.filter((w) =>
-    (w.project_id === project.id || (w.related_entities || []).some((re) => re.type === 'project' && re.id === project.id)) &&
-    !w.done
+    isLinkedToProject(w, project.id) && !w.done
   ), [data.work_items, project.id]);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
@@ -604,7 +604,7 @@ function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void
   const raid = useMemo(() => data.raid_items.filter((r) => r.project_id === project.id), [data.raid_items, project.id]);
   const stake = useMemo(() => data.stakeholders.filter((s) => s.project_id === project.id), [data.stakeholders, project.id]);
   const links = useMemo(() => data.links.filter((l) => l.parent_type === 'project' && l.parent_id === project.id), [data.links, project.id]);
-  const closed = useMemo(() => data.work_items.filter((w) => w.project_id === project.id && w.done), [data.work_items, project.id]);
+  const closed = useMemo(() => data.work_items.filter((w) => isLinkedToProject(w, project.id) && w.done), [data.work_items, project.id]);
 
   return (
     <div>

@@ -3,7 +3,7 @@
 
 import type { WorkItem, Project, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
-import { isUserTask } from './tasks';
+import { isUserTask, isLinkedToProject } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and
@@ -263,7 +263,7 @@ const PRI_SCORE: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 export function getProjectTopActions(projectId: string, items: WorkItem[], limit = 3): WorkItem[] {
   return items
-    .filter((w) => !w.done && w.project_id === projectId)
+    .filter((w) => !w.done && isLinkedToProject(w, projectId))
     .sort((a, b) => {
       const dp = (PRI_SCORE[a.priority] ?? 1) - (PRI_SCORE[b.priority] ?? 1);
       if (dp !== 0) return dp;
@@ -297,7 +297,7 @@ export function inferHealthReason(
     return updates[0].text.slice(0, 55) + (updates[0].text.length > 55 ? '…' : '');
   }
 
-  const open = items.filter((w) => w.project_id === project.id && !w.done);
+  const open = items.filter((w) => isLinkedToProject(w, project.id) && !w.done);
   const overdue = open.filter((w) => isOverdue(w.due_date));
   if (overdue.length) return `${overdue.length} overdue action${overdue.length > 1 ? 's' : ''}`;
   if (open.filter((w) => w.priority === 'high').length) return 'High-priority actions open';
@@ -324,7 +324,7 @@ export function getHealthEvidence(
   const latest = updates
     .filter((u) => u.project_id === project.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-  const open = items.filter((w) => w.project_id === project.id && !w.done);
+  const open = items.filter((w) => isLinkedToProject(w, project.id) && !w.done);
   return {
     latestUpdate: latest?.text?.trim() || null,
     openTotal: open.length,

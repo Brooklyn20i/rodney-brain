@@ -93,17 +93,19 @@ describe('Board workflow', () => {
     });
   });
 
-  it('projects mode moves by project_id only', () => {
+  it('projects mode reassigns project_id and reconciles related_entities', () => {
     setStore({ data: {
       projects: [project({ id: 'prA', name: 'Apollo' }), project({ id: 'prB', name: 'Borealis' })],
-      work_items: [wi({ id: 't1', title: 'Alpha', project_id: 'prA' })],
+      work_items: [wi({ id: 't1', title: 'Alpha', project_id: 'prA', related_entities: [{ type: 'project', id: 'prA', name: 'Apollo' }] })],
     }});
     render(<Board onMenu={() => {}} />);
     fireEvent.click(screen.getByText(/By project/));
     const card = screen.getByText('Alpha').closest('.board-card') as HTMLElement;
     fireEvent.click(within(card).getByTitle(/Move to another project/));
     fireEvent.click(screen.getByText('Borealis'));
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 't1', { project_id: 'prB' });
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 't1', {
+      project_id: 'prB', related_entities: [{ type: 'project', id: 'prB', name: 'Borealis' }],
+    });
   });
 
   it('shows an empty state when there are no open tasks', () => {

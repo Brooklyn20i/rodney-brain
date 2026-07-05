@@ -3,7 +3,7 @@ import { useCadence } from '../lib/store';
 import type { WorkItem } from '../lib/types';
 import { PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { isUserTask, reassignPrimaryPerson } from '../lib/tasks';
+import { isUserTask, reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
 import { autoColor, priorityScore } from '../lib/util';
 
 type Mode = 'people' | 'projects';
@@ -131,7 +131,12 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
 
   const onMove = (w: WorkItem, targetId: string | null) => {
     if (mode === 'projects') {
-      update('work_items', w.id, { project_id: targetId } as Partial<WorkItem>);
+      // Reconcile related_entities too, or the old project link lingers and the
+      // task keeps showing under its previous project (counts match on person_id
+      // OR a related_entities project link, same as the People-mode branch).
+      const newProject = targetId ? projects.find((x) => x.id === targetId) ?? null : null;
+      const next = reassignPrimaryProject(w.related_entities, w.project_id, newProject);
+      update('work_items', w.id, { project_id: targetId, related_entities: next } as Partial<WorkItem>);
       return;
     }
     // People mode: also reconcile related_entities so the task doesn't linger

@@ -319,16 +319,20 @@ export function trajectory(rows: RecoveryMetric[], field: RecoveryField, window 
   }
   const first = s[0].date;
   const last = s[s.length - 1].date;
-  const thenCut = daysAgoISO(first, -window); // first + window days
-  const nowCut = daysAgoISO(last, window); // last − window days
+  const spanDays = Math.round(
+    (new Date(last + 'T12:00:00').getTime() - new Date(first + 'T12:00:00').getTime()) / 86_400_000
+  );
+  // When history is shorter than two full windows, the then/now windows overlap
+  // and share points, blunting the delta. Shrink each window to at most half the
+  // span so they stay disjoint (and it stays a true then-vs-now comparison).
+  const effWindow = Math.min(window, Math.floor(spanDays / 2));
+  const thenCut = daysAgoISO(first, -effWindow); // first + effWindow days
+  const nowCut = daysAgoISO(last, effWindow); // last − effWindow days
   const thenPts = s.filter((p) => p.date <= thenCut).map((p) => p.value);
   const nowPts = s.filter((p) => p.date >= nowCut).map((p) => p.value);
   const thenAvg = thenPts.length ? thenPts.reduce((a, b) => a + b, 0) / thenPts.length : null;
   const nowAvg = nowPts.length ? nowPts.reduce((a, b) => a + b, 0) / nowPts.length : null;
   const delta = thenAvg != null && nowAvg != null ? nowAvg - thenAvg : null;
-  const spanDays = Math.round(
-    (new Date(last + 'T12:00:00').getTime() - new Date(first + 'T12:00:00').getTime()) / 86_400_000
-  );
   return {
     field,
     thenAvg,

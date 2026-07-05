@@ -334,6 +334,28 @@ describe('recovery analytics', () => {
     expect(rhr.improved).toBe(false); // rising resting HR is worse
   });
 
+  it('trajectory shrinks the window so short histories do not overlap', () => {
+    // 60-day span with the default 90-day window: the then/now windows would
+    // otherwise both cover the whole series (first+90 ⊇ all, last−90 ⊇ all) and
+    // the delta would collapse to ~0. Shrinking to half the span keeps them
+    // disjoint so a real decline still shows.
+    const short: RecoveryMetric[] = Array.from({ length: 60 }, (_, i) => {
+      const d = new Date('2025-01-01T12:00:00');
+      d.setDate(d.getDate() + i);
+      const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return {
+        id: `s${i}`, date, recovery_pct: 60, strain: 10, resting_hr: 55,
+        hrv_ms: Math.round(75 - (i / 59) * 25), // 75 → 50 across 60 days
+        sleep_hours: 7, sleep_performance_pct: 85, active_energy_kcal: 600,
+        steps: 9000, source: 'whoop' as const, notes: '', ...base,
+      };
+    });
+    const t = trajectory(short, 'hrv_ms'); // default window 90 > span 59
+    expect(t.thenAvg!).toBeGreaterThan(t.nowAvg!);
+    expect(t.delta!).toBeLessThan(-5); // a real decline, not a blunted ~0
+    expect(t.improved).toBe(false);
+  });
+
   it('monthlyRecovery aggregates one row per month', () => {
     const m = monthlyRecovery(recovery);
     expect(m[0].month).toBe('2025-01');

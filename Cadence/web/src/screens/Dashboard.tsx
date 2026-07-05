@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { isUserTask } from '../lib/tasks';
+import { isUserTask, isLinkedToPerson, isLinkedToProject } from '../lib/tasks';
 import { isOverdue, autoColor, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import {
   getHotThisWeek, getProjectTopActions, inferHealthReason, groupProjectsByPortfolio,
@@ -166,7 +166,7 @@ export function Dashboard({ onMenu, onNavigate }: {
 
   const personCards = useMemo(() => {
     return people.map((p) => {
-      const personItems = data.work_items.filter((w) => w.person_id === p.id);
+      const personItems = data.work_items.filter((w) => isLinkedToPerson(w, p.id));
       const userItems = personItems.filter(isUserTask);
       const overdueCount = userItems.filter((w) => isOverdue(w.due_date)).length;
       const hotCount = getHotThisWeek(personItems).length;
@@ -184,7 +184,7 @@ export function Dashboard({ onMenu, onNavigate }: {
     return groups.map((g) => ({
       label: g.label,
       projects: g.projects.map((p) => {
-        const openItems = data.work_items.filter((w) => w.project_id === p.id && !w.done);
+        const openItems = data.work_items.filter((w) => isLinkedToProject(w, p.id) && !w.done);
         const overdueCount = openItems.filter((w) => isOverdue(w.due_date)).length;
         const topActions = getProjectTopActions(p.id, data.work_items, 2);
         const healthReason = inferHealthReason(p, data.project_updates, data.work_items);

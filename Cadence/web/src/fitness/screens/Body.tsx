@@ -8,7 +8,7 @@ import { fmtDayShort, fmtKg, fmtNum, SOURCE_LABEL, todayISO } from '../lib/util'
 // moving-average trend so single weigh-ins don't cause panic. One row per
 // day -- re-saving a day updates it. Renpho API sync is a planned phase-2.
 export function Body({ onMenu }: { onMenu: () => void }) {
-  const { data, insert, update, remove } = useCadenceFitness();
+  const { data, upsert, remove } = useCadenceFitness();
   const today = todayISO();
 
   const rows = [...data.body_metrics].sort((a, b) => b.date.localeCompare(a.date));
@@ -29,8 +29,10 @@ export function Body({ onMenu }: { onMenu: () => void }) {
       source: 'renpho' as const,
     };
     if (!patch.weight_kg) return;
-    if (existing) await update('body_metrics', existing.id, patch);
-    else await insert('body_metrics', { date, muscle_mass_kg: null, notes: '', ...patch });
+    // Upsert on (owner_id, date): re-saving a day updates it even if the
+    // in-memory `existing` lookup is stale, instead of hitting the UNIQUE
+    // constraint. Columns omitted here keep their values on update.
+    await upsert('body_metrics', { date, ...patch }, 'owner_id,date');
     setWeight('');
     setFat('');
   };

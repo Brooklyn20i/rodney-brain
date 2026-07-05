@@ -47,6 +47,10 @@ export interface Ctx {
   data: CadenceFitnessData;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
+  // Insert-or-update keyed by a unique constraint (e.g. 'owner_id,date'). Robust
+  // against a stale in-memory `rows` racing realtime: the DB resolves the
+  // conflict instead of throwing a duplicate-key error on a re-saved day.
+  upsert: <K extends Table>(table: K, row: Partial<Row<K>>, onConflict: string) => Promise<Row<K>>;
   remove: (table: Table, id: string) => Promise<void>;
   syncError: string | null;
   clearSyncError: () => void;
@@ -250,6 +254,65 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     return (d ?? optimistic) as Row<K>;
   };
 
+  const upsert = async <K extends Table>(
+    table: K,
+    row: Partial<Row<K>>,
+    onConflict: string
+  ): Promise<Row<K>> => {
+    const now = new Date().toISOString();
+    const keyCols = onConflict.split(',').map((c) => c.trim());
+    // Deliberately omit id/created_at so the DB keeps the existing row's identity
+    // on conflict (and generates them via defaults on a fresh insert). owner_id
+    // is part of the conflict key; include it when known, else let the column's
+    // auth.uid() default fill it rather than writing a null.
+    const ownedRow: any = { ...(ownerId ? { owner_id: ownerId } : {}), updated_at: now, ...row };
+    const matchesKey = (r: any) => keyCols.every((c) => r[c] === ownedRow[c]);
+
+    if (DEMO_MODE) {
+      setData((prev) => {
+        const list = (prev as any)[table] as any[];
+        const idx = list.findIndex(matchesKey);
+        if (idx >= 0) return { ...prev, [table]: list.map((r, i) => (i === idx ? { ...r, ...ownedRow } : r)) };
+        return { ...prev, [table]: [...list, { id: newId(), owner_id: 'demo-owner', created_at: now, deleted_at: null, ...ownedRow }] };
+      });
+      return ((data as any)[table].find(matchesKey) ?? ownedRow) as Row<K>;
+    }
+
+    // Optimistic: if we already hold the row locally, reflect the change now.
+    setData((prev) => {
+      const list = (prev as any)[table] as any[];
+      const idx = list.findIndex(matchesKey);
+      if (idx < 0) return prev;
+      return { ...prev, [table]: list.map((r, i) => (i === idx ? { ...r, ...ownedRow } : r)) };
+    });
+
+    const { data: d, error } = await trackWrite(() =>
+      runWithRetry(() =>
+        supabase
+          .schema('fitness')
+          .from(table as string)
+          .upsert(ownedRow, { onConflict })
+          .select()
+          .single()
+      )
+    );
+    if (error) {
+      setSyncError(friendlyError(error));
+      // Don't throw — mirror update()'s design so a flaky save can't spam the
+      // unhandled-rejection banner; the change is local and realtime reconciles.
+      return ownedRow as Row<K>;
+    }
+    if (d) {
+      // Replace by id or conflict key so we never leave a duplicate behind.
+      setData((prev) => {
+        const list = (prev as any)[table] as any[];
+        const filtered = list.filter((r) => r.id !== (d as any).id && !matchesKey(r));
+        return { ...prev, [table]: [...filtered, d] };
+      });
+    }
+    return (d ?? ownedRow) as Row<K>;
+  };
+
   const remove = async (table: Table, id: string): Promise<void> => {
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (DEMO_MODE) return;
@@ -277,6 +340,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         data,
         insert,
         update,
+        upsert,
         remove,
         syncError,
         clearSyncError,

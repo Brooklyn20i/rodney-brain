@@ -82,11 +82,13 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
   noteTitle: string;
   people: Person[];
   projects: import('../lib/types').Project[];
-  onSend: (targets: PushTarget[]) => void;
+  onSend: (targets: PushTarget[]) => Promise<void> | void;
   onMarkDone: () => void;
 }) {
   const [showSend, setShowSend] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<PushTarget[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sendErr, setSendErr] = useState('');
   const [done, setDone] = useState(false);
   const isLate = !!action.due && !done && action.due < todayStr();
   const ownerPerson = action.owner_person_id ? people.find((p) => p.id === action.owner_person_id) ?? null : null;
@@ -100,11 +102,20 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
     setSelectedTargets(preselect ? [preselect] : []);
     setShowSend(true);
   };
-  const confirmSend = () => {
-    if (selectedTargets.length > 0) {
-      onSend(selectedTargets);
+  const confirmSend = async () => {
+    if (selectedTargets.length === 0 || sending) return;
+    setSending(true);
+    setSendErr('');
+    try {
+      // Await so an insert failure keeps the picker open with an error, instead
+      // of silently closing and clearing the selection as if the send worked.
+      await onSend(selectedTargets);
       setShowSend(false);
       setSelectedTargets([]);
+    } catch {
+      setSendErr('Could not send — check your connection and try again.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -137,7 +148,7 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
               </button>
               {showSend && (
                 <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => { setShowSend(false); setSelectedTargets([]); }} />
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => { setShowSend(false); setSelectedTargets([]); setSendErr(''); }} />
                   <div className="action-send-picker">
                     {people.length > 0 && (
                       <>
@@ -173,10 +184,13 @@ function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDon
                         })}
                       </>
                     )}
+                    {sendErr && (
+                      <div className="send-picker-error" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }}>{sendErr}</div>
+                    )}
                     {selectedTargets.length > 0 && (
                       <div className="send-picker-footer">
-                        <button className="send-picker-confirm" onClick={confirmSend}>
-                          Send to {selectedTargets.map(t => t.name.split(' ')[0]).join(' + ')}
+                        <button className="send-picker-confirm" onClick={confirmSend} disabled={sending}>
+                          {sending ? 'Sending…' : `Send to ${selectedTargets.map(t => t.name.split(' ')[0]).join(' + ')}`}
                         </button>
                       </div>
                     )}

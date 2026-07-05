@@ -40,7 +40,7 @@ const METRICS: {
 ];
 
 export function Recovery({ onMenu }: { onMenu: () => void }) {
-  const { data, insert, update } = useCadenceFitness();
+  const { data, upsert } = useCadenceFitness();
   const today = todayISO();
   const rows = data.recovery_metrics;
 
@@ -250,7 +250,7 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
         </Card>
 
         {/* Manual entry — the fallback for gaps */}
-        <ManualEntry rows={rows} insert={insert} update={update} today={today} />
+        <ManualEntry rows={rows} upsert={upsert} today={today} />
       </div>
     </>
   );
@@ -260,13 +260,11 @@ export function Recovery({ onMenu }: { onMenu: () => void }) {
 // the Whoop import, not typing.
 function ManualEntry({
   rows,
-  insert,
-  update,
+  upsert,
   today,
 }: {
   rows: ReturnType<typeof useCadenceFitness>['data']['recovery_metrics'];
-  insert: ReturnType<typeof useCadenceFitness>['insert'];
-  update: ReturnType<typeof useCadenceFitness>['update'];
+  upsert: ReturnType<typeof useCadenceFitness>['upsert'];
   today: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -285,8 +283,9 @@ function ManualEntry({
       sleep_hours: sleep === '' ? (existing?.sleep_hours ?? null) : Number(sleep),
       source: 'manual' as const,
     };
-    if (existing) await update('recovery_metrics', existing.id, patch);
-    else await insert('recovery_metrics', { date, notes: '', ...patch });
+    // Upsert on (owner_id, date) so a re-saved day updates rather than colliding
+    // with the UNIQUE constraint when the in-memory `existing` lookup is stale.
+    await upsert('recovery_metrics', { date, ...patch }, 'owner_id,date');
     setRec('');
     setHrv('');
     setRhr('');
