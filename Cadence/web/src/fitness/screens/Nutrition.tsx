@@ -1,6 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
-import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { dayNutrition, estimateTDEE, targetFor, weekReport } from '../lib/fitnessCalc';
 import {
@@ -19,35 +18,6 @@ import {
   todayISO,
 } from '../lib/util';
 import type { MealType, NutritionPhase } from '../lib/types';
-
-interface PhotoEstimate {
-  name: string;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  confidence: 'low' | 'medium' | 'high';
-  notes: string;
-}
-
-// Downscale a photo before upload: vision doesn't need 12MP, and mobile
-// uploads should stay small. Longest edge 1024px, JPEG q0.8.
-async function fileToBase64Jpeg(file: File): Promise<{ base64: string; mediaType: string }> {
-  const bitmap = await createImageBitmap(file);
-  const maxDim = 1024;
-  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas unavailable');
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  bitmap.close();
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-  return { base64: dataUrl.slice(dataUrl.indexOf(',') + 1), mediaType: 'image/jpeg' };
-}
 
 // Daily calories + macros: quick entry, one-tap saved meals, phased targets.
 // Deliberately totals-first (not a food database) -- 90% of the MacroFactor
@@ -70,69 +40,6 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
     data.body_metrics,
     weekAnchor
   );
-
-  // ── Photo logging ─────────────────────────────────────────────────────
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoError, setPhotoError] = useState('');
-  const [estimate, setEstimate] = useState<PhotoEstimate | null>(null);
-  const [estMeal, setEstMeal] = useState<MealType>('lunch');
-  const [preview, setPreview] = useState<string | null>(null);
-  const [saveEstimateAsFood, setSaveEstimateAsFood] = useState(false);
-
-  const onPhotoPicked = async (file: File | undefined) => {
-    if (!file) return;
-    setPhotoError('');
-    setEstimate(null);
-    setPhotoBusy(true);
-    setPreview(URL.createObjectURL(file));
-    try {
-      const { base64, mediaType } = await fileToBase64Jpeg(file);
-      const { data: est, error } = await supabase.functions.invoke('food-vision', {
-        body: { image_base64: base64, media_type: mediaType },
-      });
-      if (error) throw new Error(error.message || 'Estimate failed');
-      if (est?.error) throw new Error(est.error);
-      setEstimate(est as PhotoEstimate);
-      const hour = new Date().getHours();
-      setEstMeal(hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 20 ? 'dinner' : 'snack');
-    } catch (e) {
-      setPhotoError(
-        e instanceof Error
-          ? e.message
-          : 'Could not read the photo — try again or enter it manually.'
-      );
-    } finally {
-      setPhotoBusy(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  };
-
-  const clearPhoto = () => {
-    setEstimate(null);
-    setPhotoError('');
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(null);
-  };
-
-  const logEstimate = async () => {
-    if (!estimate) return;
-    const row = {
-      meal: estMeal,
-      name: estimate.name,
-      calories: estimate.calories,
-      protein_g: estimate.protein_g,
-      carbs_g: estimate.carbs_g,
-      fat_g: estimate.fat_g,
-      notes: estimate.notes
-        ? `Photo estimate (${estimate.confidence}): ${estimate.notes}`
-        : 'Photo estimate',
-    };
-    await insert('nutrition_logs', { date, ...row });
-    if (saveEstimateAsFood) await insert('saved_meals', row);
-    setSaveEstimateAsFood(false);
-    clearPhoto();
-  };
 
   // Quick add form
   const [meal, setMeal] = useState<MealType>('snack');
@@ -183,13 +90,51 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
     setSavedFoodQty((prev) => ({ ...prev, [id]: '1' }));
   };
 
-  // Targets editor
+  // ── Targets editor ─────────────────────────────────────────────────────
+  // MyFitnessPal-style: you pin calories + protein, and carbs/fat fill the
+  // remaining energy automatically (4 kcal/g protein & carbs, 9 kcal/g fat).
+  // Edit either carbs or fat and the other rebalances to keep the calorie goal.
   const [showTargets, setShowTargets] = useState(false);
   const [tPhase, setTPhase] = useState<NutritionPhase>('maintain');
   const [tCals, setTCals] = useState('');
   const [tP, setTP] = useState('');
   const [tC, setTC] = useState('');
   const [tF, setTF] = useState('');
+  const num = (s: string) => Number(s) || 0;
+  const autoFillMacros = (calsStr: string, pStr: string) => {
+    const rem = Math.max(0, num(calsStr) - num(pStr) * 4); // kcal left after protein
+    setTC(String(Math.round((rem * 0.5) / 4))); // split the remainder 50/50 by energy
+    setTF(String(Math.round((rem * 0.5) / 9)));
+  };
+  const onCals = (v: string) => {
+    setTCals(v);
+    autoFillMacros(v, tP);
+  };
+  const onProt = (v: string) => {
+    setTP(v);
+    autoFillMacros(tCals, v);
+  };
+  const onCarbs = (v: string) => {
+    setTC(v);
+    const rem = Math.max(0, num(tCals) - num(tP) * 4 - num(v) * 4);
+    setTF(String(Math.round(rem / 9)));
+  };
+  const onFat = (v: string) => {
+    setTF(v);
+    const rem = Math.max(0, num(tCals) - num(tP) * 4 - num(v) * 9);
+    setTC(String(Math.round(rem / 4)));
+  };
+  const openTargets = () => {
+    const next = !showTargets;
+    if (next && target) {
+      setTPhase(target.phase);
+      setTCals(String(target.calories));
+      setTP(String(Number(target.protein_g)));
+      setTC(String(Number(target.carbs_g)));
+      setTF(String(Number(target.fat_g)));
+    }
+    setShowTargets(next);
+  };
   const saveTargets = async () => {
     if (!Number(tCals)) return;
     await insert('nutrition_targets', {
@@ -203,6 +148,9 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
     });
     setShowTargets(false);
   };
+  const macroKcal = num(tP) * 4 + num(tC) * 4 + num(tF) * 9;
+  const macroDiff = macroKcal - num(tCals);
+  const macroMatch = Math.abs(macroDiff) <= 20;
 
   const macroRow = (
     label: string,
@@ -290,12 +238,8 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               Protein {fmtNum(Math.max(0, Number(target.protein_g) - totals.protein_g))}g to go.
             </p>
           )}
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ marginTop: 6 }}
-            onClick={() => setShowTargets(!showTargets)}
-          >
-            {showTargets ? 'Hide targets' : 'Set targets'}
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={openTargets}>
+            {showTargets ? 'Hide targets' : target ? 'Edit targets' : 'Set targets'}
           </button>
           {showTargets && (
             <div style={{ marginTop: 10 }}>
@@ -319,7 +263,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={tCals}
-                    onChange={(e) => setTCals(e.target.value)}
+                    onChange={(e) => onCals(e.target.value)}
                   />
                 </div>
                 <div>
@@ -328,28 +272,43 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                     type="number"
                     inputMode="numeric"
                     value={tP}
-                    onChange={(e) => setTP(e.target.value)}
+                    onChange={(e) => onProt(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="field">Carbs (g)</label>
+                  <label className="field">Carbs (g) · auto</label>
                   <input
                     type="number"
                     inputMode="numeric"
                     value={tC}
-                    onChange={(e) => setTC(e.target.value)}
+                    onChange={(e) => onCarbs(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="field">Fat (g)</label>
+                  <label className="field">Fat (g) · auto</label>
                   <input
                     type="number"
                     inputMode="numeric"
                     value={tF}
-                    onChange={(e) => setTF(e.target.value)}
+                    onChange={(e) => onFat(e.target.value)}
                   />
                 </div>
               </div>
+              {num(tCals) > 0 && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    margin: '2px 0 8px',
+                    color: macroMatch ? 'var(--green)' : 'var(--orange)',
+                  }}
+                >
+                  Macros ≈ {fmtNum(macroKcal)} kcal
+                  {macroMatch
+                    ? ' ✓ matches your calorie goal'
+                    : ` · ${macroDiff > 0 ? '+' : ''}${fmtNum(macroDiff)} vs goal`}
+                </p>
+              )}
               <button
                 className="btn btn-primary btn-sm"
                 onClick={saveTargets}
@@ -358,163 +317,10 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
                 Save targets from {fmtDayShort(date)}
               </button>
               <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-                Targets are phased: the newest row on or before a day applies, so past days keep
-                their old targets.
+                Set calories and protein — carbs and fat fill the rest automatically. Edit either and
+                the other rebalances to hold your calorie goal. Targets are phased: the newest row on
+                or before a day applies, so past days keep their old targets.
               </p>
-            </div>
-          )}
-        </Card>
-
-        <Card title="Log from a photo">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: 'none' }}
-            onChange={(e) => onPhotoPicked(e.target.files?.[0])}
-          />
-          {!estimate && !photoBusy && (
-            <>
-              <button
-                className="btn btn-primary nu-photo-btn"
-                onClick={() => fileRef.current?.click()}
-              >
-                📷 Snap your meal
-              </button>
-              <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
-                Kobe estimates calories and macros from the photo — you review before it's logged.
-              </p>
-            </>
-          )}
-          {photoBusy && (
-            <div className="nu-photo-review">
-              {preview && <img src={preview} alt="Your meal" className="nu-photo-thumb" />}
-              <p style={{ fontSize: 13, color: 'var(--text2)' }}>Estimating…</p>
-            </div>
-          )}
-          {photoError && (
-            <p style={{ fontSize: 13, color: 'var(--red)', marginTop: 8 }}>{photoError}</p>
-          )}
-          {estimate && (
-            <div className="nu-photo-review">
-              {preview && <img src={preview} alt="Your meal" className="nu-photo-thumb" />}
-              <div className="form-grid" style={{ marginTop: 10 }}>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label className="field">What</label>
-                  <input
-                    type="text"
-                    value={estimate.name}
-                    onChange={(e) => setEstimate({ ...estimate, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field">Meal</label>
-                  <select value={estMeal} onChange={(e) => setEstMeal(e.target.value as MealType)}>
-                    {MEALS.map((m) => (
-                      <option key={m} value={m}>
-                        {MEAL_LABEL[m]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field">Calories</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={estimate.calories || ''}
-                    onChange={(e) =>
-                      setEstimate({
-                        ...estimate,
-                        calories: Math.round(Number(e.target.value) || 0),
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="field">Protein (g)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={estimate.protein_g || ''}
-                    onChange={(e) =>
-                      setEstimate({
-                        ...estimate,
-                        protein_g: Math.round(Number(e.target.value) || 0),
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="field">Carbs (g)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={estimate.carbs_g || ''}
-                    onChange={(e) =>
-                      setEstimate({ ...estimate, carbs_g: Math.round(Number(e.target.value) || 0) })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="field">Fat (g)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={estimate.fat_g || ''}
-                    onChange={(e) =>
-                      setEstimate({ ...estimate, fat_g: Math.round(Number(e.target.value) || 0) })
-                    }
-                  />
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text2)', margin: '2px 0 10px' }}>
-                <Tag
-                  label={`${estimate.confidence} confidence`}
-                  tone={
-                    estimate.confidence === 'high'
-                      ? 'good'
-                      : estimate.confidence === 'low'
-                        ? 'warn'
-                        : 'info'
-                  }
-                />{' '}
-                {estimate.notes}
-              </p>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  margin: '0 0 10px',
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  style={{ width: 'auto' }}
-                  checked={saveEstimateAsFood}
-                  onChange={(e) => setSaveEstimateAsFood(e.target.checked)}
-                />
-                Save this as a quick-log food for next time
-              </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={logEstimate}
-                  disabled={!estimate.calories}
-                >
-                  Add to {fmtDayShort(date)}
-                </button>
-                <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-                  Retake
-                </button>
-                <button className="btn btn-ghost" onClick={clearPhoto}>
-                  Cancel
-                </button>
-              </div>
             </div>
           )}
         </Card>
@@ -619,8 +425,8 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           </div>
           {data.saved_meals.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>
-              No saved foods yet. Use <strong>Quick add</strong> with “Save to foods”, or save a
-              reviewed photo estimate.
+              No saved foods yet. Use <strong>Quick add</strong> with “Save to foods” to build your
+              list.
             </p>
           )}
           {data.saved_meals.length > 0 && savedFoodPicker.total === 0 && (
