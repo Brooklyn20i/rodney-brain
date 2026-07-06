@@ -4,7 +4,9 @@ import { makeSeed } from './seed';
 test.beforeEach(async ({ page }) => {
   const seed = makeSeed();
   await page.addInitScript((s) => { (window as any).__CADENCE_E2E__ = s; }, seed);
-  await page.goto('/');
+  // The app lives at the /work.html shell — the site root ('/') is the marketing
+  // page. The dev/E2E server serves the raw shells (no Vercel rewrites).
+  await page.goto('/work.html');
 });
 
 async function navTo(page: Page, label: string) {

@@ -7,12 +7,15 @@ import { test, expect, type Page } from '@playwright/test';
 // This is a render-smoke across every domain's every nav screen.
 
 async function bootToControl(page: Page) {
-  await page.goto('/');
+  // The app lives at the /work.html shell — '/' is the marketing site.
+  await page.goto('/work.html');
   // Work boots straight in (no login gate under E2E).
   await expect(page.locator('.screen-header h1').first()).toBeVisible();
 }
 
-async function switchDomain(page: Page, label: 'Work' | 'Financial' | 'Fitness') {
+// The fitness domain's switcher button is labelled "Health" in the UI (the
+// internal domain key is still 'fitness').
+async function switchDomain(page: Page, label: 'Work' | 'Financial' | 'Health') {
   await page.locator('.domain-switch-btn', { hasText: label }).click();
   // active button reflects the switch
   await expect(
@@ -48,18 +51,18 @@ test('Financial domain: switch in and every screen renders', async ({ page }) =>
   await driveAllNavItems(page, 'Financial');
 });
 
-test('Fitness domain: switch in and every screen renders', async ({ page }) => {
+test('Health domain: switch in and every screen renders', async ({ page }) => {
   await bootToControl(page);
-  await switchDomain(page, 'Fitness');
+  await switchDomain(page, 'Health');
   await expect(page.locator('.screen-header h1').first()).toBeVisible();
-  await driveAllNavItems(page, 'Fitness');
+  await driveAllNavItems(page, 'Health');
 });
 
-test('round-trips Work -> Financial -> Fitness -> Work without crashing', async ({ page }) => {
+test('round-trips Work -> Financial -> Health -> Work without crashing', async ({ page }) => {
   await bootToControl(page);
   await switchDomain(page, 'Financial');
   await expect(page.locator('.screen-header h1').first()).toBeVisible();
-  await switchDomain(page, 'Fitness');
+  await switchDomain(page, 'Health');
   await expect(page.locator('.screen-header h1').first()).toBeVisible();
   await switchDomain(page, 'Work');
   await expect(page.locator('.screen-header h1').first()).toBeVisible();

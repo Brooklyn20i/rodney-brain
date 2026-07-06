@@ -27,7 +27,8 @@ async function readPositions(page: Page) {
 
 test('notch clearance across Work / Financial / Fitness', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  // The app lives at the /work.html shell — '/' is the marketing site.
+  await page.goto('/work.html');
   await simulateNotch(page);
   await expect(page.locator('.screen-header').first()).toBeVisible();
 
@@ -38,9 +39,9 @@ test('notch clearance across Work / Financial / Fitness', async ({ page }) => {
   await page.waitForTimeout(300);
   results.financial = await readPositions(page);
 
-  // reopen sidebar to reach the switcher, then go Fitness
+  // reopen sidebar to reach the switcher, then go to Health (the fitness domain's UI label)
   await page.evaluate(() => document.querySelector('#sidebar')?.classList.add('open'));
-  await page.locator('.domain-switch-btn', { hasText: 'Fitness' }).click();
+  await page.locator('.domain-switch-btn', { hasText: 'Health' }).click();
   await page.waitForTimeout(300);
   results.fitness = await readPositions(page);
 
