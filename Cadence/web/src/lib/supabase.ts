@@ -15,10 +15,15 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // The password-recovery / magic links come back with the token in the URL
-      // hash; detect and consume it so PASSWORD_RECOVERY fires on this device.
+      // Password-recovery links come back as a ?code= param; detectSessionInUrl
+      // consumes it (PKCE code-exchange) and fires PASSWORD_RECOVERY on this
+      // device. PKCE (not implicit) keeps access tokens out of the URL fragment
+      // — no tokens in browser history / referrers. signInWithPassword (the main
+      // path) is unaffected by flowType, and existing sessions stay valid.
+      // Recovery must be opened in the same browser it was requested from (the
+      // code verifier lives in this device's localStorage) — the reset UI says so.
       detectSessionInUrl: true,
-      flowType: 'implicit',
+      flowType: 'pkce',
     },
   },
 );
