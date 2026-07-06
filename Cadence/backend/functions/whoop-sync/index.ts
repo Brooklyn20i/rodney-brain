@@ -22,12 +22,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getValidAccessToken,
+  mapWorkouts,
   mergeDaily,
   serviceClient,
   whoopGetAll,
   type WhoopCycle,
   type WhoopRecovery,
   type WhoopSleep,
+  type WhoopWorkout,
 } from "../_shared/whoop.ts";
 
 const cors = {
@@ -51,10 +53,11 @@ async function syncOwner(svc: ReturnType<typeof serviceClient>, ownerId: string,
   try {
     const accessToken = await getValidAccessToken(svc, ownerId);
 
-    const [recoveries, cycles, sleeps] = await Promise.all([
+    const [recoveries, cycles, sleeps, workouts] = await Promise.all([
       whoopGetAll<WhoopRecovery>(accessToken, "/v2/recovery", { start }),
       whoopGetAll<WhoopCycle>(accessToken, "/v2/cycle", { start }),
       whoopGetAll<WhoopSleep>(accessToken, "/v2/activity/sleep", { start }),
+      whoopGetAll<WhoopWorkout>(accessToken, "/v2/activity/workout", { start }),
     ]);
 
     const daily = mergeDaily(recoveries, cycles, sleeps);
@@ -69,9 +72,24 @@ async function syncOwner(svc: ReturnType<typeof serviceClient>, ownerId: string,
         "strain",
         "resting_hr",
         "hrv_ms",
+        "spo2_percentage",
+        "skin_temp_celsius",
         "sleep_hours",
         "sleep_performance_pct",
+        "sleep_efficiency_pct",
+        "sleep_consistency_pct",
+        "respiratory_rate",
+        "sleep_light_min",
+        "sleep_deep_min",
+        "sleep_rem_min",
+        "sleep_awake_min",
+        "sleep_cycle_count",
+        "sleep_disturbance_count",
+        "sleep_need_min",
+        "sleep_debt_min",
         "active_energy_kcal",
+        "day_avg_hr",
+        "day_max_hr",
       ] as const) {
         if (d[k] !== null && d[k] !== undefined) row[k] = d[k];
       }
@@ -84,6 +102,17 @@ async function syncOwner(svc: ReturnType<typeof serviceClient>, ownerId: string,
       written++;
     }
 
+    // Cardio workouts → cardio_sessions, idempotent on (owner_id, external_id).
+    let workoutsWritten = 0;
+    const cardio = mapWorkouts(workouts);
+    for (const c of cardio) {
+      const { error } = await svc
+        .from("cardio_sessions")
+        .upsert({ owner_id: ownerId, source: "whoop", ...c }, { onConflict: "owner_id,external_id" });
+      if (error) throw new Error(`cardio_sessions upsert: ${error.message}`);
+      workoutsWritten++;
+    }
+
     await svc.from("whoop_connection").upsert(
       {
         owner_id: ownerId,
@@ -94,7 +123,7 @@ async function syncOwner(svc: ReturnType<typeof serviceClient>, ownerId: string,
       },
       { onConflict: "owner_id" },
     );
-    return { owner_id: ownerId, ok: true, days_written: written };
+    return { owner_id: ownerId, ok: true, days_written: written, workouts_written: workoutsWritten };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await svc.from("whoop_connection").upsert(

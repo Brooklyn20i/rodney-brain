@@ -24,6 +24,7 @@ export async function whoopConnect(returnTo: string): Promise<void> {
 export interface SyncResult {
   ok: boolean;
   days_written?: number;
+  workouts_written?: number;
   error?: string;
 }
 

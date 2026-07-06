@@ -1,8 +1,10 @@
 # WHOOP direct-API integration — setup runbook
 
 Native server-side WHOOP integration for Cadence Fitness. Recovery, strain,
-HRV, resting HR and sleep pull from the WHOOP developer API straight into
-`fitness.recovery_metrics` (source `whoop`) — no phone, no Apple Shortcut.
+HRV, SpO₂, skin temp, respiratory rate and the full sleep-stage breakdown pull
+from the WHOOP developer API straight into `fitness.recovery_metrics` (source
+`whoop`), and cardio **workouts** land in `fitness.cardio_sessions` — no phone,
+no Apple Shortcut.
 
 **Renpho stays on Apple Health.** Renpho has no public API, so weight and body
 fat still flow Renpho → Apple Health → the `health-ingest` function. This
@@ -18,7 +20,7 @@ goes into git.
 
 | Piece | Path |
 |-------|------|
-| DB migration | `Cadence/backend/migrations/0038_whoop_integration.sql` |
+| DB migrations | `Cadence/backend/migrations/0038_whoop_integration.sql`, `0039_whoop_rich_metrics.sql` |
 | Shared WHOOP client | `Cadence/backend/functions/_shared/whoop.ts` |
 | `whoop-oauth-start` | starts the connect flow (returns the authorize URL) |
 | `whoop-oauth-callback` | WHOOP redirect handler → exchanges code, stores tokens |
@@ -33,10 +35,13 @@ Data model:
 
 ---
 
-## 1 · Run the migration
+## 1 · Run the migrations
 
-Supabase → SQL Editor → run `0038_whoop_integration.sql` (idempotent). The
-`fitness` schema is already exposed; no API-settings change needed.
+Supabase → SQL Editor → run **`0038_whoop_integration.sql`** then
+**`0039_whoop_rich_metrics.sql`**, in order (both idempotent). 0038 adds the
+OAuth/token tables; 0039 widens `recovery_metrics` to WHOOP's full physiology
+and lets workouts land in `cardio_sessions`. The `fitness` schema is already
+exposed; no API-settings change needed.
 
 ## 2 · Register a WHOOP developer app
 
@@ -45,8 +50,12 @@ Supabase → SQL Editor → run `0038_whoop_integration.sql` (idempotent). The
    ```
    https://<YOUR-PROJECT-REF>.supabase.co/functions/v1/whoop-oauth-callback
    ```
-3. **Scopes** — enable: `offline`, `read:recovery`, `read:cycles`, `read:sleep`, `read:profile`.
+3. **Scopes** — enable: `offline`, `read:recovery`, `read:cycles`, `read:sleep`, `read:workout`, `read:profile`.
 4. Copy the **Client ID** and **Client Secret**.
+
+> If you connected under 0038's smaller scope set (no `read:workout`), you'll
+> need to **Disconnect and reconnect** once so WHOOP re-issues a token that
+> includes workout access.
 
 ## 3 · Set the Edge Function secrets
 
@@ -119,24 +128,56 @@ $$);
 
 ---
 
-## How the sync maps WHOOP → `recovery_metrics`
+## How the sync maps WHOOP → Cadence
 
-Per day (one row, keyed on `(owner_id, date)`), merged from three WHOOP v2
-collections and dated to the day you wake:
+### `recovery_metrics` — one row per day, keyed on `(owner_id, date)`
+
+Merged from the recovery, cycle and sleep collections and dated to the day you
+wake:
 
 | Cadence column | WHOOP source |
 |----------------|--------------|
 | `recovery_pct` | recovery `score.recovery_score` |
 | `resting_hr` | recovery `score.resting_heart_rate` |
-| `hrv_ms` | recovery `score.hrv_rmssd_milli` (rounded) |
+| `hrv_ms` | recovery `score.hrv_rmssd_milli` |
+| `spo2_percentage` | recovery `score.spo2_percentage` |
+| `skin_temp_celsius` | recovery `score.skin_temp_celsius` |
 | `strain` | cycle `score.strain` |
 | `active_energy_kcal` | cycle `score.kilojoule` ÷ 4.184 |
+| `day_avg_hr` / `day_max_hr` | cycle `score.average_/max_heart_rate` |
 | `sleep_hours` | sleep in-bed − awake time |
 | `sleep_performance_pct` | sleep `score.sleep_performance_percentage` |
+| `sleep_efficiency_pct` / `sleep_consistency_pct` | sleep `score.*_percentage` |
+| `respiratory_rate` | sleep `score.respiratory_rate` |
+| `sleep_light_/deep_/rem_/awake_min` | sleep `stage_summary.*` (÷ 60000) |
+| `sleep_cycle_count` / `sleep_disturbance_count` | sleep `stage_summary.*` |
+| `sleep_need_min` / `sleep_debt_min` | sleep `sleep_needed.*` |
 
 Only fields WHOOP actually scored are written, so a day that already has Apple
 Health values (e.g. `steps`, which WHOOP doesn't provide) keeps them. Re-running
 is safe — it refreshes the same day's row.
+
+### `cardio_sessions` — one row per WHOOP workout, keyed on `(owner_id, external_id)`
+
+Cardio-type sports only (running, cycling, rowing, swimming, walking, hiking,
+stairs, elliptical, HIIT). Strength/mobility (weightlifting, functional fitness,
+yoga, pilates…) are **skipped** — the Programs/Workouts flow owns those. Mapped
+by WHOOP `sport_name`; unrecognised cardio falls to kind `other`.
+
+| Cadence column | WHOOP source |
+|----------------|--------------|
+| `kind` | `sport_name` → cardio kind |
+| `duration_min` | `end − start` |
+| `distance_km` | `score.distance_meter` ÷ 1000 |
+| `avg_hr` / `max_hr` | `score.average_/max_heart_rate` |
+| `calories` | `score.kilojoule` ÷ 4.184 |
+| `strain` | `score.strain` |
+| `altitude_gain_m` | `score.altitude_gain_meter` |
+| `external_id` | WHOOP workout `id` (idempotency key) |
+
+WHOOP workouts appear on the **Cardio** screen alongside anything you log
+manually; the `external_id` unique index means re-syncing updates the same row
+rather than duplicating it.
 
 ## Token security
 

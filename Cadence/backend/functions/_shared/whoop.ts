@@ -23,6 +23,7 @@ export const WHOOP_SCOPES = [
   "read:recovery",
   "read:cycles",
   "read:sleep",
+  "read:workout",
   "read:profile",
 ] as const;
 
@@ -192,14 +193,20 @@ interface WhoopRecovery {
   sleep_id: string;
   created_at: string;
   score_state: string;
-  score?: { recovery_score?: number; resting_heart_rate?: number; hrv_rmssd_milli?: number };
+  score?: {
+    recovery_score?: number;
+    resting_heart_rate?: number;
+    hrv_rmssd_milli?: number;
+    spo2_percentage?: number;
+    skin_temp_celsius?: number;
+  };
 }
 interface WhoopCycle {
   id: number;
   start: string;
   end?: string | null;
   score_state: string;
-  score?: { strain?: number; kilojoule?: number };
+  score?: { strain?: number; kilojoule?: number; average_heart_rate?: number; max_heart_rate?: number };
 }
 interface WhoopSleep {
   id: string;
@@ -209,10 +216,40 @@ interface WhoopSleep {
   score_state: string;
   score?: {
     sleep_performance_percentage?: number;
+    sleep_efficiency_percentage?: number;
+    sleep_consistency_percentage?: number;
+    respiratory_rate?: number;
     stage_summary?: {
       total_in_bed_time_milli?: number;
       total_awake_time_milli?: number;
+      total_light_sleep_time_milli?: number;
+      total_slow_wave_sleep_time_milli?: number;
+      total_rem_sleep_time_milli?: number;
+      sleep_cycle_count?: number;
+      disturbance_count?: number;
     };
+    sleep_needed?: {
+      baseline_milli?: number;
+      need_from_sleep_debt_milli?: number;
+      need_from_recent_strain_milli?: number;
+      need_from_recent_nap_milli?: number;
+    };
+  };
+}
+interface WhoopWorkout {
+  id: string;
+  start: string;
+  end: string;
+  sport_id?: number;
+  sport_name?: string;
+  score_state: string;
+  score?: {
+    strain?: number;
+    average_heart_rate?: number;
+    max_heart_rate?: number;
+    kilojoule?: number;
+    distance_meter?: number;
+    altitude_gain_meter?: number;
   };
 }
 
@@ -224,16 +261,35 @@ export interface DailyRecoveryRow {
   strain: number | null;
   resting_hr: number | null;
   hrv_ms: number | null;
+  spo2_percentage: number | null;
+  skin_temp_celsius: number | null;
   sleep_hours: number | null;
   sleep_performance_pct: number | null;
+  sleep_efficiency_pct: number | null;
+  sleep_consistency_pct: number | null;
+  respiratory_rate: number | null;
+  sleep_light_min: number | null;
+  sleep_deep_min: number | null;
+  sleep_rem_min: number | null;
+  sleep_awake_min: number | null;
+  sleep_cycle_count: number | null;
+  sleep_disturbance_count: number | null;
+  sleep_need_min: number | null;
+  sleep_debt_min: number | null;
   active_energy_kcal: number | null;
+  day_avg_hr: number | null;
+  day_max_hr: number | null;
 }
 
 const isoDate = (ts: string) => ts.slice(0, 10);
 const round = (n: number | undefined | null) =>
   n === undefined || n === null ? null : Math.round(n);
+const round1 = (n: number | undefined | null) =>
+  n === undefined || n === null ? null : Math.round(n * 10) / 10;
 const kjToKcal = (kj: number | undefined) =>
   kj === undefined ? null : Math.round(kj / 4.184);
+const milliToMin = (ms: number | undefined) =>
+  ms === undefined ? null : Math.round(ms / 60_000);
 
 // Merge recovery + cycle (strain) + sleep records into one row per calendar
 // day. Recovery is keyed to the cycle it belongs to; we date everything by the
@@ -256,22 +312,39 @@ export function mergeDaily(
         strain: null,
         resting_hr: null,
         hrv_ms: null,
+        spo2_percentage: null,
+        skin_temp_celsius: null,
         sleep_hours: null,
         sleep_performance_pct: null,
+        sleep_efficiency_pct: null,
+        sleep_consistency_pct: null,
+        respiratory_rate: null,
+        sleep_light_min: null,
+        sleep_deep_min: null,
+        sleep_rem_min: null,
+        sleep_awake_min: null,
+        sleep_cycle_count: null,
+        sleep_disturbance_count: null,
+        sleep_need_min: null,
+        sleep_debt_min: null,
         active_energy_kcal: null,
+        day_avg_hr: null,
+        day_max_hr: null,
       };
       byDate.set(date, row);
     }
     return row;
   };
 
-  // Strain + energy come from the physiological cycle.
+  // Strain + energy + day HR come from the physiological cycle.
   for (const c of cycles) {
     if (c.score_state !== "SCORED" || !c.score) continue;
     const row = ensure(isoDate(c.start));
-    if (c.score.strain !== undefined) row.strain = Math.round(c.score.strain * 10) / 10;
+    if (c.score.strain !== undefined) row.strain = round1(c.score.strain);
     const kcal = kjToKcal(c.score.kilojoule);
     if (kcal !== null) row.active_energy_kcal = kcal;
+    if (c.score.average_heart_rate !== undefined) row.day_avg_hr = round(c.score.average_heart_rate);
+    if (c.score.max_heart_rate !== undefined) row.day_max_hr = round(c.score.max_heart_rate);
   }
 
   // Recovery is dated by its parent cycle's start day.
@@ -283,22 +356,136 @@ export function mergeDaily(
     if (r.score.recovery_score !== undefined) row.recovery_pct = round(r.score.recovery_score);
     if (r.score.resting_heart_rate !== undefined) row.resting_hr = round(r.score.resting_heart_rate);
     if (r.score.hrv_rmssd_milli !== undefined) row.hrv_ms = round(r.score.hrv_rmssd_milli);
+    if (r.score.spo2_percentage !== undefined) row.spo2_percentage = round1(r.score.spo2_percentage);
+    if (r.score.skin_temp_celsius !== undefined) row.skin_temp_celsius = round1(r.score.skin_temp_celsius);
   }
 
   // Sleep (skip naps) dated by the day you wake — the end of the sleep.
   for (const s of sleeps) {
     if (s.nap || s.score_state !== "SCORED" || !s.score) continue;
     const row = ensure(isoDate(s.end));
-    const inBed = s.score.stage_summary?.total_in_bed_time_milli ?? 0;
-    const awake = s.score.stage_summary?.total_awake_time_milli ?? 0;
+    const stages = s.score.stage_summary;
+    const inBed = stages?.total_in_bed_time_milli ?? 0;
+    const awake = stages?.total_awake_time_milli ?? 0;
     const asleepMs = Math.max(0, inBed - awake);
     if (asleepMs > 0) row.sleep_hours = Math.round((asleepMs / 3_600_000) * 100) / 100;
     if (s.score.sleep_performance_percentage !== undefined) {
       row.sleep_performance_pct = round(s.score.sleep_performance_percentage);
+    }
+    if (s.score.sleep_efficiency_percentage !== undefined) {
+      row.sleep_efficiency_pct = round(s.score.sleep_efficiency_percentage);
+    }
+    if (s.score.sleep_consistency_percentage !== undefined) {
+      row.sleep_consistency_pct = round(s.score.sleep_consistency_percentage);
+    }
+    if (s.score.respiratory_rate !== undefined) row.respiratory_rate = round1(s.score.respiratory_rate);
+    if (stages) {
+      row.sleep_light_min = milliToMin(stages.total_light_sleep_time_milli);
+      row.sleep_deep_min = milliToMin(stages.total_slow_wave_sleep_time_milli);
+      row.sleep_rem_min = milliToMin(stages.total_rem_sleep_time_milli);
+      row.sleep_awake_min = milliToMin(stages.total_awake_time_milli);
+      if (stages.sleep_cycle_count !== undefined) row.sleep_cycle_count = stages.sleep_cycle_count;
+      if (stages.disturbance_count !== undefined) row.sleep_disturbance_count = stages.disturbance_count;
+    }
+    const need = s.score.sleep_needed;
+    if (need) {
+      const total = (need.baseline_milli ?? 0) +
+        (need.need_from_sleep_debt_milli ?? 0) +
+        (need.need_from_recent_strain_milli ?? 0) +
+        (need.need_from_recent_nap_milli ?? 0);
+      if (total > 0) row.sleep_need_min = milliToMin(total);
+      row.sleep_debt_min = milliToMin(need.need_from_sleep_debt_milli);
     }
   }
 
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export type { WhoopRecovery, WhoopCycle, WhoopSleep };
+// ── WHOOP workouts → cardio_sessions ────────────────────────────────────────
+// WHOOP tracks every activity; we only ingest genuinely cardio sports into
+// cardio_sessions. Strength/mobility (weightlifting, functional fitness, yoga,
+// pilates) are owned by the Programs/Workouts flow, so they're skipped. Map by
+// sport_name (stable, human-readable in v2), lower-cased.
+type CardioKind = "run" | "bike" | "row" | "swim" | "walk" | "hike" | "stairs" | "elliptical" | "hiit" | "other";
+
+const SPORT_TO_KIND: Record<string, CardioKind> = {
+  running: "run",
+  jogging: "run",
+  trail_running: "run",
+  cycling: "bike",
+  bike: "bike",
+  road_biking: "bike",
+  mountain_biking: "bike",
+  spinning: "bike",
+  rowing: "row",
+  swimming: "swim",
+  open_water_swimming: "swim",
+  walking: "walk",
+  hiking: "hike",
+  "hiking/rucking": "hike",
+  rucking: "hike",
+  stairs: "stairs",
+  stair_climber: "stairs",
+  elliptical: "elliptical",
+  hiit: "hiit",
+  "high_intensity_interval_training": "hiit",
+};
+
+// Sports that are explicitly NOT cardio — skip rather than dumping into 'other'.
+const NON_CARDIO = new Set([
+  "weightlifting",
+  "powerlifting",
+  "functional_fitness",
+  "strength_trainer",
+  "yoga",
+  "pilates",
+  "meditation",
+  "stretching",
+  "mobility",
+]);
+
+const normSport = (name: string) => name.trim().toLowerCase().replace(/\s+/g, "_");
+
+// (CardioKind is declared above SPORT_TO_KIND.)
+export interface CardioRow {
+  external_id: string;
+  date: string;
+  kind: CardioKind;
+  duration_min: number;
+  distance_km: number;
+  avg_hr: number;
+  max_hr: number | null;
+  calories: number;
+  strain: number | null;
+  altitude_gain_m: number | null;
+}
+
+// Map WHOOP workouts to cardio_sessions rows. Returns only cardio-type,
+// scored workouts; unknown sports fall back to 'other' unless explicitly
+// non-cardio (then skipped).
+export function mapWorkouts(workouts: WhoopWorkout[]): CardioRow[] {
+  const out: CardioRow[] = [];
+  for (const w of workouts) {
+    if (w.score_state !== "SCORED" || !w.score) continue;
+    const key = w.sport_name ? normSport(w.sport_name) : "";
+    if (key && NON_CARDIO.has(key)) continue;
+    const kind: CardioKind = SPORT_TO_KIND[key] ?? "other";
+
+    const durationMin = Math.max(0, Math.round(((new Date(w.end).getTime() - new Date(w.start).getTime()) / 60_000) * 10) / 10);
+    out.push({
+      external_id: w.id,
+      date: isoDate(w.start),
+      kind,
+      duration_min: durationMin,
+      distance_km: w.score.distance_meter !== undefined ? Math.round((w.score.distance_meter / 1000) * 100) / 100 : 0,
+      avg_hr: round(w.score.average_heart_rate) ?? 0,
+      max_hr: round(w.score.max_heart_rate),
+      calories: kjToKcal(w.score.kilojoule) ?? 0,
+      strain: round1(w.score.strain),
+      altitude_gain_m: round1(w.score.altitude_gain_meter),
+    });
+  }
+  return out;
+}
+
+export type { WhoopRecovery, WhoopCycle, WhoopSleep, WhoopWorkout };

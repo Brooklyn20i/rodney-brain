@@ -162,6 +162,14 @@ export interface CardioSession {
   // shows within that workout and is cleaned up if the session is discarded.
   // Standalone cardio (logged on the Cardio screen) leaves this null.
   workout_id: string | null;
+  // WHOOP-synced sessions carry source 'whoop' + the WHOOP workout id (for
+  // idempotent upserts) and the WHOOP-only numbers; manual entries leave these
+  // at their defaults / null (migration 0039).
+  source?: MetricSource;
+  external_id?: string | null;
+  strain?: number | null;
+  max_hr?: number | null;
+  altitude_gain_m?: number | null;
   notes: string;
   created_at: string;
   updated_at: string;
@@ -233,6 +241,23 @@ export interface RecoveryMetric {
   // energy / step count) or entered manually; used for the energy-balance view.
   active_energy_kcal: number | null;
   steps: number | null;
+  // Fuller WHOOP physiology (all nullable; migration 0039). Populated by the
+  // WHOOP API sync, blank for manual/Health rows.
+  spo2_percentage?: number | null;
+  skin_temp_celsius?: number | null;
+  respiratory_rate?: number | null;
+  sleep_efficiency_pct?: number | null;
+  sleep_consistency_pct?: number | null;
+  sleep_light_min?: number | null;
+  sleep_deep_min?: number | null;
+  sleep_rem_min?: number | null;
+  sleep_awake_min?: number | null;
+  sleep_cycle_count?: number | null;
+  sleep_disturbance_count?: number | null;
+  sleep_need_min?: number | null;
+  sleep_debt_min?: number | null;
+  day_avg_hr?: number | null;
+  day_max_hr?: number | null;
   source: MetricSource;
   notes: string;
   created_at: string;

@@ -110,7 +110,11 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
     setWhoopMsg('');
     try {
       const res = await whoopSyncNow(14);
-      setWhoopMsg(res.ok ? `✓ Synced ${res.days_written ?? 0} day(s) from WHOOP.` : `Sync failed: ${res.error}`);
+      setWhoopMsg(
+        res.ok
+          ? `✓ Synced ${res.days_written ?? 0} day(s) + ${res.workouts_written ?? 0} workout(s) from WHOOP.`
+          : `Sync failed: ${res.error}`,
+      );
       await refreshWhoop();
     } catch (e) {
       setWhoopMsg(e instanceof Error ? e.message : 'Sync failed.');
@@ -243,8 +247,9 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
                 </p>
               )}
               <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
-                Recovery, strain, HRV, resting HR and sleep pull straight from WHOOP into the Recovery screen
-                (source <code>whoop</code>). An hourly job keeps it fresh; use Sync now for an immediate pull.
+                Recovery, strain, HRV, SpO₂, skin temp, respiratory rate and full sleep stages land on the
+                Recovery screen (source <code>whoop</code>); cardio workouts (strain, HR, distance, calories)
+                land on the Cardio screen. An hourly job keeps it fresh; use Sync now for an immediate pull.
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
                 <button className="btn btn-primary" onClick={onSyncWhoop} disabled={whoopBusy}>
@@ -258,9 +263,9 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
           ) : (
             <>
               <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 0 }}>
-                Connect WHOOP once and Cadence pulls your recovery, strain, HRV, resting HR and sleep directly
-                from the WHOOP API — no phone, no Shortcut. You'll approve read-only access on WHOOP's site and
-                come straight back here.
+                Connect WHOOP once and Cadence pulls your recovery, strain, HRV, SpO₂, sleep stages and cardio
+                workouts directly from the WHOOP API — no phone, no Shortcut. You'll approve read-only access on
+                WHOOP's site and come straight back here.
               </p>
               <button className="btn btn-primary" onClick={onConnectWhoop} disabled={whoopBusy}>
                 {whoopBusy ? 'Starting…' : 'Connect WHOOP'}
