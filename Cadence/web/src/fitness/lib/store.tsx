@@ -250,7 +250,11 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // on conflict (and generates them via defaults on a fresh insert). owner_id
     // is part of the conflict key; include it when known, else let the column's
     // auth.uid() default fill it rather than writing a null.
-    const ownedRow: any = { ...(ownerId ? { owner_id: ownerId } : {}), updated_at: now, ...row };
+    // deleted_at: null so a re-save REVIVES a soft-deleted row. These tables
+    // (body_metrics/recovery_metrics) keep a full unique(owner_id,date)
+    // constraint for ON CONFLICT, so re-logging a deleted day updates the
+    // tombstone in place — without this it would silently stay deleted.
+    const ownedRow: any = { ...(ownerId ? { owner_id: ownerId } : {}), updated_at: now, deleted_at: null, ...row };
     const matchesKey = (r: any) => keyCols.every((c) => r[c] === ownedRow[c]);
 
     if (OFFLINE) {
