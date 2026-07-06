@@ -2,8 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { programPosition, lastSetsForExercise, nextProgramDay } from '../lib/fitnessCalc';
-import { fmtDayShort, fmtKg, stripDayPrefix, todayISO } from '../lib/util';
-import type { ProgramDay, WorkoutSet } from '../lib/types';
+import {
+  CARDIO_KINDS,
+  CARDIO_KIND_ICON,
+  CARDIO_KIND_LABEL,
+  fmtDayShort,
+  fmtKg,
+  fmtNum,
+  stripDayPrefix,
+  todayISO,
+} from '../lib/util';
+import type { CardioKind, ProgramDay, WorkoutSet } from '../lib/types';
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
 // sets with weight/reps, see what you did last time, and run a rest timer.
@@ -189,6 +198,43 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     [data.program_exercises, active]
   );
 
+  // ── In-session cardio ────────────────────────────────────────────────────
+  // A run/row/ride done as part of this session. It's written to
+  // cardio_sessions (so it counts as cardio everywhere — week totals, the
+  // Cardio screen, the dashboard) and linked to this workout via workout_id so
+  // it shows here and is cleaned up if the session is discarded. This is why a
+  // run belongs in the Cardio block, not as a weight/reps "exercise".
+  const [cardioKind, setCardioKind] = useState<CardioKind>('run');
+  const [cardioMin, setCardioMin] = useState('');
+  const [cardioKm, setCardioKm] = useState('');
+  const [cardioCals, setCardioCals] = useState('');
+  const [cardioOpen, setCardioOpen] = useState(false);
+
+  const sessionCardio = useMemo(
+    () => (active ? data.cardio_sessions.filter((c) => c.workout_id === active.id) : []),
+    [data.cardio_sessions, active]
+  );
+
+  const logSessionCardio = async () => {
+    if (!active) return;
+    const minutes = Math.round(Number(cardioMin)) || 0;
+    if (!minutes) return;
+    await insert('cardio_sessions', {
+      date: active.date,
+      workout_id: active.id,
+      kind: cardioKind,
+      duration_min: minutes,
+      distance_km: Number(cardioKm) || 0,
+      avg_hr: 0,
+      calories: Math.round(Number(cardioCals)) || 0,
+      notes: '',
+    });
+    setCardioMin('');
+    setCardioKm('');
+    setCardioCals('');
+    setCardioOpen(false);
+  };
+
   // Exercise order: program-day slot order first, then extras by first log.
   const exerciseIds = useMemo(() => {
     const ordered: string[] = daySlots.map((s) => s.exercise_id);
@@ -342,6 +388,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     if (!active) return;
     if (!window.confirm('Discard this session and all its sets?')) return;
     for (const s of sessionSets) await remove('workout_sets', s.id);
+    for (const c of sessionCardio) await remove('cardio_sessions', c.id);
     await remove('workouts', active.id);
     stopRest();
     setDrafts({});
@@ -627,11 +674,92 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     );
   };
 
+  // Cardio done as part of this session — the right home for a run/row/ride
+  // (time, distance, calories), which then counts as cardio automatically.
+  const renderCardioBlock = () => (
+    <Card title="Cardio">
+      {sessionCardio.map((c) => (
+        <div key={c.id} className="pick-row">
+          <span className="cd-feed-icon" aria-hidden="true">
+            {CARDIO_KIND_ICON[c.kind]}
+          </span>
+          <div className="pick-main">
+            <div className="pick-title">{CARDIO_KIND_LABEL[c.kind]}</div>
+            <div className="pick-sub">
+              {[
+                `${fmtNum(Number(c.duration_min))} min`,
+                Number(c.distance_km) > 0 ? `${fmtNum(Number(c.distance_km), 2)} km` : '',
+                c.calories > 0 ? `${c.calories} kcal` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          </div>
+          <button className="btn btn-danger btn-sm" aria-label="Delete cardio" onClick={() => remove('cardio_sessions', c.id)}>
+            ✕
+          </button>
+        </div>
+      ))}
+      {!cardioOpen ? (
+        <button className="btn btn-ghost btn-sm" onClick={() => setCardioOpen(true)}>
+          + Log cardio (run, row, ride…)
+        </button>
+      ) : (
+        <div className="wo-cardio-form">
+          <div className="cd-kind-grid">
+            {CARDIO_KINDS.map((k) => (
+              <button key={k} className={`cd-kind ${cardioKind === k ? 'active' : ''}`} onClick={() => setCardioKind(k)}>
+                <span className="cd-kind-icon">{CARDIO_KIND_ICON[k]}</span>
+                <span>{CARDIO_KIND_LABEL[k]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="form-grid" style={{ marginTop: 8 }}>
+            <div>
+              <label className="field">Time (min)</label>
+              <input type="number" inputMode="numeric" value={cardioMin} autoFocus placeholder="e.g. 28"
+                onChange={(e) => setCardioMin(e.target.value)} />
+            </div>
+            <div>
+              <label className="field">Distance (km)</label>
+              <input type="number" inputMode="decimal" value={cardioKm} placeholder="e.g. 5"
+                onChange={(e) => setCardioKm(e.target.value)} />
+            </div>
+            <div>
+              <label className="field">Calories</label>
+              <input type="number" inputMode="numeric" value={cardioCals} placeholder="optional"
+                onChange={(e) => setCardioCals(e.target.value)} />
+            </div>
+          </div>
+          <div className="wo-cardio-actions">
+            <button className="btn btn-ghost btn-sm" onClick={() => setCardioOpen(false)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" disabled={!Number(cardioMin)} onClick={logSessionCardio}>
+              {Number(cardioMin)
+                ? `Log ${CARDIO_KIND_LABEL[cardioKind]} · ${Math.round(Number(cardioMin))} min`
+                : 'Enter time'}
+            </button>
+          </div>
+        </div>
+      )}
+      {sessionCardio.length === 0 && !cardioOpen && (
+        <p className="wo-cardio-hint">A run, row or ride logged here counts as cardio for the week — no need to re-log it.</p>
+      )}
+    </Card>
+  );
+
   // ── Render: active session ───────────────────────────────────────────────
   const elapsedMin = active.started_at
     ? Math.max(0, Math.floor((Date.now() - new Date(active.started_at).getTime()) / 60000))
     : 0;
   const doneCount = sessionSets.filter((s) => s.done).length;
+  const summary = [
+    `${elapsedMin} min`,
+    sessionSets.length ? `${doneCount}/${sessionSets.length} sets` : null,
+    sessionCardio.length ? `${sessionCardio.length} cardio` : null,
+  ].filter(Boolean);
+  if (summary.length === 1) summary.push('0 sets'); // nothing logged yet
   const allSetsDone = (exerciseId: string) => {
     const rows = sessionSets.filter((s) => s.exercise_id === exerciseId);
     return rows.length > 0 && rows.every((s) => s.done);
@@ -672,7 +800,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <>
       <ScreenHeader
         title={stripDayPrefix(active.name || 'Session')}
-        subtitle={`${fmtDayShort(active.date)} · ${elapsedMin} min · ${doneCount}/${sessionSets.length} sets · ${saving ? 'saving…' : 'saved ✓'}`}
+        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saving ? 'saving…' : 'saved ✓'}`}
         onMenu={onMenu}
       >
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
@@ -689,8 +817,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         {gymMode ? (
           exerciseIds.length === 0 ? (
             <>
-              <div className="cf-callout">No exercises in this session yet — add one to get going.</div>
+              <div className="cf-callout">No exercises in this session yet — add one, or log a run below.</div>
               {addExerciseControl('card')}
+              {renderCardioBlock()}
             </>
           ) : (
             <>
@@ -728,6 +857,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 )}
               </div>
               {addExerciseControl('plain')}
+              {renderCardioBlock()}
               <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession}>
                 Discard session
               </button>
@@ -737,6 +867,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           <>
             {exerciseIds.map((exerciseId) => renderExercise(exerciseId, false))}
             {addExerciseControl('card')}
+            {renderCardioBlock()}
             <Card title="Session notes">
               <textarea
                 defaultValue={active.notes}

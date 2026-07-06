@@ -93,6 +93,19 @@ export const CARDIO_KIND_LABEL: Record<CardioKind, string> = {
 
 export const CARDIO_KINDS = Object.keys(CARDIO_KIND_LABEL) as CardioKind[];
 
+export const CARDIO_KIND_ICON: Record<CardioKind, string> = {
+  run: '🏃',
+  bike: '🚴',
+  row: '🚣',
+  swim: '🏊',
+  walk: '🚶',
+  hike: '🥾',
+  stairs: '🪜',
+  elliptical: '⬭',
+  hiit: '⚡',
+  other: '•',
+};
+
 export const MEAL_LABEL: Record<MealType, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',

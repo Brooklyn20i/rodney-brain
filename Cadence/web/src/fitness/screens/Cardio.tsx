@@ -2,21 +2,8 @@ import { useMemo, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { weekOf } from '../lib/fitnessCalc';
-import { CARDIO_KIND_LABEL, CARDIO_KINDS, fmtDayShort, fmtNum, todayISO } from '../lib/util';
+import { CARDIO_KIND_ICON as KIND_ICON, CARDIO_KIND_LABEL, CARDIO_KINDS, fmtDayShort, fmtNum, todayISO } from '../lib/util';
 import type { CardioKind } from '../lib/types';
-
-const KIND_ICON: Record<CardioKind, string> = {
-  run: '🏃',
-  bike: '🚴',
-  row: '🚣',
-  swim: '🏊',
-  walk: '🚶',
-  hike: '🥾',
-  stairs: '🪜',
-  elliptical: '⬭',
-  hiit: '⚡',
-  other: '•',
-};
 
 const DURATION_PRESETS = [15, 20, 30, 45, 60];
 

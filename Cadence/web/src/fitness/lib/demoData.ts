@@ -258,6 +258,7 @@ export function loadDemoData(): CadenceFitnessData {
           distance_km: daysAgo % 2 === 0 ? 5.2 : 15,
           avg_hr: 142 + (daysAgo % 4),
           calories: 320 + (daysAgo % 3) * 30,
+          workout_id: null,
           notes: '',
         },
         date

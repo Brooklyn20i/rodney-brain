@@ -158,6 +158,10 @@ export interface CardioSession {
   distance_km: number;
   avg_hr: number;
   calories: number;
+  // When a run/row/ride is logged inside a gym session it's linked here, so it
+  // shows within that workout and is cleaned up if the session is discarded.
+  // Standalone cardio (logged on the Cardio screen) leaves this null.
+  workout_id: string | null;
   notes: string;
   created_at: string;
   updated_at: string;
@@ -177,14 +181,36 @@ export interface SaunaSession {
   deleted_at: string | null;
 }
 
-// One row per day of scale data (Renpho or manual).
+// One row per day of scale/body-composition data (Renpho or manual).
 export interface BodyMetric {
   id: string;
   owner_id: string;
   date: string;
+  measurement_at?: string | null;
   weight_kg: number;
   body_fat_pct: number | null;
   muscle_mass_kg: number | null;
+  body_score?: number | null;
+  body_fat_mass_kg?: number | null;
+  fat_free_mass_kg?: number | null;
+  skeletal_muscle_mass_kg?: number | null;
+  bmi?: number | null;
+  bmr_kcal?: number | null;
+  visceral_fat?: number | null;
+  subcutaneous_fat_pct?: number | null;
+  bone_mass_kg?: number | null;
+  protein_mass_kg?: number | null;
+  body_water_mass_kg?: number | null;
+  smi_kg_m2?: number | null;
+  whr?: number | null;
+  metabolic_age?: number | null;
+  height_cm?: number | null;
+  report_age?: number | null;
+  report_sex?: string | null;
+  optimal_weight_kg?: number | null;
+  target_weight_delta_kg?: number | null;
+  target_fat_mass_delta_kg?: number | null;
+  target_muscle_mass_delta_kg?: number | null;
   source: MetricSource;
   notes: string;
   created_at: string;

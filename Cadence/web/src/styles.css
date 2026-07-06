@@ -1625,6 +1625,11 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 .wo-discard { display: block; margin: 18px auto 0; color: var(--red); }
 .wo-chip-btn { cursor: pointer; font-family: inherit; }
+
+/* In-session cardio logger */
+.wo-cardio-form { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.wo-cardio-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.wo-cardio-hint { font-size: 12px; color: var(--text3); margin: 8px 0 0; }
 .wo-rest-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .wo-rest-picker .cd-dur { flex: 0 0 auto; min-width: 52px; padding: 9px 10px; }
 .wo-rest-note { font-size: 11px; color: var(--text3); flex-basis: 100%; }
