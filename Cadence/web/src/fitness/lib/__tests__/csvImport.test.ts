@@ -68,7 +68,7 @@ describe('parseWeightCSV', () => {
     ].join('\n');
     const r = parseWeightCSV(csv);
     expect(r.rows).toHaveLength(2);
-    expect(r.rows[0]).toEqual({ date: '2026-06-01', weight_kg: 89.9, body_fat_pct: 21.2, muscle_mass_kg: 60 });
+    expect(r.rows[0]).toEqual({ date: '2026-06-01', measurement_at: '2026-06-01 21:30', weight_kg: 89.9, body_fat_pct: 21.2, muscle_mass_kg: 60 });
   });
 
   it('converts pounds when the header says lb', () => {

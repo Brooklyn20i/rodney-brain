@@ -12,6 +12,7 @@ export function Body({ onMenu }: { onMenu: () => void }) {
   const today = todayISO();
 
   const rows = [...data.body_metrics].sort((a, b) => b.date.localeCompare(a.date));
+  const latestBody = rows[0];
   const trend = weightTrend(data.body_metrics);
   const latest = trend[trend.length - 1];
   const delta7 = trendDelta(trend, 7);
@@ -38,6 +39,9 @@ export function Body({ onMenu }: { onMenu: () => void }) {
   };
 
   const spark = trend.slice(-30).map((p) => ({ label: fmtDayShort(p.date), value: Number(p.weight_kg) }));
+  const metricValue = (value: number | null | undefined, unit = '', decimals = 1) =>
+    value == null ? '—' : `${fmtNum(Number(value), decimals)}${unit}`;
+  const metricKg = (value: number | null | undefined) => (value == null ? '—' : fmtKg(Number(value)));
 
   return (
     <>
@@ -61,6 +65,28 @@ export function Body({ onMenu }: { onMenu: () => void }) {
         {spark.length > 1 && (
           <Card title="Weight, last 30 entries">
             <SparkBars points={spark} formatTip={(p) => `${p.label}: ${p.value}kg`} />
+          </Card>
+        )}
+
+        {latestBody && (
+          <Card title={`Latest body composition — ${fmtDayShort(latestBody.date)}`}>
+            <div className="cf-metric-grid">
+              <Metric label="Body fat mass" value={metricKg(latestBody.body_fat_mass_kg)} />
+              <Metric label="Fat-free mass" value={metricKg(latestBody.fat_free_mass_kg)} />
+              <Metric label="Skeletal muscle" value={metricKg(latestBody.skeletal_muscle_mass_kg)} />
+              <Metric label="Muscle mass" value={metricKg(latestBody.muscle_mass_kg)} />
+              <Metric label="BMI" value={metricValue(latestBody.bmi, '', 1)} />
+              <Metric label="BMR" value={latestBody.bmr_kcal != null ? `${Math.round(Number(latestBody.bmr_kcal))} kcal` : '—'} />
+              <Metric label="Visceral fat" value={metricValue(latestBody.visceral_fat, '', 1)} />
+              <Metric label="Subcutaneous fat" value={metricValue(latestBody.subcutaneous_fat_pct, '%', 1)} />
+              <Metric label="Body water" value={metricKg(latestBody.body_water_mass_kg)} />
+              <Metric label="Bone mass" value={metricKg(latestBody.bone_mass_kg)} />
+              <Metric label="Protein mass" value={metricKg(latestBody.protein_mass_kg)} />
+              <Metric label="WHR" value={metricValue(latestBody.whr, '', 2)} />
+              <Metric label="SMI" value={latestBody.smi_kg_m2 != null ? `${fmtNum(Number(latestBody.smi_kg_m2), 1)} kg/m²` : '—'} />
+              <Metric label="Metabolic age" value={latestBody.metabolic_age != null ? String(Math.round(Number(latestBody.metabolic_age))) : '—'} />
+              <Metric label="Body score" value={latestBody.body_score != null ? `${Math.round(Number(latestBody.body_score))}/100` : '—'} />
+            </div>
           </Card>
         )}
 
@@ -106,6 +132,9 @@ export function Body({ onMenu }: { onMenu: () => void }) {
                   <th>Date</th>
                   <th>Weight</th>
                   <th>Body fat</th>
+                  <th>Fat mass</th>
+                  <th>Skeletal muscle</th>
+                  <th>BMI</th>
                   <th>Source</th>
                   <th></th>
                 </tr>
@@ -116,6 +145,9 @@ export function Body({ onMenu }: { onMenu: () => void }) {
                     <td>{fmtDayShort(m.date)}</td>
                     <td>{fmtKg(Number(m.weight_kg))}</td>
                     <td>{m.body_fat_pct != null ? `${fmtNum(Number(m.body_fat_pct), 1)}%` : '—'}</td>
+                    <td>{metricKg(m.body_fat_mass_kg)}</td>
+                    <td>{metricKg(m.skeletal_muscle_mass_kg)}</td>
+                    <td>{metricValue(m.bmi, '', 1)}</td>
                     <td>{SOURCE_LABEL[m.source]}</td>
                     <td>
                       <button className="btn btn-danger btn-sm" onClick={() => remove('body_metrics', m.id)}>

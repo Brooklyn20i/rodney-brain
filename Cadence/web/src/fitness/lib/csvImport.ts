@@ -21,9 +21,24 @@ export interface RecoveryImportRow {
 
 export interface BodyImportRow {
   date: string;
+  measurement_at?: string;
   weight_kg?: number;
   body_fat_pct?: number;
   muscle_mass_kg?: number;
+  body_score?: number;
+  body_fat_mass_kg?: number;
+  fat_free_mass_kg?: number;
+  skeletal_muscle_mass_kg?: number;
+  bmi?: number;
+  bmr_kcal?: number;
+  visceral_fat?: number;
+  subcutaneous_fat_pct?: number;
+  bone_mass_kg?: number;
+  protein_mass_kg?: number;
+  body_water_mass_kg?: number;
+  smi_kg_m2?: number;
+  whr?: number;
+  metabolic_age?: number;
 }
 
 // Minimal RFC-4180-ish parser: quoted fields, embedded commas/newlines.
@@ -164,7 +179,7 @@ export function parseWhoopCSV(text: string): ImportResult<RecoveryImportRow> {
   return finish(byDate, skipped);
 }
 
-// Weight history CSV (Renpho export, spreadsheet, etc.).
+// Weight/body-composition history CSV (Renpho export, spreadsheet, etc.).
 export function parseWeightCSV(text: string): ImportResult<BodyImportRow> {
   const grid = parseCSV(text);
   if (grid.length < 2) return { rows: [], skipped: 0, from: null, to: null };
@@ -172,25 +187,65 @@ export function parseWeightCSV(text: string): ImportResult<BodyImportRow> {
 
   const dateCol = findCol(headers, ['date'], ['time']);
   const weightCol = findCol(headers, ['weight']);
-  const fatCol = findCol(headers, ['body fat'], ['fat']);
-  const muscleCol = findCol(headers, ['muscle']);
+  const cols = {
+    fatPct: findCol(headers, ['body fat'], ['fat %'], ['fat', '%']),
+    fatMass: findCol(headers, ['body fat mass'], ['fat mass']),
+    fatFree: findCol(headers, ['fat-free mass'], ['fat free mass'], ['lean body mass'], ['fat-free weight']),
+    muscle: findCol(headers, ['muscle mass'], ['muscle']),
+    skeletalMuscle: findCol(headers, ['skeletal muscle']),
+    bmi: findCol(headers, ['bmi']),
+    bmr: findCol(headers, ['bmr'], ['basal metabolic']),
+    visceral: findCol(headers, ['visceral fat']),
+    subcutaneous: findCol(headers, ['subcutaneous fat']),
+    bone: findCol(headers, ['bone mass']),
+    protein: findCol(headers, ['protein mass'], ['protein']),
+    water: findCol(headers, ['body water mass'], ['body water']),
+    smi: findCol(headers, ['smi'], ['skeletal muscle index']),
+    whr: findCol(headers, ['whr'], ['waist-to-hip'], ['waist hip']),
+    metabolicAge: findCol(headers, ['metabolic age']),
+    score: findCol(headers, ['body score'], ['score']),
+  };
   if (dateCol === -1 || weightCol === -1) return { rows: [], skipped: grid.length - 1, from: null, to: null };
   const lbs = headers[weightCol].includes('lb');
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const maybe = (line: string[], col: number) => (col === -1 ? undefined : num(line[col]));
+  const put = (row: BodyImportRow, key: keyof BodyImportRow, value: number | undefined, round: (n: number) => number) => {
+    if (value !== undefined && value > 0) (row as unknown as Record<string, number>)[key] = round(value);
+  };
 
   const byDate = new Map<string, BodyImportRow>();
   let skipped = 0;
   for (const line of grid.slice(1)) {
-    const date = toISO(line[dateCol] ?? '');
+    const rawDate = line[dateCol] ?? '';
+    const date = toISO(rawDate);
     const weight = num(line[weightCol]);
     if (!date || weight === undefined || weight <= 0) {
       skipped++;
       continue;
     }
-    const row: BodyImportRow = { date, weight_kg: Math.round((lbs ? weight * 0.45359237 : weight) * 100) / 100 };
-    const fat = num(line[fatCol]);
-    const muscle = num(line[muscleCol]);
-    if (fat !== undefined && fat > 0) row.body_fat_pct = Math.round(fat * 10) / 10;
-    if (muscle !== undefined && muscle > 0) row.muscle_mass_kg = Math.round(muscle * 100) / 100;
+    const row: BodyImportRow = {
+      date,
+      measurement_at: rawDate.trim() || undefined,
+      weight_kg: round2(lbs ? weight * 0.45359237 : weight),
+    };
+    put(row, 'body_fat_pct', maybe(line, cols.fatPct), round1);
+    put(row, 'body_fat_mass_kg', maybe(line, cols.fatMass), round2);
+    put(row, 'fat_free_mass_kg', maybe(line, cols.fatFree), round2);
+    put(row, 'muscle_mass_kg', maybe(line, cols.muscle), round2);
+    put(row, 'skeletal_muscle_mass_kg', maybe(line, cols.skeletalMuscle), round2);
+    put(row, 'bmi', maybe(line, cols.bmi), round1);
+    put(row, 'bmr_kcal', maybe(line, cols.bmr), Math.round);
+    put(row, 'visceral_fat', maybe(line, cols.visceral), round1);
+    put(row, 'subcutaneous_fat_pct', maybe(line, cols.subcutaneous), round1);
+    put(row, 'bone_mass_kg', maybe(line, cols.bone), round2);
+    put(row, 'protein_mass_kg', maybe(line, cols.protein), round2);
+    put(row, 'body_water_mass_kg', maybe(line, cols.water), round2);
+    put(row, 'smi_kg_m2', maybe(line, cols.smi), round1);
+    put(row, 'whr', maybe(line, cols.whr), round2);
+    put(row, 'metabolic_age', maybe(line, cols.metabolicAge), Math.round);
+    put(row, 'body_score', maybe(line, cols.score), Math.round);
     byDate.set(date, row); // last reading of the day wins
   }
   return finish(byDate, skipped);

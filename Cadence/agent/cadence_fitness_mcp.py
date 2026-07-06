@@ -394,7 +394,15 @@ _RECOVERY_KEYS = {
     "recovery_pct", "strain", "sleep_hours", "sleep_performance_pct",
     "hrv_ms", "resting_hr", "active_energy_kcal", "steps", "notes",
 }
-_BODY_KEYS = {"weight_kg", "body_fat_pct", "muscle_mass_kg", "notes"}
+_BODY_KEYS = {
+    "measurement_at", "weight_kg", "body_fat_pct", "muscle_mass_kg",
+    "body_score", "body_fat_mass_kg", "fat_free_mass_kg", "skeletal_muscle_mass_kg",
+    "bmi", "bmr_kcal", "visceral_fat", "subcutaneous_fat_pct", "bone_mass_kg",
+    "protein_mass_kg", "body_water_mass_kg", "smi_kg_m2", "whr", "metabolic_age",
+    "height_cm", "report_age", "report_sex", "optimal_weight_kg",
+    "target_weight_delta_kg", "target_fat_mass_delta_kg", "target_muscle_mass_delta_kg",
+    "notes",
+}
 _BULK_CHUNK = 200
 
 
