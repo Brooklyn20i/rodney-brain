@@ -119,6 +119,13 @@ export function History({ onMenu }: { onMenu: () => void }) {
                       for (const s of data.workout_sets.filter((x) => x.workout_id === w.id)) {
                         await remove('workout_sets', s.id);
                       }
+                      // Also remove any cardio logged inside this session, so a
+                      // deleted run doesn't linger in the weekly cardio totals with
+                      // a dangling workout_id (the in-session cardio block only ever
+                      // shows for the active session, so it'd be un-deletable).
+                      for (const c of data.cardio_sessions.filter((x) => x.workout_id === w.id)) {
+                        await remove('cardio_sessions', c.id);
+                      }
                       await remove('workouts', w.id);
                     }}
                   />

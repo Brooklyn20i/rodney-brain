@@ -111,6 +111,10 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>): Promise<Row<K>> => {
+    // Snapshot the row before the optimistic write so a permanent (non-network)
+    // failure can roll back — otherwise the UI keeps showing an edit the DB
+    // rejected until the next reload silently snaps it back ("my change vanished").
+    const prevRow = (data as any)[table].find((r: any) => r.id === id);
     setData((prev) => ({
       ...prev,
       [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
@@ -129,6 +133,7 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
       .select()
       .single();
     if (error) {
+      if (prevRow) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? prevRow : r)) }));
       setSyncError(error.message || 'Save failed');
       throw error;
     }

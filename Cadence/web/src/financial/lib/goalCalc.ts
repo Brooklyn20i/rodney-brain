@@ -100,7 +100,9 @@ export function computeRunway(
   const otherC = nwC - managedC;
 
   return {
-    progressFraction: targetC > 0 ? nwC / targetC : 0,
+    // Floor at 0: with a negative net worth (debt > assets) a raw ratio goes
+    // negative and would render as a negative-width progress bar.
+    progressFraction: targetC > 0 ? Math.max(0, nwC / targetC) : 0,
     monthsOperatingOnly: monthsToTarget(managedC, otherC, targetC, contributionC, 0),
     monthsWithGrowth: monthsToTarget(
       managedC,

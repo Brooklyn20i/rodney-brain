@@ -108,7 +108,11 @@ export function computeStressTests(
   );
 
   // Vacancy scenario: the largest-rent property loses 3 months of rent.
-  const largestRent = properties.reduce((max, p) => Math.max(max, p.annual_rent), 0);
+  // The in-app Property editor only writes weekly_rent (annual_rent comes from
+  // the legacy CSV import), so derive annual rent from weekly when it's the only
+  // one set — otherwise this stress row reads $0 and falsely reports "no risk".
+  const annualRentOf = (p: (typeof properties)[number]) => Math.max(p.annual_rent || 0, (p.weekly_rent ?? 0) * 52);
+  const largestRent = properties.reduce((max, p) => Math.max(max, annualRentOf(p)), 0);
   const vacancyC = Math.round(toCents(largestRent) / 4);
 
   const propertyDown10C = -Math.round(propertyC * 0.1);
