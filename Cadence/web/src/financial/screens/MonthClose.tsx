@@ -4,12 +4,26 @@ import { ScreenHeader, Card, Metric } from '../components/bits';
 import { MonthCloseWizard } from '../components/MonthCloseWizard';
 import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
-import { exportMonthlyAssessmentPdf } from '../lib/pdf';
 
 export function MonthClose({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
   const [showWizard, setShowWizard] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const months = data.monthly_metrics;
+
+  // The PDF renderer (@react-pdf, ~220 KB gzip) is loaded ONLY when someone
+  // actually exports — not baked into the Month Close chunk — so viewing this
+  // screen stays light. Dynamic import; the chunk is cached after first use.
+  const downloadPdf = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { exportMonthlyAssessmentPdf } = await import('../lib/pdf');
+      await exportMonthlyAssessmentPdf(data);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (months.length === 0) {
     return (
@@ -38,8 +52,8 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
         <button className="btn btn-secondary btn-sm" onClick={() => setShowWizard((s) => !s)}>
           {showWizard ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
         </button>
-        <button className="btn btn-primary btn-sm" onClick={() => exportMonthlyAssessmentPdf(data)}>
-          Download monthly PDF
+        <button className="btn btn-primary btn-sm" onClick={downloadPdf} disabled={exporting}>
+          {exporting ? 'Preparing…' : 'Download monthly PDF'}
         </button>
       </ScreenHeader>
       <div className="screen-content">
