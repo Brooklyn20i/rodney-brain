@@ -39,7 +39,24 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   const liveFor = (h: (typeof data.investment_holdings)[number]) => {
     const q = quotes[yahooSymbol(h)];
-    return q ? liveNativeValue(h.units, q.price) : null;
+    if (!q) return null;
+    // Guard: the quote is in the LISTING's currency (Yahoo returns USD for a US
+    // listing), but native_value is stored in the HOLDING's currency. Applying
+    // a USD quote to an AUD-labelled holding would write a USD number into an
+    // AUD field — a silent ~1.5× error. Only reprice when the currencies match;
+    // cross-currency conversion isn't done here (FX rates are AUD-pegged).
+    if ((q.currency || '').toUpperCase() !== (h.currency || 'AUD').toUpperCase()) return null;
+    return liveNativeValue(h.units, q.price);
+  };
+
+  // A quote exists but its currency doesn't match the holding's → return the
+  // quote currency so the row can explain why no live reprice is offered.
+  const quoteCurrencyMismatch = (h: (typeof data.investment_holdings)[number]) => {
+    const q = quotes[yahooSymbol(h)];
+    if (!q) return null;
+    const qc = (q.currency || '').toUpperCase();
+    const hc = (h.currency || 'AUD').toUpperCase();
+    return qc && qc !== hc ? { quote: qc, holding: hc } : null;
   };
 
   const applyLive = async (id: string) => {
@@ -250,7 +267,16 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                       </td>
                       <td>
                         {live === null ? (
-                          <span style={{ color: 'var(--text3)' }}>—</span>
+                          (() => {
+                            const mm = quoteCurrencyMismatch(h);
+                            return mm ? (
+                              <span style={{ fontSize: 11, color: 'var(--orange)' }} title={`Live quote is in ${mm.quote} but this holding is set to ${mm.holding}. Set the holding's currency to ${mm.quote} to reprice from live.`}>
+                                {mm.quote} quote
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text3)' }}>—</span>
+                            );
+                          })()
                         ) : (
                           <>
                             {formatMoney(live)}

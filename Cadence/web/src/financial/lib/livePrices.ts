@@ -40,10 +40,13 @@ export function liveNativeValue(units: number, price: number): number {
 // Fictional demo quotes so VITE_DEMO=1 exercises the whole live-pricing UI
 // with no network. Chosen to sit near (not equal to) the demo holdings'
 // stored values so the delta column visibly does something.
+// Currencies match the demo holdings (all AUD) so the demo exercises the
+// live-apply path; the reprice screen guards on currency match, so a real
+// USD-listed holding left as AUD is caught rather than mis-repriced.
 const DEMO_QUOTES: QuoteMap = {
   'BTC-AUD': { price: 88_900, currency: 'AUD' },
-  MSFT: { price: 512, currency: 'USD' },
-  VOO: { price: 845, currency: 'USD' },
+  MSFT: { price: 512, currency: 'AUD' },
+  VOO: { price: 845, currency: 'AUD' },
 };
 
 export async function fetchLiveQuotes(symbols: string[], demo: boolean): Promise<QuoteMap> {

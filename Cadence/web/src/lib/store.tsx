@@ -189,18 +189,43 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   // signup) has no membership yet, so we provision them their own workspace —
   // giving them an isolated space (own owner_id + own workspace) that no other
   // user can see. Existing users just load their workspace.
+  //
+  // Two robustness properties matter here:
+  //  • Determinism — a user in ≥2 workspaces (their own + an accepted invite)
+  //    must always land in the SAME one, so we order by joined_at (oldest =
+  //    their own provisioned space) instead of relying on an unordered limit(1).
+  //  • No silent dead-end — if provisioning fails (transient blip), leaving
+  //    workspace=null means every insert silently fails on NOT NULL
+  //    workspace_id. So a failure surfaces a syncError and auto-retries with
+  //    backoff (bumping provisionNonce) rather than stranding the user.
+  const [provisionNonce, setProvisionNonce] = useState(0);
+  const provisionAttempts = useRef(0);
+  const provisionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!session || needsPasswordSet) { setWorkspace(null); setWorkspaceMembers([]); return; }
     let cancelled = false;
+    const retry = (msg: string) => {
+      if (cancelled) return;
+      if (provisionAttempts.current >= 4) {
+        setSyncError('Could not finish setting up your workspace. Please reload the page.');
+        return;
+      }
+      const delay = Math.min(8000, 1000 * 2 ** provisionAttempts.current);
+      provisionAttempts.current += 1;
+      setSyncError(`${msg} Retrying…`);
+      provisionTimer.current = setTimeout(() => setProvisionNonce((n) => n + 1), delay);
+    };
     (async () => {
-      const { data: wm } = await supabase
+      const { data: wm, error: wmErr } = await supabase
         .from('workspace_members')
         .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
         .eq('user_id', session.user.id)
+        .order('joined_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       if (cancelled) return;
-      if ((wm as any)?.workspaces) { setWorkspace((wm as any).workspaces as Workspace); return; }
+      if (wmErr) { retry('Couldn’t load your workspace.'); return; }
+      if ((wm as any)?.workspaces) { provisionAttempts.current = 0; setWorkspace((wm as any).workspaces as Workspace); return; }
       // No workspace — first login. Provision one server-side: an atomic,
       // idempotent SECURITY DEFINER function creates the workspace + admin
       // membership (a direct client insert is blocked by a column grant on
@@ -209,16 +234,22 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       const { data: wid, error: rpcErr } = await supabase.rpc('provision_workspace', {
         ws_name: name ? `${name}'s Cadence` : 'My Cadence',
       });
-      if (rpcErr || !wid || cancelled) return; // pre-migration: owner_id still protects data
+      if (cancelled) return;
+      if (rpcErr || !wid) { retry('Setting up your workspace didn’t complete.'); return; }
       const { data: ws } = await supabase
         .from('workspaces')
         .select('id, name, created_by, plan, created_at, updated_at, deleted_at')
         .eq('id', wid as string)
         .maybeSingle();
-      if (ws && !cancelled) setWorkspace(ws as Workspace);
+      if (cancelled) return;
+      if (ws) { provisionAttempts.current = 0; setWorkspace(ws as Workspace); }
+      else retry('Setting up your workspace didn’t complete.');
     })();
-    return () => { cancelled = true; };
-  }, [session, needsPasswordSet]);
+    return () => {
+      cancelled = true;
+      if (provisionTimer.current) { clearTimeout(provisionTimer.current); provisionTimer.current = null; }
+    };
+  }, [session, needsPasswordSet, provisionNonce]);
 
   // Fetch all workspace members whenever the workspace is resolved.
   useEffect(() => {
@@ -463,14 +494,18 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.rpc('accept_workspace_invite', { token });
     if (error) return { error: error.message };
     if ((data as any)?.error) return { error: (data as any).error };
-    // Refresh workspace after acceptance.
-    const { data: wm } = await supabase
-      .from('workspace_members')
-      .select('workspace_id, workspaces(id, name, created_by, plan, created_at, updated_at, deleted_at)')
-      .eq('user_id', session!.user.id)
-      .limit(1)
-      .single();
-    if (wm) setWorkspace((wm as any).workspaces as Workspace ?? null);
+    // Switch to the workspace we just joined. The RPC returns {ok, workspace_id},
+    // so target that specific workspace — a user who's in several workspaces must
+    // land in the one they just accepted, not an arbitrary membership row.
+    const acceptedId = (data as any)?.workspace_id as string | undefined;
+    if (acceptedId) {
+      const { data: ws } = await supabase
+        .from('workspaces')
+        .select('id, name, created_by, plan, created_at, updated_at, deleted_at')
+        .eq('id', acceptedId)
+        .maybeSingle();
+      if (ws) setWorkspace(ws as Workspace);
+    }
     return { ok: true };
   };
 
