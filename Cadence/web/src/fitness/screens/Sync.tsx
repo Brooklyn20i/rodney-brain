@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { supabase } from '../../lib/supabase';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { fmtDayShort, fmtNum, todayISO } from '../lib/util';
 import { parseWeightCSV, parseWhoopCSV, type BodyImportRow, type RecoveryImportRow } from '../lib/csvImport';
+import type { WhoopConnection } from '../lib/types';
+import { getWhoopConnection, whoopConnect, whoopDisconnect, whoopSyncNow } from '../lib/whoopApi';
 
 type PendingImport =
   | { kind: 'recovery'; rows: RecoveryImportRow[]; from: string; to: string; skipped: number; file: string }
@@ -47,6 +49,94 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
     setCopied(label);
     setTimeout(() => setCopied(''), 2000);
   };
+
+  // ── Native WHOOP API connection ────────────────────────────────────────
+  const [whoop, setWhoop] = useState<WhoopConnection | null>(null);
+  const [whoopLoaded, setWhoopLoaded] = useState(false);
+  const [whoopBusy, setWhoopBusy] = useState(false);
+  const [whoopMsg, setWhoopMsg] = useState('');
+
+  const refreshWhoop = async () => {
+    try {
+      setWhoop(await getWhoopConnection());
+    } catch {
+      // status is best-effort; leave prior value
+    } finally {
+      setWhoopLoaded(true);
+    }
+  };
+
+  // Load status on mount, react to the OAuth redirect banner, and keep the
+  // card live while a sync runs server-side (realtime on whoop_connection).
+  useEffect(() => {
+    refreshWhoop();
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get('whoop');
+    if (outcome === 'connected') setWhoopMsg('✓ WHOOP connected — pulling your recent recovery…');
+    else if (outcome === 'error') setWhoopMsg(`WHOOP connect failed: ${params.get('reason') || 'unknown error'}`);
+    if (outcome) {
+      params.delete('whoop');
+      params.delete('reason');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+    const channel = supabase
+      .channel('whoop_connection_status')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'fitness', table: 'whoop_connection' },
+        () => refreshWhoop(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const onConnectWhoop = async () => {
+    setWhoopBusy(true);
+    setWhoopMsg('');
+    try {
+      await whoopConnect(window.location.origin + window.location.pathname);
+      // whoopConnect navigates away on success; if we're still here it threw.
+    } catch (e) {
+      setWhoopMsg(e instanceof Error ? e.message : 'Could not start WHOOP connect.');
+      setWhoopBusy(false);
+    }
+  };
+
+  const onSyncWhoop = async () => {
+    setWhoopBusy(true);
+    setWhoopMsg('');
+    try {
+      const res = await whoopSyncNow(14);
+      setWhoopMsg(res.ok ? `✓ Synced ${res.days_written ?? 0} day(s) from WHOOP.` : `Sync failed: ${res.error}`);
+      await refreshWhoop();
+    } catch (e) {
+      setWhoopMsg(e instanceof Error ? e.message : 'Sync failed.');
+    } finally {
+      setWhoopBusy(false);
+    }
+  };
+
+  const onDisconnectWhoop = async () => {
+    if (!window.confirm('Disconnect WHOOP? Synced history stays; new data stops until you reconnect.')) return;
+    setWhoopBusy(true);
+    setWhoopMsg('');
+    try {
+      await whoopDisconnect();
+      setWhoop(null);
+      setWhoopMsg('WHOOP disconnected.');
+    } catch (e) {
+      setWhoopMsg(e instanceof Error ? e.message : 'Disconnect failed.');
+    } finally {
+      setWhoopBusy(false);
+    }
+  };
+
+  const whoopSyncFresh = freshness(
+    whoop?.last_sync_at ? { date: whoop.last_sync_at.slice(0, 10) } : null,
+  );
 
   // ── Historical backfill (Whoop export CSV / weight history CSV) ─────────
   const whoopFileRef = useRef<HTMLInputElement>(null);
@@ -127,8 +217,63 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Sync" subtitle="Whoop + Renpho → Apple Health → Cadence." onMenu={onMenu} />
+      <ScreenHeader title="Sync" subtitle="WHOOP via API · Renpho via Apple Health." onMenu={onMenu} />
       <div className="screen-content">
+        <Card title="WHOOP (direct API)">
+          {!whoopLoaded ? (
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: 0 }}>Checking connection…</p>
+          ) : whoop ? (
+            <>
+              <div className="pick-row">
+                <div className="pick-main">
+                  <div className="pick-title">Recovery, strain & sleep</div>
+                  <div className="pick-sub">
+                    Connected{whoop.whoop_user_id ? ` · WHOOP user ${whoop.whoop_user_id}` : ''}
+                    {whoop.last_sync_at ? ` · last sync ${fmtDayShort(whoop.last_sync_at.slice(0, 10))}` : ' · not synced yet'}
+                  </div>
+                </div>
+                <Tag
+                  label={whoop.last_sync_status === 'error' ? 'error' : whoopSyncFresh.label}
+                  tone={whoop.last_sync_status === 'error' ? 'bad' : whoopSyncFresh.tone === 'warn' ? 'warn' : whoopSyncFresh.tone}
+                />
+              </div>
+              {whoop.last_sync_status === 'error' && whoop.last_sync_error && (
+                <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>
+                  Last sync error: {whoop.last_sync_error}
+                </p>
+              )}
+              <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
+                Recovery, strain, HRV, resting HR and sleep pull straight from WHOOP into the Recovery screen
+                (source <code>whoop</code>). An hourly job keeps it fresh; use Sync now for an immediate pull.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <button className="btn btn-primary" onClick={onSyncWhoop} disabled={whoopBusy}>
+                  {whoopBusy ? 'Working…' : 'Sync now'}
+                </button>
+                <button className="btn btn-ghost" onClick={onDisconnectWhoop} disabled={whoopBusy}>
+                  Disconnect
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 0 }}>
+                Connect WHOOP once and Cadence pulls your recovery, strain, HRV, resting HR and sleep directly
+                from the WHOOP API — no phone, no Shortcut. You'll approve read-only access on WHOOP's site and
+                come straight back here.
+              </p>
+              <button className="btn btn-primary" onClick={onConnectWhoop} disabled={whoopBusy}>
+                {whoopBusy ? 'Starting…' : 'Connect WHOOP'}
+              </button>
+            </>
+          )}
+          {whoopMsg && (
+            <p style={{ fontSize: 13, marginTop: 10, color: whoopMsg.startsWith('✓') ? 'var(--green)' : 'var(--red)' }}>
+              {whoopMsg}
+            </p>
+          )}
+        </Card>
+
         <Card title="Pipeline status">
           <div className="pick-row">
             <div className="pick-main">
@@ -141,21 +286,28 @@ export function Sync({ onMenu }: { onMenu: () => void }) {
           </div>
           <div className="pick-row">
             <div className="pick-main">
-              <div className="pick-title">Recovery, sleep, energy, steps</div>
+              <div className="pick-title">Recovery, sleep, strain</div>
               <div className="pick-sub">
-                Whoop → Apple Health{lastRecovery ? ` · last row ${fmtDayShort(lastRecovery.date)}` : ''}
+                {whoop ? 'WHOOP → direct API' : 'WHOOP → API (not connected)'}
+                {lastRecovery ? ` · last row ${fmtDayShort(lastRecovery.date)}` : ''}
               </div>
             </div>
             <Tag label={recoveryFresh.label} tone={recoveryFresh.tone === 'warn' ? 'warn' : recoveryFresh.tone} />
           </div>
           <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8 }}>
-            Cadence is a web app, so it can't read Apple Health directly — an Apple Shortcut automation posts
-            the day's numbers here instead. Whoop and Renpho both write into Apple Health, so one Shortcut
-            covers everything: recovery, sleep, HRV, weight and body fat.
+            Recovery, strain, HRV and sleep now come straight from the WHOOP API (above). Weight and body fat
+            come from your Renpho scale via Apple Health — Cadence is a web app and can't read Apple Health
+            directly, so an Apple Shortcut posts those numbers to the endpoint below. The Shortcut can still
+            carry recovery too if you'd rather not connect WHOOP directly.
           </p>
         </Card>
 
-        <Card title="Set up the Apple Shortcut (once, ~5 min)">
+        <Card title="Renpho weight via Apple Shortcut (once, ~5 min)">
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginTop: 0 }}>
+            Renpho has no public API, so its weight and body-fat readings come through Apple Health. Renpho
+            writes to Health automatically; this Shortcut forwards the day's numbers to Cadence. Include the
+            recovery metrics too if you'd like a Health-based fallback for WHOOP.
+          </p>
           <ol className="sync-steps">
             <li>
               On your iPhone open <strong>Shortcuts</strong> → <strong>+</strong> to create a new shortcut.

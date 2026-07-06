@@ -87,6 +87,16 @@ super app via one agent account (`rbalech+cadence-kobe@gmail.com`), one grant
 per schema. The Hermes MCP servers are registered as `cadence`,
 `cadence_fitness` and `cadence_financial` in `~/.hermes/config.yaml`.
 
+**WHOOP direct API**: recovery, strain, HRV, resting HR and sleep pull straight
+from the WHOOP developer API into `fitness.recovery_metrics` (source `whoop`),
+no phone or Shortcut. Server-side OAuth (`whoop-oauth-start` /
+`whoop-oauth-callback`), tokens stored service-role-only in
+`fitness.whoop_oauth_token`, an hourly `whoop-sync` cron + a "Sync now" button
+(Fitness → Sync → WHOOP card). Setup runbook: `Cadence/docs/WHOOP_API_SETUP.md`
+(migration `0038`). **Renpho has no public API**, so weight/body-fat still flow
+Renpho → Apple Health → the `health-ingest` function (Sync screen documents the
+Shortcut).
+
 **Backfilling Whoop / weight history**: Rodney can download a monthly export
 from Whoop (a ZIP whose useful file is `physiological_cycles.csv`) and scale
 history from Renpho. Two ways in, both idempotent (upsert on owner_id+date, so

@@ -313,6 +313,23 @@ export interface AgentMessage {
   deleted_at: string | null;
 }
 
+// Status of the native WHOOP API connection (fitness.whoop_connection). Read
+// directly by the Sync screen, not part of the main data store — it's a single
+// per-owner status row, and its token material lives in a separate service-role
+// table that the client can never read. Recovery/strain/sleep still land in
+// recovery_metrics with source 'whoop'.
+export interface WhoopConnection {
+  owner_id: string;
+  whoop_user_id: string | null;
+  scopes: string;
+  connected_at: string;
+  last_sync_at: string | null;
+  last_sync_status: 'ok' | 'error' | null;
+  last_sync_error: string;
+  synced_from: string | null;
+  updated_at: string;
+}
+
 export interface CadenceFitnessData {
   exercises: Exercise[];
   programs: Program[];
