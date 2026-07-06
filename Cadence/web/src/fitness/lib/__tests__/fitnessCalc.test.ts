@@ -20,6 +20,8 @@ import {
   weeklySetsByMuscle,
   weekReport,
   weightTrend,
+  ewmaWeightTrend,
+  weightRangeStats,
   workoutTonnage,
 } from '../fitnessCalc';
 import type {
@@ -175,6 +177,55 @@ describe('weightTrend / trendDelta', () => {
   });
   it('returns null delta with too little data', () => {
     expect(trendDelta([], 7)).toBeNull();
+  });
+});
+
+describe('ewmaWeightTrend / weightRangeStats', () => {
+  const mk = (arr: { d: string; w: number }[]): BodyMetric[] =>
+    arr.map((x, i) => ({
+      id: `w${i}`,
+      date: x.d,
+      weight_kg: x.w,
+      body_fat_pct: null,
+      muscle_mass_kg: null,
+      source: 'renpho',
+      notes: '',
+      ...base,
+    }));
+
+  it('smooths noisy weigh-ins: trend swings less than the raw scale', () => {
+    // Alternating ±1kg around 80 — the EWMA should barely move.
+    const metrics = mk(
+      Array.from({ length: 20 }, (_, i) => ({ d: `2026-06-${String(i + 1).padStart(2, '0')}`, w: i % 2 === 0 ? 79 : 81 }))
+    );
+    const pts = ewmaWeightTrend(metrics, 0.1);
+    expect(pts).toHaveLength(20);
+    // Raw jumps a full 2kg every day; the trend stays inside a tight band.
+    const trendVals = pts.slice(5).map((p) => p.trend); // after warm-up
+    const spread = Math.max(...trendVals) - Math.min(...trendVals);
+    expect(spread).toBeLessThan(0.6);
+    expect(pts[0].trend).toBe(79); // seeds from the first reading
+  });
+
+  it('tracks a steady loss and reports a negative difference', () => {
+    const metrics = mk(Array.from({ length: 30 }, (_, i) => ({ d: `2026-06-${String(i + 1).padStart(2, '0')}`, w: 85 - i * 0.1 })));
+    const pts = ewmaWeightTrend(metrics);
+    const stats = weightRangeStats(pts);
+    expect(stats).not.toBeNull();
+    expect(stats!.differenceKg).toBeLessThan(0);
+    expect(stats!.startDate).toBe('2026-06-01');
+    expect(stats!.endDate).toBe('2026-06-30');
+    // Average sits between the start and end weights.
+    expect(stats!.averageKg).toBeGreaterThan(82);
+    expect(stats!.averageKg).toBeLessThan(85);
+  });
+
+  it('ignores zero/blank weigh-ins and handles empty input', () => {
+    const metrics = mk([{ d: '2026-06-01', w: 0 }, { d: '2026-06-02', w: 80 }]);
+    const pts = ewmaWeightTrend(metrics);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].weight_kg).toBe(80);
+    expect(weightRangeStats([])).toBeNull();
   });
 });
 

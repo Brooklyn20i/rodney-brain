@@ -164,6 +164,58 @@ export function trendDelta(points: TrendPoint[], days = 7): number | null {
   return last.avg - ref.avg;
 }
 
+// ── MacroFactor-style weight trend ──────────────────────────────────────────
+// The scale is noisy — water, food, salt swing daily weigh-ins ±1kg — so a raw
+// line panics you over nothing. The "trend weight" is an exponentially weighted
+// moving average that leans on history and only nudges toward each new reading,
+// giving the smooth line MacroFactor/Trendweight are loved for. alpha≈0.1 puts
+// ~10% weight on today's weigh-in (half-life ~7 readings): smooth but still
+// responsive. Compute it over the WHOLE history, then slice to a view window,
+// so the trend entering the window is already warmed up (no reset artefact).
+export interface WeightPoint {
+  date: string;
+  weight_kg: number; // raw scale reading
+  trend: number; // EWMA trend weight
+}
+
+export function ewmaWeightTrend(metrics: BodyMetric[], alpha = 0.1): WeightPoint[] {
+  const sorted = [...metrics]
+    .filter((m) => Number(m.weight_kg) > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  let t = 0;
+  return sorted.map((m, i) => {
+    const w = Number(m.weight_kg);
+    t = i === 0 ? w : t + alpha * (w - t);
+    return { date: m.date, weight_kg: w, trend: Math.round(t * 1000) / 1000 };
+  });
+}
+
+export interface WeightRangeStats {
+  averageKg: number; // mean trend weight across the window
+  differenceKg: number; // trend weight change: end − start
+  startDate: string;
+  endDate: string;
+  start: WeightPoint;
+  end: WeightPoint;
+}
+
+// Headline figures for a view window: the average trend weight and the net
+// trend change across it (what MacroFactor shows as Average / Difference).
+export function weightRangeStats(points: WeightPoint[]): WeightRangeStats | null {
+  if (points.length < 1) return null;
+  const start = points[0];
+  const end = points[points.length - 1];
+  const averageKg = points.reduce((s, p) => s + p.trend, 0) / points.length;
+  return {
+    averageKg: Math.round(averageKg * 100) / 100,
+    differenceKg: Math.round((end.trend - start.trend) * 100) / 100,
+    startDate: start.date,
+    endDate: end.date,
+    start,
+    end,
+  };
+}
+
 // ── Recovery analytics (long-range Whoop history) ───────────────────────────
 // Turns years of daily rows into something readable: trend series with a
 // rolling baseline, range stats vs a personal baseline, monthly aggregates,
