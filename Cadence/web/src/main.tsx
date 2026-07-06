@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import * as Sentry from '@sentry/react';
 import { CadenceProvider } from './lib/store';
 import { E2EProvider } from './lib/e2eProvider';
 import { CadenceFinancialProvider } from './financial/lib/store';
@@ -20,17 +19,30 @@ window.addEventListener('vite:preloadError', () => {
   }
 });
 
-// Sentry is enabled when VITE_SENTRY_DSN is set in the environment.
-// In dev mode it is left unconfigured (errors still appear in the console).
+// Sentry is enabled when VITE_SENTRY_DSN is set (production). Loaded DYNAMICALLY
+// so @sentry/react (~100KB gz) never touches the cold-start path — in dev / when
+// no DSN is set it isn't fetched at all, and errors still hit the console.
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
 if (sentryDsn) {
-  Sentry.init({
-    dsn: sentryDsn,
-    environment: import.meta.env.MODE,
-    // Capture 10% of sessions for performance profiling.
-    tracesSampleRate: 0.1,
-    // Only report errors from our own code, not third-party scripts.
-    allowUrls: [/cadence/, /localhost/],
+  import('@sentry/react').then((Sentry) => {
+    Sentry.init({
+      dsn: sentryDsn,
+      environment: import.meta.env.MODE,
+      // Capture 10% of sessions for performance profiling.
+      tracesSampleRate: 0.1,
+      // Only report errors from our own code, not third-party scripts.
+      allowUrls: [/cadence/, /localhost/],
+      sendDefaultPii: false,
+      // Supabase REST URLs embed table names + filter values (owner ids) in the
+      // query string; strip it from breadcrumbs so we don't ship that to Sentry.
+      beforeBreadcrumb(breadcrumb) {
+        const url = (breadcrumb.data as { url?: string } | undefined)?.url;
+        if (typeof url === 'string' && url.includes('.supabase.co') && breadcrumb.data) {
+          breadcrumb.data.url = url.split('?')[0];
+        }
+        return breadcrumb;
+      },
+    });
   });
 }
 

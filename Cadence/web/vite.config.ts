@@ -25,6 +25,15 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         // Cache all built assets (JS chunks, CSS, fonts, icons).
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // But NOT the marketing screenshots / wallpapers (~6MB) — the installed
+        // app never renders them (they're marketing-only, already denied by the
+        // navigate fallback), and the PDF renderer chunk (~770KB) is loaded on
+        // demand at export time, not needed offline. Precaching these bloated
+        // the first-visit download to ~9MB on cellular for no app benefit.
+        globIgnores: ['**/shots/**', '**/wallpapers/**', 'assets/react-pdf-*.js'],
+        // The one big-but-legit precache entry (the app JS) can exceed the 2MB
+        // default cap; raise it so the shell still precaches.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
             // Supabase REST reads: network-first with a 5 s timeout.
