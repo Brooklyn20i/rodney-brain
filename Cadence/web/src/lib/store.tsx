@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isConfigured } from './supabase';
 import { CadenceData, TABLES, emptyData, Workspace, WorkspaceMember } from './types';
-import { enqueue, dequeueAll, dropEntry, queueCount, isNetworkError } from './offlineQueue';
+import { enqueue, dequeueAll, dropEntry, queueCount, clearQueue, isNetworkError } from './offlineQueue';
 import { dropMissingColumn } from './supabaseWrite';
 
 type Table = keyof CadenceData;
@@ -125,6 +125,10 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     drainInFlight.current = true;
     setIsSyncing(true);
     let _failed = 0;
+    // Entries dropped on a PERMANENT error (validation/RLS) — the user's queued
+    // edit is gone and can't be retried, so we must tell them rather than let it
+    // evaporate silently.
+    let _dropped = 0;
     for (const entry of entries) {
       try {
         const { op } = entry;
@@ -133,7 +137,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           // duplicate insert collides on the primary key and is treated as done.
           const { error } = await supabase.from(op.table).insert(op.row);
           if (!error || /duplicate key|already exists/i.test(error.message || '')) dropEntry(entry.qid);
-          else if (!isNetworkError(error)) dropEntry(entry.qid);
+          else if (!isNetworkError(error)) { dropEntry(entry.qid); _dropped++; }
           else _failed++;
         } else if (op.op === 'update') {
           const { error } = await supabase
@@ -143,7 +147,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
           if (!error) dropEntry(entry.qid);
           else if (!isNetworkError(error)) {
             // Permanent error — drop it (don't retry forever).
-            dropEntry(entry.qid);
+            dropEntry(entry.qid); _dropped++;
           } else {
             _failed++;
           }
@@ -154,7 +158,7 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
             .eq('id', op.id);
           if (!error) dropEntry(entry.qid);
           else if (!isNetworkError(error)) {
-            dropEntry(entry.qid);
+            dropEntry(entry.qid); _dropped++;
           } else {
             _failed++;
           }
@@ -162,6 +166,11 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
       } catch {
         _failed++;
       }
+    }
+    if (_dropped > 0) {
+      setSyncError(
+        `${_dropped} offline ${_dropped === 1 ? 'change' : 'changes'} couldn't be saved and ${_dropped === 1 ? 'was' : 'were'} discarded — please re-enter.`
+      );
     }
     const remaining = queueCount();
     setPendingCount(remaining);
@@ -298,7 +307,14 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message };
   };
 
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => {
+    // Don't leave queued financial/health mutations sitting in localStorage
+    // after logout (data-at-rest on a shared device; also avoids replaying a
+    // previous user's writes under the next session).
+    clearQueue();
+    setPendingCount(0);
+    await supabase.auth.signOut();
+  };
 
   // The current user's role in the active workspace. Null when there's no
   // membership record yet (single-user / pre-migration) — treated as full access.

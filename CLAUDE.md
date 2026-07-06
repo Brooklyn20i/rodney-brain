@@ -27,6 +27,15 @@ Never manually build or copy to `docs/` — Vercel handles everything.
 | Production | https://cadence-agent.com |
 | Vercel dashboard | https://vercel.com/cadenceagent/web |
 
+## Rollback runbook (2am edition)
+
+Prod is broken and you need it back NOW:
+1. **Fastest (UI):** Vercel dashboard → project `web` → Deployments → find the last known-good production deploy → **⋯ → Promote to Production** (aka Instant Rollback). Live in ~seconds, no rebuild.
+2. **CLI:** `npx vercel rollback` (lists recent deploys) or `npx vercel rollback <deployment-url> --scope cadenceagent`.
+3. **Then fix forward:** revert the bad commit on `main` (`git revert <sha>` → push) so the next deploy is clean — don't leave prod pinned to an old promote.
+- **DB migrations do NOT auto-roll-back with a Vercel rollback.** If the bad deploy shipped a migration, assess the DB separately (most migrations here are additive/idempotent; a bad one needs its own reverse migration).
+- CI gate is advisory until branch protection is enabled — a red CI run can still deploy. Enable required status check `Cadence web` on `main` in GitHub settings to make CI blocking.
+
 ## Architecture in one line
 
 React PWA (`Cadence/web/`) → Vercel builds and deploys on push → installed on iPad/iPhone/PC as a PWA.

@@ -100,6 +100,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Give jsdom a real origin (default is opaque about:blank) so localStorage
+    // works — the offline queue and stores depend on it.
+    environmentOptions: { jsdom: { url: 'https://localhost/' } },
     globals: true,
     setupFiles: './src/test-setup.ts',
     // Vitest owns the src unit/component tests; Playwright owns e2e/ — keep the

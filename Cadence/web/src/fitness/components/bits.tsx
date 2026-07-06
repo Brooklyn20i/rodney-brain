@@ -129,7 +129,10 @@ export function TrendLine({
   const last = points[points.length - 1];
   return (
     <div className={`trend-line trend-${tone}`} style={{ height }}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height="100%">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" width="100%" height="100%"
+        role="img"
+        aria-label={`Trend line, ${points.length} points: latest ${Math.round(last.value)}, ranging ${Math.round(min)} to ${Math.round(max)}.`}>
+
         {showArea && <path className="trend-area" d={areaPath} />}
         <path className="trend-raw" d={rawPath} vectorEffect="non-scaling-stroke" />
         {avgPath && <path className="trend-avg" d={avgPath} vectorEffect="non-scaling-stroke" />}
@@ -233,7 +236,8 @@ export function WeightTrendChart({ points }: { points: { date: string; weight_kg
 
   return (
     <div className="wt-chart">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Weight trend chart">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img"
+        aria-label={`Weight trend, ${points[0].date} to ${last.date}: trend ${last.trend.toFixed(1)} kg, ${(last.trend - points[0].trend >= 0 ? 'up ' : 'down ') + Math.abs(last.trend - points[0].trend).toFixed(1)} kg over the range.`}>
         {ticks.map((t) => (
           <g key={t}>
             <line className="wt-grid" x1={mL} x2={W - mR} y1={vy(t)} y2={vy(t)} />
