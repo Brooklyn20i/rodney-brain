@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { writeWithColumnDrift } from '../../lib/supabaseWrite';
 import { CadenceFitnessData, TABLES, emptyData } from './types';
 import { loadDemoData } from './demoData';
 import { EXERCISE_CATALOG } from './exerciseCatalog';
@@ -13,6 +14,11 @@ type Table = keyof CadenceFitnessData;
 type Row<K extends Table> = CadenceFitnessData[K][number];
 
 const DEMO_MODE = import.meta.env.VITE_DEMO === '1';
+// E2E builds (Playwright) must never reach a real backend. OFFLINE = "no live
+// Supabase": demo (seeded) OR e2e (empty, in-memory). Data still initialises
+// from demo only, so e2e keeps its empty-state assertions.
+const E2E_MODE = import.meta.env.VITE_E2E === '1';
+const OFFLINE = DEMO_MODE || E2E_MODE;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -94,7 +100,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   };
 
   const reload = useCallback(async (table?: Table) => {
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     const tables = table ? [table] : TABLES;
     const results = await Promise.all(
       tables.map(async (t) => {
@@ -117,14 +123,14 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   }, []);
 
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     supabase.auth.getSession().then(({ data }) => setOwnerId(data.session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setOwnerId(s?.user?.id ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (DEMO_MODE || !ownerId) return;
+    if (OFFLINE || !ownerId) return;
     reload();
     // Coalesce realtime echoes: our own writes each bounce back a change event,
     // and rapid set-logging fires many in a burst. Debounce per table so we
@@ -151,7 +157,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   // One-time seed of the common-movement library on first sign-in (see
   // CadenceFitness's original comment) -- unchanged, just schema-qualified.
   useEffect(() => {
-    if (DEMO_MODE || !ownerId) return;
+    if (OFFLINE || !ownerId) return;
     const FLAG = 'cadence-fitness:seeded-exercises';
     if (localStorage.getItem(FLAG)) return;
     let cancelled = false;
@@ -190,7 +196,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     const now = new Date().toISOString();
     const stamped: any = { id: newId(), created_at: now, updated_at: now, deleted_at: null, ...row };
 
-    if (DEMO_MODE) {
+    if (OFFLINE) {
       const withOwner = { owner_id: 'demo-owner', ...stamped };
       setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], withOwner] }));
       return withOwner as Row<K>;
@@ -200,14 +206,13 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // Show the row immediately (optimistic) so the UI never stalls on a slow
     // gym connection; reconcile with the server copy once the write lands.
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ownedRow] }));
+    // Column-drift tolerant (shared helper): strip + retry a column the DB
+    // doesn't have yet, composed with the gym-wifi network retry.
     const { data: d, error } = await trackWrite(() =>
-      runWithRetry(() =>
-        supabase
-          .schema('fitness')
-          .from(table as string)
-          .insert(ownedRow)
-          .select()
-          .single()
+      writeWithColumnDrift(ownedRow, (p) =>
+        runWithRetry(() =>
+          supabase.schema('fitness').from(table as string).insert(p).select().single()
+        )
       )
     );
     if (error) {
@@ -225,21 +230,17 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
     }));
 
-    if (DEMO_MODE) {
+    if (OFFLINE) {
       const found = (data as any)[table].find((r: any) => r.id === id);
       return { ...found, ...patch } as Row<K>;
     }
 
     const optimistic = { ...(data as any)[table].find((r: any) => r.id === id), ...patch };
     const { data: d, error } = await trackWrite(() =>
-      runWithRetry(() =>
-        supabase
-          .schema('fitness')
-          .from(table as string)
-          .update(patch as any)
-          .eq('id', id)
-          .select()
-          .single()
+      writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
+        runWithRetry(() =>
+          supabase.schema('fitness').from(table as string).update(p).eq('id', id).select().single()
+        )
       )
     );
     // Local state already reflects the change (optimistic, above). If the write
@@ -268,7 +269,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     const ownedRow: any = { ...(ownerId ? { owner_id: ownerId } : {}), updated_at: now, ...row };
     const matchesKey = (r: any) => keyCols.every((c) => r[c] === ownedRow[c]);
 
-    if (DEMO_MODE) {
+    if (OFFLINE) {
       setData((prev) => {
         const list = (prev as any)[table] as any[];
         const idx = list.findIndex(matchesKey);
@@ -287,13 +288,10 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     });
 
     const { data: d, error } = await trackWrite(() =>
-      runWithRetry(() =>
-        supabase
-          .schema('fitness')
-          .from(table as string)
-          .upsert(ownedRow, { onConflict })
-          .select()
-          .single()
+      writeWithColumnDrift(ownedRow, (p) =>
+        runWithRetry(() =>
+          supabase.schema('fitness').from(table as string).upsert(p, { onConflict }).select().single()
+        )
       )
     );
     if (error) {
@@ -315,7 +313,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
 
   const remove = async (table: Table, id: string): Promise<void> => {
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     const { error } = await trackWrite(() =>
       runWithRetry(() =>
         supabase
@@ -336,7 +334,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   return (
     <CadenceFitnessCtx.Provider
       value={{
-        demo: DEMO_MODE,
+        demo: OFFLINE,
         data,
         insert,
         update,

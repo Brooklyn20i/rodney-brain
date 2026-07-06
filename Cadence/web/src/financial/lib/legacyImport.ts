@@ -244,7 +244,12 @@ export function mapShareTransactionsCsv(rows: CsvRow[], owner_id: string): Omit<
     .map((r) => {
       const currency = r.Currency || 'AUD';
       const amount = num(r['Amount / proceeds']);
-      const amountAud = r['Amount AUD'] ? num(r['Amount AUD']) : currency === 'AUD' ? amount : amount;
+      // Prefer an explicit 'Amount AUD' column. Without it we can't convert at
+      // import time (no FX here), so a foreign-currency row falls back to its
+      // native amount — flagged by the import review note, not silently trusted.
+      // (The previous ternary's two branches were identical; this makes the
+      // limitation explicit instead of looking like it converts.)
+      const amountAud = r['Amount AUD'] ? num(r['Amount AUD']) : amount;
       return {
         ...stub(owner_id),
         date: r.Date,

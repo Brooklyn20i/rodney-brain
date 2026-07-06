@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { writeWithColumnDrift } from '../../lib/supabaseWrite';
 import { CadenceFinancialData, TABLES, emptyData } from './types';
 import { loadDemoData } from './demoData';
 
@@ -14,6 +15,11 @@ type Table = keyof CadenceFinancialData;
 type Row<K extends Table> = CadenceFinancialData[K][number];
 
 const DEMO_MODE = import.meta.env.VITE_DEMO === '1';
+// E2E builds (Playwright) must never reach a real backend. OFFLINE = "no live
+// Supabase": demo (seeded data) OR e2e (empty, in-memory). Data still
+// initialises from demo only, so e2e keeps its empty-state assertions.
+const E2E_MODE = import.meta.env.VITE_E2E === '1';
+const OFFLINE = DEMO_MODE || E2E_MODE;
 
 export interface Ctx {
   demo: boolean;
@@ -43,7 +49,7 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const reload = useCallback(async (table?: Table) => {
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     const tables = table ? [table] : TABLES;
     const results = await Promise.all(
       tables.map(async (t) => {
@@ -66,14 +72,14 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
   }, []);
 
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     supabase.auth.getSession().then(({ data }) => setOwnerId(data.session?.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setOwnerId(s?.user?.id ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (DEMO_MODE || !ownerId) return;
+    if (OFFLINE || !ownerId) return;
     reload();
     const ch = supabase.channel('cadence-financial-rt');
     TABLES.forEach((t) =>
@@ -89,25 +95,24 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
     const now = new Date().toISOString();
     const stamped: any = { id: newId(), created_at: now, updated_at: now, deleted_at: null, ...row };
 
-    if (DEMO_MODE) {
+    if (OFFLINE) {
       const withOwner = { owner_id: 'demo-owner', ...stamped };
       setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], withOwner] }));
       return withOwner as Row<K>;
     }
 
     const ownedRow = ownerId ? { owner_id: ownerId, ...stamped } : stamped;
-    const { data: d, error } = await supabase
-      .schema('financial')
-      .from(table as string)
-      .insert(ownedRow)
-      .select()
-      .single();
+    // Column-drift tolerant: strip + retry if a column predates its migration,
+    // matching the Work store (shared helper) instead of hard-failing the save.
+    const { data: d, error } = await writeWithColumnDrift(ownedRow, (p) =>
+      supabase.schema('financial').from(table as string).insert(p).select().single()
+    );
     if (error) {
-      setSyncError(error.message || 'Save failed');
+      setSyncError((error as { message?: string }).message || 'Save failed');
       throw error;
     }
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
-    return d as Row<K>;
+    return d as unknown as Row<K>;
   };
 
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>): Promise<Row<K>> => {
@@ -120,30 +125,26 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
       [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
     }));
 
-    if (DEMO_MODE) {
+    if (OFFLINE) {
       const found = (data as any)[table].find((r: any) => r.id === id);
       return { ...found, ...patch } as Row<K>;
     }
 
-    const { data: d, error } = await supabase
-      .schema('financial')
-      .from(table as string)
-      .update(patch as any)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data: d, error } = await writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
+      supabase.schema('financial').from(table as string).update(p).eq('id', id).select().single()
+    );
     if (error) {
       if (prevRow) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? prevRow : r)) }));
-      setSyncError(error.message || 'Save failed');
+      setSyncError((error as { message?: string }).message || 'Save failed');
       throw error;
     }
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
-    return d as Row<K>;
+    return d as unknown as Row<K>;
   };
 
   const remove = async (table: Table, id: string): Promise<void> => {
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
-    if (DEMO_MODE) return;
+    if (OFFLINE) return;
     const { error } = await supabase
       .schema('financial')
       .from(table as string)
@@ -160,7 +161,7 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
   return (
     <CadenceFinancialCtx.Provider
       value={{
-        demo: DEMO_MODE,
+        demo: OFFLINE,
         data,
         insert,
         update,

@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isConfigured } from './supabase';
 import { CadenceData, TABLES, emptyData, Workspace, WorkspaceMember } from './types';
 import { enqueue, dequeueAll, dropEntry, queueCount, isNetworkError } from './offlineQueue';
+import { dropMissingColumn } from './supabaseWrite';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
@@ -39,21 +40,9 @@ export interface Ctx {
 }
 
 // If a write fails because a column doesn't exist in the database yet (the
-// schema predates a migration), pull the offending column name out of the
-// Postgres / PostgREST error and return a copy of the payload without it, so
-// the caller can retry. Returns null if the error isn't a missing-column error
-// or the column can't be identified / isn't present in the payload.
-function dropMissingColumn(payload: any, error: any): any | null {
-  const msg = String(error?.message || error || '') + ' ' + String(error?.details || '');
-  const m =
-    msg.match(/could not find the '([^']+)' column/i) ||  // PostgREST PGRST204
-    msg.match(/column "([^"]+)"/i) ||                       // Postgres 42703 (quoted)
-    msg.match(/column ([a-z0-9_]+) does not exist/i);       // Postgres 42703 (unquoted)
-  const col = m?.[1];
-  if (!col || !(col in payload)) return null;
-  const { [col]: _omit, ...rest } = payload;
-  return rest;
-}
+// schema predates a migration) is handled by the shared dropMissingColumn
+// helper in ./supabaseWrite (imported above), so all three domain stores strip
+// unknown columns identically instead of each carrying their own copy.
 
 export const CadenceCtx = createContext<Ctx | null>(null);
 
