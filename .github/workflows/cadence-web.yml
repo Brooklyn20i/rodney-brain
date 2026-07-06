@@ -43,3 +43,12 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # E2E is in CI (not just local) so the suite can't silently rot when the
+      # app's routes or labels change — which is exactly how it broke before
+      # (goto('/') hit the marketing site; the Fitness button became "Health").
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
