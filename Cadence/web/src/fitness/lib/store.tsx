@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { writeWithColumnDrift } from '../../lib/supabaseWrite';
+import { useSupabaseOwnerId, fetchSchemaTables } from '../../lib/domainStore';
 import { CadenceFitnessData, TABLES, emptyData } from './types';
 import { loadDemoData } from './demoData';
 import { EXERCISE_CATALOG } from './exerciseCatalog';
@@ -86,7 +87,7 @@ function friendlyError(error: any): string {
 }
 
 export function CadenceFitnessProvider({ children }: { children: React.ReactNode }) {
-  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const ownerId = useSupabaseOwnerId(OFFLINE);
   const [data, setData] = useState<CadenceFitnessData>(() => (DEMO_MODE ? loadDemoData() : emptyData()));
   const [syncError, setSyncError] = useState<string | null>(null);
   const [inflight, setInflight] = useState(0);
@@ -101,32 +102,15 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
 
   const reload = useCallback(async (table?: Table) => {
     if (OFFLINE) return;
-    const tables = table ? [table] : TABLES;
-    const results = await Promise.all(
-      tables.map(async (t) => {
-        const r = await supabase
-          .schema('fitness')
-          .from(t as string)
-          .select('*')
-          .is('deleted_at', null)
-          .order('created_at', { ascending: true });
-        return { t, r };
-      })
-    );
+    const tables = (table ? [table] : TABLES) as string[];
+    const results = await fetchSchemaTables('fitness', tables);
     setData((prev) => {
       const next = { ...prev };
-      results.forEach(({ t, r }) => {
-        if (!r.error && r.data) (next as any)[t] = r.data;
+      results.forEach(({ t, error, data }) => {
+        if (!error && data) (next as any)[t] = data;
       });
       return next;
     });
-  }, []);
-
-  useEffect(() => {
-    if (OFFLINE) return;
-    supabase.auth.getSession().then(({ data }) => setOwnerId(data.session?.user?.id ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setOwnerId(s?.user?.id ?? null));
-    return () => sub.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
