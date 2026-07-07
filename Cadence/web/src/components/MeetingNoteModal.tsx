@@ -524,7 +524,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setNotes(p.notes);
     rawRef.current = raw;
     lastBodyRef.current = note.body;
-  }, [note.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [note.body]);
 
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
