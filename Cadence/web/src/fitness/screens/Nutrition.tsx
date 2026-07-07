@@ -51,6 +51,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
   const [saveAsMeal, setSaveAsMeal] = useState(false);
   const [savedFoodQuery, setSavedFoodQuery] = useState('');
   const [savedFoodQty, setSavedFoodQty] = useState<Record<string, string>>({});
+  const [showSaved, setShowSaved] = useState(false);
   const savedFoodPicker = useMemo(
     () =>
       buildSavedFoodPicker({
@@ -403,10 +404,71 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
           </button>
         </Card>
 
+        <Card title="Logged">
+          {MEALS.filter((m) => logs.some((l) => l.meal === m)).map((m) => (
+            <div key={m}>
+              <div className="cf-card-title nu-meal-head" style={{ margin: '8px 0 2px' }}>
+                <span>{MEAL_LABEL[m]}</span>
+                <span className="nu-meal-total">
+                  {fmtNum(
+                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.calories), 0)
+                  )}{' '}
+                  kcal · P
+                  {fmtNum(
+                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.protein_g), 0)
+                  )}
+                </span>
+              </div>
+              {logs
+                .filter((l) => l.meal === m)
+                .map((l) => (
+                  <div key={l.id} className="pick-row">
+                    <div className="pick-main">
+                      <div className="pick-title">{l.name}</div>
+                      <div className="pick-sub">
+                        {l.calories} kcal · P{fmtNum(Number(l.protein_g))} C
+                        {fmtNum(Number(l.carbs_g))} F{fmtNum(Number(l.fat_g))}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => remove('nutrition_logs', l.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+            </div>
+          ))}
+          {logs.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nothing logged for this day.</p>
+          )}
+        </Card>
+
         <Card
           title="Saved foods"
-          actions={<Tag label={`${data.saved_meals.length} saved`} tone="info" />}
+          actions={
+            <button
+              className="btn btn-ghost btn-sm nu-saved-toggle"
+              onClick={() => setShowSaved((s) => !s)}
+              aria-expanded={showSaved}
+            >
+              {data.saved_meals.length} saved
+              <span className="nu-saved-caret" aria-hidden="true">
+                {showSaved ? '▲' : '▼'}
+              </span>
+            </button>
+          }
         >
+          {!showSaved && (
+            <p className="nu-saved-help" style={{ margin: 0 }}>
+              {data.saved_meals.length === 0
+                ? 'No saved foods yet — tick “Save to foods” in Quick add to build your list.'
+                : 'Tap to quick-log from your saved foods.'}
+            </p>
+          )}
+          {showSaved && (
+            <>
           <p className="nu-saved-help">
             Showing recent foods only. Search to find anything else in the full saved-food library.
           </p>
@@ -485,46 +547,7 @@ export function Nutrition({ onMenu }: { onMenu: () => void }) {
               the list.
             </p>
           )}
-        </Card>
-
-        <Card title="Logged">
-          {MEALS.filter((m) => logs.some((l) => l.meal === m)).map((m) => (
-            <div key={m}>
-              <div className="cf-card-title nu-meal-head" style={{ margin: '8px 0 2px' }}>
-                <span>{MEAL_LABEL[m]}</span>
-                <span className="nu-meal-total">
-                  {fmtNum(
-                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.calories), 0)
-                  )}{' '}
-                  kcal · P
-                  {fmtNum(
-                    logs.filter((l) => l.meal === m).reduce((s, l) => s + Number(l.protein_g), 0)
-                  )}
-                </span>
-              </div>
-              {logs
-                .filter((l) => l.meal === m)
-                .map((l) => (
-                  <div key={l.id} className="pick-row">
-                    <div className="pick-main">
-                      <div className="pick-title">{l.name}</div>
-                      <div className="pick-sub">
-                        {l.calories} kcal · P{fmtNum(Number(l.protein_g))} C
-                        {fmtNum(Number(l.carbs_g))} F{fmtNum(Number(l.fat_g))}
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => remove('nutrition_logs', l.id)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-            </div>
-          ))}
-          {logs.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--text2)' }}>Nothing logged for this day.</p>
+            </>
           )}
         </Card>
 
