@@ -1784,7 +1784,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .nu-saved-help { font-size: 12px; color: var(--text3); margin: 0 0 10px; line-height: 1.35; }
 .nu-saved-search { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .nu-saved-search input { min-width: 0; }
-.nu-saved-list { border-top: 1px solid var(--border); }
+.nu-saved-list { border-top: 1px solid var(--border); max-height: 340px; overflow-y: auto; }
+.nu-saved-toggle { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.nu-saved-caret { font-size: 9px; color: var(--text3); line-height: 1; }
 .nu-saved-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .nu-saved-row:last-child { border-bottom: none; }
 .nu-saved-main { min-width: 0; }
