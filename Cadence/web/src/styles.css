@@ -1600,6 +1600,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .wo-set-labels { display: grid; grid-template-columns: 40px 1fr 1fr 48px; gap: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); padding: 0 4px 6px; }
 .wo-set-row { display: grid; grid-template-columns: 40px 1fr 1fr 48px; gap: 10px; align-items: center; padding: 6px; border-radius: 12px; margin-bottom: 6px; background: var(--surface2); border: 1px solid transparent; transition: background 0.15s, border-color 0.15s; }
 .wo-set-row.wo-set-done { background: var(--green-bg); border-color: rgba(26,127,55,0.18); }
+/* Single-value sets (bodyweight reps or a timed hold): one data column, not two. */
+.wo-set-labels.wo-single, .wo-set-row.wo-single { grid-template-columns: 40px 1fr 48px; }
 .wo-set-num { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 auto; font-size: 13px; font-weight: 700; color: var(--text2); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
 .wo-set-row.wo-set-done .wo-set-num { color: var(--green); border-color: rgba(26,127,55,0.3); }
 .wo-set-row input { padding: 11px 8px; font-size: 16px; font-weight: 600; text-align: center; border: 1px solid var(--border); border-radius: 10px; width: 100%; font-family: inherit; background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
@@ -1698,6 +1700,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .wo-exercise.gym .wo-exercise-name { font-size: 23px; }
 .wo-exercise.gym .wo-set-labels,
 .wo-exercise.gym .wo-set-row { grid-template-columns: 30px 1.2fr 1fr 50px; gap: 7px; }
+.wo-exercise.gym .wo-set-labels.wo-single,
+.wo-exercise.gym .wo-set-row.wo-single { grid-template-columns: 30px 1fr 50px; }
 .wo-exercise.gym .wo-set-row { padding: 8px 6px; }
 .wo-exercise.gym .wo-set-row input { padding: 13px 2px; font-size: 17px; }
 .wo-exercise.gym .wo-set-check { width: 50px; height: 50px; font-size: 22px; border-radius: 12px; }

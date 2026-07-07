@@ -12,6 +12,13 @@ import {
   stripDayPrefix,
   todayISO,
 } from '../lib/util';
+import {
+  fmtDuration,
+  looksLikeCardio,
+  parseDuration,
+  setDuration,
+  trackingOf,
+} from '../lib/tracking';
 import type { CardioKind, ProgramDay, WorkoutSet } from '../lib/types';
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
@@ -149,9 +156,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   };
 
   // Local input drafts so typing doesn't hit Supabase per keystroke.
-  const [drafts, setDrafts] = useState<Record<string, { weight?: string; reps?: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { weight?: string; reps?: string; dur?: string }>>({});
 
   const exName = (exerciseId: string) => data.exercises.find((e) => e.id === exerciseId)?.name || 'Exercise';
+  // How a given exercise is logged (weight×reps / bodyweight reps / timed hold).
+  const trackingFor = (exerciseId: string) => trackingOf(data.exercises.find((e) => e.id === exerciseId));
 
   // ── Start a session ─────────────────────────────────────────────────────
   const startSession = async (day: ProgramDay | null) => {
@@ -181,6 +190,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             set_number: n,
             weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
             reps: 0,
+            duration_seconds: lastSet ? setDuration(lastSet) : 0,
             rpe: null,
             is_warmup: false,
             done: false,
@@ -281,6 +291,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const patch: Partial<WorkoutSet> = { ...extra };
     if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
     if (d.reps !== undefined) patch.reps = Math.max(0, Math.round(Number(d.reps) || 0));
+    if (d.dur !== undefined) patch.duration_seconds = parseDuration(d.dur);
     if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
     if (patch.weight_kg !== undefined) await propagateWeightToBlanks(set, patch.weight_kg);
   };
@@ -301,6 +312,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const next = Math.max(0, cur + delta);
     setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], reps: undefined } }));
     await update('workout_sets', set.id, { reps: next });
+  };
+  const stepDuration = async (set: WorkoutSet, delta: number) => {
+    const d = drafts[set.id] || {};
+    const cur = d.dur !== undefined ? parseDuration(d.dur) : setDuration(set);
+    const next = Math.max(0, cur + delta);
+    setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], dur: undefined } }));
+    await update('workout_sets', set.id, { duration_seconds: next });
   };
 
   const toggleSet = async (set: WorkoutSet) => {
@@ -333,6 +351,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       set_number: (lastRow?.set_number ?? 0) + 1,
       weight_kg: lastRow ? Number(lastRow.weight_kg) : 0,
       reps: 0,
+      duration_seconds: lastRow ? setDuration(lastRow) : 0,
       rpe: null,
       is_warmup: false,
       done: false,
@@ -359,6 +378,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           set_number: n,
           weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
           reps: 0,
+          duration_seconds: lastSet ? setDuration(lastSet) : 0,
           rpe: null,
           is_warmup: false,
           done: false,
@@ -379,9 +399,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       const d = drafts[s.id] || {};
       const reps = d.reps !== undefined ? Math.max(0, Math.round(Number(d.reps) || 0)) : s.reps;
       const weight = d.weight !== undefined ? Number(d.weight) || 0 : Number(s.weight_kg) || 0;
-      if (reps > 0) {
-        if (!s.done || d.weight !== undefined || d.reps !== undefined) {
-          await update('workout_sets', s.id, { done: true, reps, weight_kg: weight });
+      const dur = d.dur !== undefined ? parseDuration(d.dur) : setDuration(s);
+      const tracking = trackingFor(s.exercise_id);
+      const touched = d.weight !== undefined || d.reps !== undefined || d.dur !== undefined;
+      // A timed hold counts if it has a hold time; everything else if it has
+      // reps. A genuinely empty target row (no value) is dropped.
+      const value = tracking === 'time' ? dur : reps;
+      if (value > 0) {
+        if (!s.done || touched) {
+          const patch: Partial<WorkoutSet> =
+            tracking === 'time'
+              ? { done: true, duration_seconds: dur }
+              : tracking === 'bodyweight'
+                ? { done: true, reps }
+                : { done: true, reps, weight_kg: weight };
+          await update('workout_sets', s.id, patch);
         }
       } else if (!s.done) {
         await remove('workout_sets', s.id);
@@ -487,6 +519,20 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const slot = daySlots.find((s) => s.exercise_id === exerciseId);
     const last = lastSetsForExercise(data.workout_sets, data.workouts, exerciseId, active.id);
     const doneRows = rows.filter((s) => s.done).length;
+    const tracking = trackingFor(exerciseId);
+    const single = tracking !== 'weight_reps'; // one data column (reps or hold) vs weight+reps
+    // "Last time" summary, phrased for how the exercise is tracked.
+    const lastSummary = last
+      ? last.sets
+          .map((s) =>
+            tracking === 'time'
+              ? fmtDuration(setDuration(s))
+              : tracking === 'bodyweight'
+                ? `${s.reps}`
+                : `${Number(s.weight_kg)}×${s.reps}`
+          )
+          .join(', ')
+      : null;
     return (
       <div key={exerciseId} className={`wo-exercise ${big ? 'gym' : ''}`}>
         <div className="wo-exercise-head">
@@ -500,8 +546,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         <div className="wo-chips">
           {slot && (
             <span className="wo-chip wo-chip-target">
-              {slot.target_sets} × {slot.rep_min}–{slot.rep_max}
-              {slot.target_rpe ? ` · RPE ${slot.target_rpe}` : ''}
+              {tracking === 'time'
+                ? `${slot.target_sets} × ${slot.rep_min}–${slot.rep_max}s hold`
+                : `${slot.target_sets} × ${slot.rep_min}–${slot.rep_max}${slot.target_rpe ? ` · RPE ${slot.target_rpe}` : ''}`}
             </span>
           )}
           <button
@@ -512,11 +559,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             Rest {fmtRest(slot ? slot.rest_seconds : restDefault)} ▾
           </button>
           <span className="wo-chip wo-chip-last">
-            {last
-              ? `Last ${fmtDayShort(last.date)}: ${last.sets
-                  .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
-                  .join(', ')}`
-              : 'First time'}
+            {lastSummary ? `Last ${fmtDayShort(last!.date)}: ${lastSummary}` : 'First time'}
           </span>
         </div>
         {restPickerFor === exerciseId && (
@@ -537,10 +580,18 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             <span className="wo-rest-note">{slot ? 'Saved to this exercise in your program' : 'Default for ad-hoc exercises'}</span>
           </div>
         )}
-        <div className={`wo-set-labels ${big ? 'gym' : ''}`}>
+        <div className={`wo-set-labels ${big ? 'gym' : ''} ${single ? 'wo-single' : ''}`}>
           <span>Set</span>
-          <span style={{ textAlign: 'center' }}>Weight (kg)</span>
-          <span style={{ textAlign: 'center' }}>Reps</span>
+          {tracking === 'time' ? (
+            <span style={{ textAlign: 'center' }}>Hold (m:ss)</span>
+          ) : tracking === 'bodyweight' ? (
+            <span style={{ textAlign: 'center' }}>Reps</span>
+          ) : (
+            <>
+              <span style={{ textAlign: 'center' }}>Weight (kg)</span>
+              <span style={{ textAlign: 'center' }}>Reps</span>
+            </>
+          )}
           <span aria-hidden="true"> </span>
         </div>
         {rows.map((s) => {
@@ -562,42 +613,84 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               type="number"
               inputMode="numeric"
               value={d.reps ?? (s.reps || '')}
-              placeholder={slot ? `${slot.rep_min}–${slot.rep_max}` : '—'}
+              placeholder={slot && tracking !== 'time' ? `${slot.rep_min}–${slot.rep_max}` : '—'}
               onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
               onBlur={() => commitSet(s)}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
             />
           );
-          return (
-            <div key={s.id} className={`wo-set-row ${big ? 'gym' : ''} ${s.done ? 'wo-set-done' : ''}`}>
-              <span className="wo-set-num">{s.set_number}</span>
-              {big ? (
-                <>
-                  <div className="wo-step-group">
-                    <button className="wo-step" aria-label="Weight down 2.5kg" onClick={() => stepWeight(s, -2.5)}>
-                      −
-                    </button>
-                    {weightField}
-                    <button className="wo-step" aria-label="Weight up 2.5kg" onClick={() => stepWeight(s, 2.5)}>
-                      +
-                    </button>
-                  </div>
-                  <div className="wo-step-group">
-                    <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
-                      −
-                    </button>
-                    {repsField}
-                    <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
-                      +
-                    </button>
-                  </div>
-                </>
+          const durField = (
+            <input
+              type="text"
+              inputMode="numeric"
+              value={d.dur ?? (setDuration(s) ? fmtDuration(setDuration(s)) : '')}
+              placeholder={slot ? `${slot.rep_min}–${slot.rep_max}s` : 'm:ss'}
+              onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], dur: e.target.value } }))}
+              onBlur={() => commitSet(s)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+          );
+          // The one or two editable fields for this set, per its tracking mode.
+          const fields =
+            tracking === 'time' ? (
+              big ? (
+                <div className="wo-step-group">
+                  <button className="wo-step" aria-label="15 seconds fewer" onClick={() => stepDuration(s, -15)}>
+                    −
+                  </button>
+                  {durField}
+                  <button className="wo-step" aria-label="15 seconds more" onClick={() => stepDuration(s, 15)}>
+                    +
+                  </button>
+                </div>
               ) : (
-                <>
-                  {weightField}
+                durField
+              )
+            ) : tracking === 'bodyweight' ? (
+              big ? (
+                <div className="wo-step-group">
+                  <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
+                    −
+                  </button>
                   {repsField}
-                </>
-              )}
+                  <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
+                    +
+                  </button>
+                </div>
+              ) : (
+                repsField
+              )
+            ) : big ? (
+              <>
+                <div className="wo-step-group">
+                  <button className="wo-step" aria-label="Weight down 2.5kg" onClick={() => stepWeight(s, -2.5)}>
+                    −
+                  </button>
+                  {weightField}
+                  <button className="wo-step" aria-label="Weight up 2.5kg" onClick={() => stepWeight(s, 2.5)}>
+                    +
+                  </button>
+                </div>
+                <div className="wo-step-group">
+                  <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
+                    −
+                  </button>
+                  {repsField}
+                  <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
+                    +
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {weightField}
+                {repsField}
+              </>
+            );
+          return (
+            <div key={s.id} className={`wo-set-row ${big ? 'gym' : ''} ${single ? 'wo-single' : ''} ${s.done ? 'wo-set-done' : ''}`}>
+              <span className="wo-set-num">{s.set_number}</span>
+              {fields}
               <button
                 className={`wo-set-check ${s.done ? 'checked' : ''}`}
                 aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
@@ -634,7 +727,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             setAddExId('');
           }}
         />
-        {q && matches.length === 0 && (
+        {q && looksLikeCardio(q) && (
+          <p className="wo-cardio-hint" style={{ margin: '6px 0 0' }}>
+            🏃 Running, rowing & riding go in the <strong>Cardio</strong> block below — they track
+            time &amp; distance, not weight.
+          </p>
+        )}
+        {q && matches.length === 0 && !looksLikeCardio(q) && (
           <p style={{ fontSize: 12, color: 'var(--text2)', margin: '6px 0 0' }}>
             No match — add it on the Exercises screen first.
           </p>

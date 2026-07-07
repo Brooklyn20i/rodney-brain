@@ -3,7 +3,8 @@ import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
 import { weeklySetsByMuscle, weeklyHardSets, weekOf, workoutTonnage } from '../lib/fitnessCalc';
 import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, stripDayPrefix, todayISO } from '../lib/util';
-import type { Workout, WorkoutSet } from '../lib/types';
+import { fmtDuration, parseDuration, setDuration, trackingOf } from '../lib/tracking';
+import type { ExerciseTracking, Workout, WorkoutSet } from '../lib/types';
 
 // Session log + weekly volume: what actually happened, week by week.
 // Sessions stay editable after the fact: fix a mistyped weight, add the set
@@ -32,6 +33,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
   const weekSauna = data.sauna_sessions.filter((s) => s.date >= thisWeek.start && s.date <= thisWeek.end).length;
 
   const exName = (id: string) => data.exercises.find((e) => e.id === id)?.name || '?';
+  const trackingFor = (id: string) => trackingOf(data.exercises.find((e) => e.id === id));
 
   return (
     <>
@@ -95,6 +97,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
                     editing={editId === w.id}
                     onToggleEdit={() => setEditId(editId === w.id ? null : w.id)}
                     exName={exName}
+                    trackingFor={trackingFor}
                     onUpdateWorkout={(patch) => update('workouts', w.id, patch)}
                     onUpdateSet={(id, patch) => update('workout_sets', id, patch)}
                     onAddSet={async (exerciseId) => {
@@ -108,6 +111,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
                         set_number: (last?.set_number ?? 0) + 1,
                         weight_kg: last ? Number(last.weight_kg) : 0,
                         reps: last?.reps ?? 0,
+                        duration_seconds: last ? setDuration(last) : 0,
                         rpe: null,
                         is_warmup: false,
                         done: true,
@@ -138,7 +142,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
           <p style={{ fontSize: 11, color: 'var(--text3)' }}>
             Heaviest logged set ever:{' '}
             {(() => {
-              const done = data.workout_sets.filter((s) => s.done && !s.is_warmup);
+              const done = data.workout_sets.filter((s) => s.done && !s.is_warmup && Number(s.weight_kg) > 0);
               if (!done.length) return '—';
               const top = done.reduce((a, b) => (Number(a.weight_kg) >= Number(b.weight_kg) ? a : b));
               return `${exName(top.exercise_id)} ${fmtKg(Number(top.weight_kg))} × ${top.reps}`;
@@ -158,6 +162,7 @@ function SessionDetail({
   editing,
   onToggleEdit,
   exName,
+  trackingFor,
   onUpdateWorkout,
   onUpdateSet,
   onAddSet,
@@ -169,6 +174,7 @@ function SessionDetail({
   editing: boolean;
   onToggleEdit: () => void;
   exName: (id: string) => string;
+  trackingFor: (id: string) => ExerciseTracking;
   onUpdateWorkout: (patch: Partial<Workout>) => void;
   onUpdateSet: (id: string, patch: Partial<WorkoutSet>) => void;
   onAddSet: (exerciseId: string) => void;
@@ -201,39 +207,65 @@ function SessionDetail({
           </div>
         </div>
       )}
-      {byExercise.map(([exerciseId, rows]) => (
+      {byExercise.map(([exerciseId, rows]) => {
+        const tracking = trackingFor(exerciseId);
+        const sorted = [...rows].sort((a, b) => a.set_number - b.set_number);
+        return (
         <div key={exerciseId} style={{ fontSize: 13, padding: '3px 0' }}>
           <strong>{exName(exerciseId)}</strong>{' '}
           {!editing ? (
             <span style={{ color: 'var(--text2)' }}>
-              {rows
-                .sort((a, b) => a.set_number - b.set_number)
-                .map((s) => `${Number(s.weight_kg)}×${s.reps}`)
+              {sorted
+                .map((s) =>
+                  tracking === 'time'
+                    ? fmtDuration(setDuration(s))
+                    : tracking === 'bodyweight'
+                      ? `${s.reps}`
+                      : `${Number(s.weight_kg)}×${s.reps}`
+                )
                 .join(', ')}
             </span>
           ) : (
             <div style={{ marginTop: 4 }}>
-              {rows
-                .sort((a, b) => a.set_number - b.set_number)
-                .map((s) => (
+              {sorted.map((s) => (
                   <div key={s.id} className="hist-set-edit">
                     <span className="wo-set-num">{s.set_number}</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.5"
-                      defaultValue={Number(s.weight_kg) || ''}
-                      placeholder="kg"
-                      onBlur={(e) => onUpdateSet(s.id, { weight_kg: Number(e.target.value) || 0 })}
-                    />
-                    <span className="hist-set-x">×</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      defaultValue={s.reps || ''}
-                      placeholder="reps"
-                      onBlur={(e) => onUpdateSet(s.id, { reps: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-                    />
+                    {tracking === 'time' ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        defaultValue={setDuration(s) ? fmtDuration(setDuration(s)) : ''}
+                        placeholder="m:ss"
+                        onBlur={(e) => onUpdateSet(s.id, { duration_seconds: parseDuration(e.target.value) })}
+                      />
+                    ) : tracking === 'bodyweight' ? (
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        defaultValue={s.reps || ''}
+                        placeholder="reps"
+                        onBlur={(e) => onUpdateSet(s.id, { reps: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                      />
+                    ) : (
+                      <>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.5"
+                          defaultValue={Number(s.weight_kg) || ''}
+                          placeholder="kg"
+                          onBlur={(e) => onUpdateSet(s.id, { weight_kg: Number(e.target.value) || 0 })}
+                        />
+                        <span className="hist-set-x">×</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          defaultValue={s.reps || ''}
+                          placeholder="reps"
+                          onBlur={(e) => onUpdateSet(s.id, { reps: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                        />
+                      </>
+                    )}
                     <button className="btn btn-danger btn-sm" aria-label="Delete set" onClick={() => onRemoveSet(s.id)}>
                       ✕
                     </button>
@@ -245,7 +277,8 @@ function SessionDetail({
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
       {editing ? (
         <div style={{ marginTop: 8 }}>
           <label className="field">Notes</label>
