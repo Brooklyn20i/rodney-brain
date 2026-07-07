@@ -448,12 +448,30 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Has the user actually edited this meeting's body since it was opened,
+  // navigated, or last saved? A modal left open on another device holds a stale
+  // snapshot; without this guard its close/unmount flush would write that stale
+  // body back and clobber a newer save made elsewhere. So we only ever persist
+  // the body when there are real local edits.
+  const dirtyRef = useRef(false);
+  // The exact body string we last parsed into local state (or wrote out). Used
+  // to tell a genuine remote change apart from the realtime echo of our own
+  // save — a string compare that's robust to JSON formatting differences
+  // between the web build, the Swift app and the agent.
+  const lastBodyRef = useRef(note.body);
+
   const flushSave = useCallback(() => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    // Nothing edited locally → never write. This is what stops a stale open
+    // modal (e.g. left open overnight on the PC while the iPad saved the real
+    // notes) from overwriting the newer content when it's finally closed.
+    if (!dirtyRef.current) return;
     const body = serializeMeeting(
       { agenda: agendaRef.current, actions: actionsRef.current, notes: notesRef.current },
       rawRef.current,
     );
+    dirtyRef.current = false;
+    lastBodyRef.current = body; // recognise the realtime echo of this save as "no change"
     // Fire-and-forget (runs on unmount, where we can't await): catch the promise
     // so a failed final save can't raise an unhandled rejection. Real failures
     // still surface via the store's sync-error banner, and network drops are
@@ -462,6 +480,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   }, [update]);
 
   const scheduleSave = useCallback(() => {
+    dirtyRef.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flushSave, 600);
   }, [flushSave]);
@@ -473,8 +492,9 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => { flushSave(); }, []);
 
-  // Reset state when navigating between meetings (note.id change only — body changes
-  // from real-time sync are intentionally NOT reset to avoid clobbering in-progress edits).
+  // Reset state when navigating between meetings (note.id change only). Starting
+  // on a fresh meeting is not a local edit, so clear the dirty flag and record
+  // the body we just loaded as the sync baseline.
   useEffect(() => {
     const { data: p, raw } = parseMeeting(note.body);
     setAgenda(p.agenda);
@@ -482,9 +502,29 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     setNotes(p.notes);
     setTitle(note.title);
     rawRef.current = raw;
+    dirtyRef.current = false;
+    lastBodyRef.current = note.body;
     setShowImport(false);
     setImportSel(new Set());
   }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live sync: when another device (or the Swift app / agent) saves this same
+  // meeting, realtime updates note.body on the parent and it flows in as a new
+  // prop. Adopt that incoming body into the open modal — but ONLY while there
+  // are no unsaved local edits, so an idle instance stays current without ever
+  // clobbering work in progress. Together with the dirty-guarded flush above,
+  // an instance left open on one device now tracks, and never overwrites, the
+  // other.
+  useEffect(() => {
+    if (note.body === lastBodyRef.current) return; // no remote change since we last synced/saved
+    if (dirtyRef.current) return; // unsaved local edits win — don't stomp them
+    const { data: p, raw } = parseMeeting(note.body);
+    setAgenda(p.agenda);
+    setActions(p.actions);
+    setNotes(p.notes);
+    rawRef.current = raw;
+    lastBodyRef.current = note.body;
+  }, [note.body]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
