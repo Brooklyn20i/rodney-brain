@@ -148,26 +148,89 @@ def select(table: str, query: str = "", limit: int | None = None) -> Any:
     return request_json("GET", url, rest_headers(anon, token))
 
 
+def _active_writable_grants(limit: int = 2) -> list[dict[str, Any]]:
+    """Return active writable grants across legacy and live schema variants.
+
+    The original migration used `owner_user_id`; the live Cadence Work project
+    currently exposes `owner_id`. Keep the bridge compatible with both instead
+    of requiring a DB migration just to keep Kobe operational.
+    """
+    queries = [
+        "select=owner_id,agent_user_id,can_write,revoked_at&revoked_at=is.null&can_write=eq.true",
+        "select=owner_user_id,agent_user_id,can_write,revoked_at&revoked_at=is.null&can_write=eq.true",
+    ]
+    last_error: Exception | None = None
+    for query in queries:
+        try:
+            grants = select("cadence_agent_access", query, limit=limit)
+        except CadenceBridgeError as e:
+            last_error = e
+            continue
+        if isinstance(grants, list):
+            return [g for g in grants if isinstance(g, dict)]
+    if last_error:
+        raise last_error
+    return []
+
+
+def _owner_id_from_grant(grant: dict[str, Any]) -> str | None:
+    owner_id = grant.get("owner_id") or grant.get("owner_user_id")
+    return str(owner_id) if owner_id else None
+
+
 def discover_owner_id() -> str:
     explicit = os.environ.get("CADENCE_OWNER_ID")
     if explicit:
         return explicit
-    grants = select(
-        "cadence_agent_access",
-        "select=owner_user_id,can_read,can_write,revoked_at&revoked_at=is.null&can_write=eq.true",
-        limit=2,
-    )
-    if not isinstance(grants, list) or not grants:
+    grants = _active_writable_grants(limit=2)
+    if not grants:
         raise CadenceBridgeError(
-            "No active writable Cadence agent grant visible. Run the 0003_kobe_agent.sql "
-            "migration and insert the Rodney -> Kobe grant, or set CADENCE_OWNER_ID."
+            "No active writable Cadence agent grant visible. Insert the Rodney -> Kobe grant, "
+            "or set CADENCE_OWNER_ID."
         )
     if len(grants) > 1:
         raise CadenceBridgeError("Multiple writable Cadence owner grants visible. Set CADENCE_OWNER_ID explicitly.")
-    owner_id = grants[0].get("owner_user_id")
+    owner_id = _owner_id_from_grant(grants[0])
     if not owner_id:
-        raise CadenceBridgeError("Active Cadence grant did not include owner_user_id")
-    return str(owner_id)
+        raise CadenceBridgeError("Active Cadence grant did not include owner_id/owner_user_id")
+    return owner_id
+
+
+def discover_workspace_id() -> str | None:
+    explicit = os.environ.get("CADENCE_WORKSPACE_ID")
+    if explicit:
+        return explicit
+    rows = select(
+        "projects",
+        "select=workspace_id&workspace_id=not.is.null&deleted_at=is.null&order=updated_at.desc",
+        limit=20,
+    )
+    if not isinstance(rows, list):
+        return None
+    workspace_ids = sorted({str(r.get("workspace_id")) for r in rows if isinstance(r, dict) and r.get("workspace_id")})
+    if not workspace_ids:
+        return None
+    if len(workspace_ids) > 1:
+        raise CadenceBridgeError("Multiple Cadence workspaces visible. Set CADENCE_WORKSPACE_ID explicitly.")
+    return workspace_ids[0]
+
+
+WORKSPACE_SCOPED_TABLES = {
+    "projects", "milestones", "project_updates", "people", "talking_points",
+    "work_items", "comments", "decisions", "notes", "outbox", "links", "activity",
+    "agent_messages", "agent_control_events",
+}
+
+
+def with_owner_workspace(table: str, row: dict[str, Any]) -> dict[str, Any]:
+    out = dict(row)
+    if "owner_id" not in out:
+        out["owner_id"] = discover_owner_id()
+    if table in WORKSPACE_SCOPED_TABLES and "workspace_id" not in out:
+        workspace_id = discover_workspace_id()
+        if workspace_id:
+            out["workspace_id"] = workspace_id
+    return out
 
 
 def insert(table: str, row: dict[str, Any]) -> Any:
@@ -176,7 +239,7 @@ def insert(table: str, row: dict[str, Any]) -> Any:
     base, anon, token = get_session()
     headers = {**rest_headers(anon, token), "Prefer": "return=representation"}
     url = f"{base}/rest/v1/{table}"
-    return request_json("POST", url, headers, row)
+    return request_json("POST", url, headers, with_owner_workspace(table, row))
 
 
 def patch_row(table: str, row_id: str, patch: dict[str, Any]) -> Any:
@@ -202,11 +265,7 @@ def cmd_probe(_: argparse.Namespace) -> None:
     # Read only. Confirms auth and RLS visibility without dumping sensitive row data.
     try:
         counts: dict[str, int | str] = {}
-        grants = select(
-            "cadence_agent_access",
-            "select=owner_user_id,can_read,can_write,revoked_at&revoked_at=is.null",
-            limit=10,
-        )
+        grants = _active_writable_grants(limit=10)
         writable_grants = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
         for t in ["work_items", "projects", "people", "decisions", "outbox"]:
             rows = select(t, "select=id", limit=1000)

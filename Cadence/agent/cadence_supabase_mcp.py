@@ -21,11 +21,7 @@ def probe() -> dict:
     """Read-only check: confirms grant visibility and counts without dumping row contents."""
     try:
         counts: dict[str, int | str] = {}
-        grants = bridge.select(
-            "cadence_agent_access",
-            "select=owner_user_id,can_read,can_write,revoked_at&revoked_at=is.null",
-            limit=10,
-        )
+        grants = bridge._active_writable_grants(limit=10)
         writable = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
         for table in ["work_items", "projects", "people", "decisions", "outbox"]:
             rows = bridge.select(table, "select=id", limit=1000)
