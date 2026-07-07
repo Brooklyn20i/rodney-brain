@@ -59,10 +59,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   // ── Rest-finished chime ───────────────────────────────────────────────────
   // A short ping when rest ends, so you can look away from the phone. Built on
-  // Web Audio with an "ambient" session so on iOS it MIXES over a podcast/music
-  // instead of pausing it. The context must be created/resumed inside a user
-  // gesture (a set tap), so we prime it there; by the time the timer fires it's
-  // already unlocked and the chime just plays.
+  // Web Audio with a "playback" session so on iOS it plays THROUGH the silent /
+  // mute switch (like an alarm) — a gym phone is usually on silent, which is
+  // why the old "ambient" session stayed quiet. The context must be created/
+  // resumed inside a user gesture (a set tap), so we prime it there; by the
+  // time the timer fires it's already unlocked and the chime just plays.
   const audioCtxRef = useRef<AudioContext | null>(null);
   const primeAudio = () => {
     if (typeof window === 'undefined') return null;
@@ -70,9 +71,10 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       if (!audioCtxRef.current) {
         const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctx) return null;
-        // ambient = don't interrupt other audio, obey the mute switch.
+        // playback = audible even when the phone's mute switch is on (a rest
+        // timer you can't hear is useless in a gym). May duck/pause other audio.
         const anyNav = navigator as unknown as { audioSession?: { type: string } };
-        if (anyNav.audioSession) anyNav.audioSession.type = 'ambient';
+        if (anyNav.audioSession) anyNav.audioSession.type = 'playback';
         audioCtxRef.current = new Ctx();
       }
       if (audioCtxRef.current.state === 'suspended') void audioCtxRef.current.resume();
@@ -84,20 +86,27 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const chime = () => {
     const ctx = primeAudio();
     if (!ctx) return;
-    const now = ctx.currentTime;
     // Two quick rising pings — distinct from a notification, easy over audio.
-    [ [0, 880], [0.16, 1175] ].forEach(([t, freq]) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + t);
-      gain.gain.exponentialRampToValueAtTime(0.25, now + t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + t);
-      osc.stop(now + t + 0.16);
-    });
+    const play = () => {
+      const now = ctx.currentTime;
+      [ [0, 880], [0.16, 1175] ].forEach(([t, freq]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + t);
+        gain.gain.exponentialRampToValueAtTime(0.25, now + t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + 0.16);
+      });
+    };
+    // The timer fires outside a user gesture; if iOS parked the context while
+    // the screen was off, scheduling on its stalled clock plays nothing. Resume
+    // first and ping once it's actually running.
+    if (ctx.state === 'suspended') void ctx.resume().then(play).catch(() => {});
+    else play();
   };
 
   // ── Rest timer ──────────────────────────────────────────────────────────
