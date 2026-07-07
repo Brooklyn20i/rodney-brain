@@ -25,6 +25,12 @@ export type MuscleGroup =
 
 export type ProgramStatus = 'draft' | 'active' | 'completed' | 'archived';
 
+// How an exercise is logged. 'weight_reps' is the default (barbell/dumbbell/
+// machine work); 'bodyweight' logs reps alone (push-ups, pull-ups); 'time'
+// logs a hold duration (planks, dead hangs, wall sits). Running/rowing/riding
+// are cardio, not exercises — they live in cardio_sessions.
+export type ExerciseTracking = 'weight_reps' | 'bodyweight' | 'time';
+
 export type WorkoutStatus = 'in_progress' | 'completed' | 'skipped';
 
 export type CardioKind =
@@ -57,6 +63,10 @@ export interface Exercise {
   muscle_group: MuscleGroup;
   secondary_muscles: string; // free text, e.g. "triceps, front delts"
   equipment: string; // 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | free text
+  // How this movement is logged. May be absent on rows written before the
+  // tracking migration / by an older client — read via trackingOf(), which
+  // defaults to 'weight_reps'.
+  tracking?: ExerciseTracking;
   notes: string;
   created_at: string;
   updated_at: string;
@@ -141,6 +151,9 @@ export interface WorkoutSet {
   set_number: number;
   weight_kg: number;
   reps: number;
+  // Hold time for timed exercises (planks etc.); 0 for weight/reps work. May be
+  // absent on rows written before the tracking migration.
+  duration_seconds?: number;
   rpe: number | null;
   is_warmup: boolean;
   done: boolean;

@@ -4,12 +4,14 @@
 // lib/store.tsx). Add your own on the Exercises screen; edit or delete any of
 // these freely.
 
-import type { MuscleGroup } from './types';
+import type { ExerciseTracking, MuscleGroup } from './types';
 
 export interface CatalogExercise {
   name: string;
   muscle_group: MuscleGroup;
   equipment: string;
+  // Omitted = weight × reps. Set only where the movement is logged differently.
+  tracking?: ExerciseTracking;
 }
 
 export const EXERCISE_CATALOG: CatalogExercise[] = [
@@ -24,7 +26,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { name: 'Cable Fly', muscle_group: 'chest', equipment: 'cable' },
   { name: 'Incline Cable Fly', muscle_group: 'chest', equipment: 'cable' },
   { name: 'Dumbbell Fly', muscle_group: 'chest', equipment: 'dumbbell' },
-  { name: 'Push-Up', muscle_group: 'chest', equipment: 'bodyweight' },
+  { name: 'Push-Up', muscle_group: 'chest', equipment: 'bodyweight', tracking: 'bodyweight' },
   { name: 'Chest Dip', muscle_group: 'chest', equipment: 'bodyweight' },
 
   // ── Back ─────────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { name: 'Lying Leg Curl', muscle_group: 'hamstrings', equipment: 'machine' },
   { name: 'Seated Leg Curl', muscle_group: 'hamstrings', equipment: 'machine' },
   { name: 'Good Morning', muscle_group: 'hamstrings', equipment: 'barbell' },
-  { name: 'Nordic Curl', muscle_group: 'hamstrings', equipment: 'bodyweight' },
+  { name: 'Nordic Curl', muscle_group: 'hamstrings', equipment: 'bodyweight', tracking: 'bodyweight' },
 
   // ── Glutes ───────────────────────────────────────────────────────────
   { name: 'Hip Thrust', muscle_group: 'glutes', equipment: 'barbell' },
@@ -110,13 +112,14 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { name: 'Leg Press Calf Raise', muscle_group: 'calves', equipment: 'machine' },
 
   // ── Core ─────────────────────────────────────────────────────────────
-  { name: 'Plank', muscle_group: 'core', equipment: 'bodyweight' },
+  { name: 'Plank', muscle_group: 'core', equipment: 'bodyweight', tracking: 'time' },
+  { name: 'Side Plank', muscle_group: 'core', equipment: 'bodyweight', tracking: 'time' },
   { name: 'Cable Crunch', muscle_group: 'core', equipment: 'cable' },
-  { name: 'Hanging Leg Raise', muscle_group: 'core', equipment: 'bodyweight' },
+  { name: 'Hanging Leg Raise', muscle_group: 'core', equipment: 'bodyweight', tracking: 'bodyweight' },
   { name: 'Ab Wheel Rollout', muscle_group: 'core', equipment: 'other' },
-  { name: 'Russian Twist', muscle_group: 'core', equipment: 'bodyweight' },
+  { name: 'Russian Twist', muscle_group: 'core', equipment: 'bodyweight', tracking: 'bodyweight' },
   { name: 'Machine Crunch', muscle_group: 'core', equipment: 'machine' },
-  { name: 'Decline Sit-Up', muscle_group: 'core', equipment: 'bodyweight' },
+  { name: 'Decline Sit-Up', muscle_group: 'core', equipment: 'bodyweight', tracking: 'bodyweight' },
 
   // ── Forearms ─────────────────────────────────────────────────────────
   { name: 'Wrist Curl', muscle_group: 'forearms', equipment: 'dumbbell' },

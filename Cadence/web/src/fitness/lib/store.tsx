@@ -160,12 +160,21 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         muscle_group: e.muscle_group,
         secondary_muscles: '',
         equipment: e.equipment,
+        tracking: e.tracking ?? 'weight_reps',
         notes: '',
         created_at: now,
         updated_at: now,
         deleted_at: null,
       }));
-      const { error: insErr } = await supabase.schema('fitness').from('exercises').insert(rows);
+      let { error: insErr } = await supabase.schema('fitness').from('exercises').insert(rows);
+      // Tolerate a database that predates the tracking migration: if the
+      // `tracking` column doesn't exist yet, seed without it (defaults apply
+      // once the migration lands) rather than leaving a new user with no
+      // exercise library.
+      if (insErr && /tracking/i.test(insErr.message || '')) {
+        const legacyRows = rows.map(({ tracking: _tracking, ...rest }) => rest);
+        ({ error: insErr } = await supabase.schema('fitness').from('exercises').insert(legacyRows));
+      }
       if (!cancelled && !insErr) {
         localStorage.setItem(FLAG, '1');
         reload('exercises');

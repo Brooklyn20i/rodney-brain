@@ -4,7 +4,15 @@ import { ScreenHeader, Card, Tag, SparkBars } from '../components/bits';
 import { epley1RM, prsByExercise, workingSets } from '../lib/fitnessCalc';
 import { EQUIPMENT_OPTIONS, fmtDMY, fmtKg, MUSCLE_GROUP_LABEL, MUSCLE_GROUPS } from '../lib/util';
 import { EXERCISE_CATALOG } from '../lib/exerciseCatalog';
-import type { MuscleGroup } from '../lib/types';
+import {
+  fmtDuration,
+  guessTracking,
+  looksLikeCardio,
+  setDuration,
+  TRACKING_OPTIONS,
+  trackingOf,
+} from '../lib/tracking';
+import type { ExerciseTracking, MuscleGroup } from '../lib/types';
 
 // Exercise library + per-lift history: PRs (best e1RM), and an e1RM-over-time
 // spark for the selected lift.
@@ -22,6 +30,14 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
   const [newName, setNewName] = useState('');
   const [newMuscle, setNewMuscle] = useState<MuscleGroup>('chest');
   const [newEquip, setNewEquip] = useState('barbell');
+  // Tracking mode for the new exercise. Auto-guessed from the name (so "Plank"
+  // defaults to a timed hold) until the user picks one explicitly.
+  const [newTracking, setNewTracking] = useState<ExerciseTracking>('weight_reps');
+  const [trackingTouched, setTrackingTouched] = useState(false);
+  const onNewName = (name: string) => {
+    setNewName(name);
+    if (!trackingTouched) setNewTracking(guessTracking(name));
+  };
   const addExercise = async () => {
     if (!newName.trim()) return;
     await insert('exercises', {
@@ -29,9 +45,12 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
       muscle_group: newMuscle,
       secondary_muscles: '',
       equipment: newEquip,
+      tracking: newTracking,
       notes: '',
     });
     setNewName('');
+    setNewTracking('weight_reps');
+    setTrackingTouched(false);
   };
 
   const seedStarter = async () => {
@@ -108,7 +127,7 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
           <div className="form-grid">
             <div style={{ gridColumn: 'span 2' }}>
               <label className="field">Name</label>
-              <input type="text" value={newName} placeholder="e.g. Pendlay Row" onChange={(e) => setNewName(e.target.value)} />
+              <input type="text" value={newName} placeholder="e.g. Pendlay Row" onChange={(e) => onNewName(e.target.value)} />
             </div>
             <div>
               <label className="field">Muscle group</label>
@@ -130,7 +149,29 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="field">Tracked as</label>
+              <select
+                value={newTracking}
+                onChange={(e) => {
+                  setNewTracking(e.target.value as ExerciseTracking);
+                  setTrackingTouched(true);
+                }}
+              >
+                {TRACKING_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+          {looksLikeCardio(newName) && (
+            <p className="cf-callout cf-callout-warn" style={{ fontSize: 12, marginTop: 4 }}>
+              🏃 Running, rowing, cycling and swimming are tracked as <strong>Cardio</strong> (time +
+              distance) — log those on the Cardio screen or in a session's Cardio block, not here.
+            </p>
+          )}
           <button className="btn btn-primary" onClick={addExercise} disabled={!newName.trim()}>
             Add
           </button>
@@ -158,6 +199,8 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
     const spark = [...bySession.values()].map((p) => ({ label: fmtDMY(p.date), value: Math.round(p.e1rm * 10) / 10 }));
     const pr = prs.get(exerciseId);
     const recent = [...history].reverse().slice(0, 12);
+    const tracking = trackingOf(e);
+    const isWeighted = tracking === 'weight_reps';
 
     return (
       <Card
@@ -188,49 +231,86 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
             <label className="field">Equipment</label>
             <input type="text" defaultValue={e.equipment} onBlur={(ev) => update('exercises', e.id, { equipment: ev.target.value })} />
           </div>
+          <div>
+            <label className="field">Tracked as</label>
+            <select value={tracking} onChange={(ev) => update('exercises', e.id, { tracking: ev.target.value as ExerciseTracking })}>
+              {TRACKING_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div style={{ gridColumn: 'span 2' }}>
             <label className="field">Notes / cues</label>
             <input type="text" defaultValue={e.notes} onBlur={(ev) => update('exercises', e.id, { notes: ev.target.value })} />
           </div>
         </div>
-        {pr ? (
-          <p style={{ fontSize: 13, marginBottom: 10 }}>
-            PR: <strong>{fmtKg(pr.weight_kg)} × {pr.reps}</strong> (e1RM {fmtKg(pr.e1rm)}) on {fmtDMY(pr.date)}
-          </p>
-        ) : (
-          <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>No working sets logged yet.</p>
-        )}
-        {spark.length > 1 && (
+        {isWeighted ? (
           <>
-            <div className="cf-card-title" style={{ marginBottom: 6 }}>
-              e1RM per session
-            </div>
-            <SparkBars points={spark} formatTip={(p) => `${p.label}: e1RM ${p.value}kg`} />
+            {pr ? (
+              <p style={{ fontSize: 13, marginBottom: 10 }}>
+                PR: <strong>{fmtKg(pr.weight_kg)} × {pr.reps}</strong> (e1RM {fmtKg(pr.e1rm)}) on {fmtDMY(pr.date)}
+              </p>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>No working sets logged yet.</p>
+            )}
+            {spark.length > 1 && (
+              <>
+                <div className="cf-card-title" style={{ marginBottom: 6 }}>
+                  e1RM per session
+                </div>
+                <SparkBars points={spark} formatTip={(p) => `${p.label}: e1RM ${p.value}kg`} />
+              </>
+            )}
+            {recent.length > 0 && (
+              <div className="cf-table-wrap" style={{ marginTop: 12 }}>
+                <table className="cf-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>kg</th>
+                      <th>Reps</th>
+                      <th>e1RM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recent.map(({ s, w }) => (
+                      <tr key={s.id}>
+                        <td>{fmtDMY(w!.date)}</td>
+                        <td>{Number(s.weight_kg)}</td>
+                        <td>{s.reps}</td>
+                        <td>{fmtKg(epley1RM(Number(s.weight_kg), s.reps))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
-        )}
-        {recent.length > 0 && (
+        ) : recent.length > 0 ? (
+          // Bodyweight reps / timed holds: no weight, so show the raw value history
+          // (e1RM/PRs don't apply).
           <div className="cf-table-wrap" style={{ marginTop: 12 }}>
             <table className="cf-table">
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>kg</th>
-                  <th>Reps</th>
-                  <th>e1RM</th>
+                  <th>{tracking === 'time' ? 'Hold' : 'Reps'}</th>
                 </tr>
               </thead>
               <tbody>
                 {recent.map(({ s, w }) => (
                   <tr key={s.id}>
                     <td>{fmtDMY(w!.date)}</td>
-                    <td>{Number(s.weight_kg)}</td>
-                    <td>{s.reps}</td>
-                    <td>{fmtKg(epley1RM(Number(s.weight_kg), s.reps))}</td>
+                    <td>{tracking === 'time' ? fmtDuration(setDuration(s)) : s.reps}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>No sets logged yet.</p>
         )}
       </Card>
     );
