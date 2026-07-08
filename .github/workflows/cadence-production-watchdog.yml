@@ -1,0 +1,37 @@
+name: Cadence production watchdog
+
+on:
+  schedule:
+    # Hourly read-only production smoke. GitHub cron can be delayed, but this is
+    # enough to catch silent production regressions between deploys without
+    # relying on a paid uptime service.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cadence-production-watchdog
+  cancel-in-progress: true
+
+jobs:
+  prod-smoke:
+    name: Production smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cadence/web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No npm ci: scripts/prod-smoke.mjs uses only Node built-ins and global fetch.
+      # Scheduled checks do not assert a specific commit; they assert the current
+      # production deployment is healthy, production-labelled, cache-safe, and
+      # serving the expected public routes/security headers.
+      - name: Production smoke check
+        run: npm run smoke:prod

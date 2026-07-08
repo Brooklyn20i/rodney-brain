@@ -20,6 +20,7 @@ for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Refe
 }
 
 const workflow = read('../../.github/workflows/cadence-web.yml');
+const productionWatchdog = read('../../.github/workflows/cadence-production-watchdog.yml');
 assert(!workflow.includes('@v4'), 'Cadence web workflow must not use Node 20-era @v4 GitHub actions.');
 assert(workflow.includes('actions/checkout@v7'), 'Cadence web workflow must use Node 24 checkout action.');
 assert(workflow.includes('actions/setup-node@v6'), 'Cadence web workflow must use Node 24 setup-node action.');
@@ -38,6 +39,12 @@ assert(
 );
 assert(read('package.json').includes('"audit:security"'), 'package.json must expose a security audit script.');
 assert(workflow.includes('npm run audit:security'), 'Cadence web workflow must run npm audit security gate.');
+assert(productionWatchdog.includes('schedule:'), 'Cadence production watchdog must run on a schedule.');
+assert(productionWatchdog.includes('workflow_dispatch:'), 'Cadence production watchdog must be manually runnable.');
+assert(productionWatchdog.includes('npm run smoke:prod'), 'Cadence production watchdog must run the production smoke check.');
+assert(!productionWatchdog.includes('--expected-commit'), 'Scheduled production watchdog must not require a specific deploy commit.');
+assert(productionWatchdog.includes('actions/checkout@v7'), 'Cadence production watchdog must use Node 24 checkout action.');
+assert(productionWatchdog.includes('actions/setup-node@v6'), 'Cadence production watchdog must use Node 24 setup-node action.');
 
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
