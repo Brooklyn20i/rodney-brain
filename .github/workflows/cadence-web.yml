@@ -4,11 +4,26 @@ on:
   push:
     paths:
       - 'Cadence/web/**'
+      - 'Cadence/backend/**'
+      - 'Cadence/agent/**'
       - '.github/workflows/cadence-web.yml'
   pull_request:
-    paths:
-      - 'Cadence/web/**'
-      - '.github/workflows/cadence-web.yml'
+
+# Required PR checks must always materialize. Do not path-filter
+# pull_request, or GitHub can leave the required check pending on PRs that
+# touch docs/config outside the filtered paths. Push runs stay path-scoped to
+# avoid wasting minutes on unrelated direct pushes.
+
+# Least-privilege: this job only reads the repo. No write scopes are granted.
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same PR/branch to save minutes. Push runs
+# (including on main) are left to complete so a deploy-gating check is never
+# cancelled out from under a merge.
+concurrency:
+  group: cadence-web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
@@ -52,3 +67,16 @@ jobs:
 
       - name: E2E tests
         run: npm run test:e2e
+
+      # Preserve Playwright traces/reports for post-mortem when E2E fails.
+      # if-no-files-found: ignore keeps the step green when no artifacts exist.
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            Cadence/web/test-results/
+            Cadence/web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

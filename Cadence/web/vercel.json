@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm install",
+  "installCommand": "npm ci",
   "framework": "vite",
   "rewrites": [
     { "source": "/", "has": [{ "type": "query", "key": "invite" }], "destination": "/work.html" },
