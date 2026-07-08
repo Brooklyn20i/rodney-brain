@@ -61,6 +61,16 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
 
+      - name: RLS negative / security assertions
+        run: psql -v ON_ERROR_STOP=1 --no-psqlrc -v CADENCE_CI_RLS_ASSERTIONS=1 -f Cadence/backend/scripts/rls_assertions.sql
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
