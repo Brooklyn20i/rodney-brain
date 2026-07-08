@@ -819,23 +819,28 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
 
         {/* Collapsible actions panel */}
         <div className="mtg-actions-panel">
-          <button className="mtg-actions-panel-hdr" onClick={() => setActionsOpen((v) => !v)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="mtg-actions-panel-hdr">
+            <button
+              type="button"
+              className="mtg-actions-panel-toggle"
+              aria-expanded={actionsOpen}
+              aria-controls="mtg-actions-panel-body"
+              onClick={() => setActionsOpen((v) => !v)}>
               <span className={`mtg-actions-panel-chevron${actionsOpen ? ' open' : ''}`}>▼</span>
               <span className="mtg-actions-panel-title">
                 ✅ Action Items{(actions.length + carryForward.length) > 0 ? ` (${actions.filter(a => !a.done).length + carryForward.length})` : ''}
               </span>
-            </div>
-            <div className="mtg-action-add-row" onClick={(e) => e.stopPropagation()}>
-              <button className="mtg-add-row" onClick={() => { setActionsOpen(true); addAction('me'); }}>+ For me</button>
-              <button className="mtg-add-row" onClick={() => { setActionsOpen(true); addAction('them'); }}>
+            </button>
+            <div className="mtg-action-add-row">
+              <button className="mtg-add-row" type="button" onClick={() => { setActionsOpen(true); addAction('me'); }}>+ For me</button>
+              <button className="mtg-add-row" type="button" onClick={() => { setActionsOpen(true); addAction('them'); }}>
                 {isGroupMeeting ? '+ For others' : `+ For ${person.name.split(' ')[0]}`}
               </button>
             </div>
-          </button>
+          </div>
 
           {actionsOpen && (
-            <div className="mtg-actions-panel-body">
+            <div id="mtg-actions-panel-body" className="mtg-actions-panel-body">
               {actions.length === 0 && carryForward.length === 0 && (
                 <p className="mtg-empty-hint">Actions agreed in this meeting appear here.</p>
               )}

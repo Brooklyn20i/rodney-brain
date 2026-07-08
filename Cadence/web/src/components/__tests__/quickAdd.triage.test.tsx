@@ -5,7 +5,7 @@
  * (inboxed: true) and shown there for triage — not filed straight into that
  * person's / project's folder. This locks in the behaviour the user asked for.
  */
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emptyData } from '../../lib/types';
 
@@ -39,13 +39,13 @@ beforeEach(() => setStore());
 afterEach(() => cleanup());
 
 describe('Quick Add captures to the Inbox', () => {
-  it('files a person- and project-tagged note into the Inbox (inboxed: true), keeping the tags', () => {
+  it('files a person- and project-tagged note into the Inbox (inboxed: true), keeping the tags', async () => {
     setStore({ people: [person({ id: 'amy', name: 'Amy Jones' })], projects: [project({ id: 'promace', name: 'Promace' })] });
     render(<QuickAdd onClose={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Call Amy about Promace' } });
     // Parser should have tagged both — the button stays "Add to Inbox", not "Add Task".
     fireEvent.click(screen.getByText('Add to Inbox →'));
-    expect(h.store.insert).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(h.store.insert).toHaveBeenCalledTimes(1));
     const [table, row] = h.store.insert.mock.calls[0];
     expect(table).toBe('work_items');
     expect(row.inboxed).toBe(true);                 // captured, not filed
