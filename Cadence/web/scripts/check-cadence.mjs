@@ -25,6 +25,18 @@ assert(workflow.includes('actions/checkout@v7'), 'Cadence web workflow must use 
 assert(workflow.includes('actions/setup-node@v6'), 'Cadence web workflow must use Node 24 setup-node action.');
 assert(workflow.includes('actions/upload-artifact@v7'), 'Cadence web workflow must use Node 24 upload-artifact action.');
 
+// Guard the production smoke automation so it cannot silently disappear from
+// the workflow. This CI job runs after `ci` on main pushes and verifies prod.
+assert(workflow.includes('prod-smoke:'), 'Cadence web workflow must define the prod-smoke job.');
+assert(workflow.includes('npm run smoke:prod'), 'prod-smoke job must run the production smoke check (npm run smoke:prod).');
+assert(workflow.includes('--expected-commit="$GITHUB_SHA"'), 'prod-smoke job must require production to reach the pushed commit.');
+assert(workflow.includes('for attempt in {1..30}'), 'prod-smoke job must poll for Vercel production deploy readiness.');
+assert(workflow.includes('needs: ci'), 'prod-smoke job must run after the ci job (needs: ci).');
+assert(
+  workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"),
+  'prod-smoke job must be gated to pushes on main.',
+);
+
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
 assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init must tag errors with the deploy release.');
