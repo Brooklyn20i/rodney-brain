@@ -36,6 +36,8 @@ assert(
   workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"),
   'prod-smoke job must be gated to pushes on main.',
 );
+assert(read('package.json').includes('"audit:security"'), 'package.json must expose a security audit script.');
+assert(workflow.includes('npm run audit:security'), 'Cadence web workflow must run npm audit security gate.');
 
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
