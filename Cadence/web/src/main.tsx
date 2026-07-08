@@ -8,6 +8,10 @@ import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import './styles.css';
 
+// Build provenance for operators and bug reports. Vite replaces this at build
+// time from Vercel's commit SHA or a local git fallback.
+document.documentElement.dataset.buildCommit = __BUILD_COMMIT__;
+
 // Resilience: a new deploy renames hashed chunks. If a stale service worker
 // serves an old shell that imports a chunk that no longer exists, the browser
 // fires vite:preloadError — reload once to fetch the fresh index instead of
@@ -45,6 +49,7 @@ if (sentryDsn) {
     Sentry.init({
       dsn: sentryDsn,
       environment: import.meta.env.MODE,
+      release: __BUILD_COMMIT__,
       // Capture 10% of sessions for performance profiling.
       tracesSampleRate: 0.1,
       // Only report errors from our own code, not third-party scripts.
