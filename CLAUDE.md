@@ -30,6 +30,7 @@ Never manually build or copy to `docs/` — Vercel handles everything.
 ## Rollback runbook (2am edition)
 
 Prod is broken and you need it back NOW:
+0. **Identify the live deploy:** `curl -s https://cadence-agent.com/api/health` and note the running `commit`/`env`/`region`. Cross-reference that commit with Vercel deployments and Sentry's `release` field before rolling back.
 1. **Fastest (UI):** Vercel dashboard → project `web` → Deployments → find the last known-good production deploy → **⋯ → Promote to Production** (aka Instant Rollback). Live in ~seconds, no rebuild.
 2. **CLI:** `npx vercel rollback` (lists recent deploys) or `npx vercel rollback <deployment-url> --scope cadenceagent`.
 3. **Then fix forward:** revert the bad commit on `main` (`git revert <sha>` → push) so the next deploy is clean — don't leave prod pinned to an old promote.

@@ -25,6 +25,16 @@
 
 ## 3. Identify the last known good state
 
+### Step 0 — identify the live deploy
+
+Before touching data or rolling anything back, capture which web deploy is actually live:
+
+```bash
+curl -s https://cadence-agent.com/api/health
+```
+
+The probe returns the running short `commit`, branch/ref, Vercel environment and region. Cross-reference that commit with GitHub, Vercel deployments and Sentry's `release` field to identify whether the incident started with the current deploy or with a backend/data change.
+
 ### Option A — PITR (Supabase Pro)
 1. Go to Supabase Dashboard → **Database** → **Backups**
 2. Choose **Point in Time Recovery**

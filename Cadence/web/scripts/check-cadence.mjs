@@ -19,6 +19,19 @@ for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Refe
   assert(vercelConfig.includes(header), `vercel.json must set ${header}.`);
 }
 
+const viteConfig = read('vite.config.ts');
+assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
+assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init must tag errors with the deploy release.');
+assert(read('src/vite-env.d.ts').includes('__BUILD_COMMIT__'), 'vite-env.d.ts must declare __BUILD_COMMIT__.');
+assert(read('tsconfig.json').includes('"api"'), 'typecheck must include Vercel API functions.');
+assert(read('package.json').includes('eslint src api'), 'lint must include Vercel API functions.');
+assert(read('eslint.config.js').includes("'api/**/*.ts'"), 'ESLint config must cover api/**/*.ts.');
+assert(existsSync(join(root, 'api/health.ts')), 'api/health.ts must expose deploy provenance.');
+const healthApi = read('api/health.ts');
+assert(healthApi.includes("Cache-Control', 'no-store'"), 'api/health.ts must disable caching.');
+assert(healthApi.includes('VERCEL_GIT_COMMIT_SHA') && healthApi.includes('VERCEL_ENV'), 'api/health.ts must return deploy commit and environment.');
+assert(!/SUPABASE|SERVICE_ROLE|PASSWORD|SECRET|TOKEN/.test(healthApi), 'api/health.ts must not reference secrets or data backends.');
+
 const inviteMigration = read('../backend/migrations/0015_workspace_invites.sql');
 assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites SELECT must not publicly expose invite tokens.');
 assert(inviteMigration.includes("cadence_workspace_access(workspace_id, 'admin')"), 'workspace_invites SELECT must be admin-scoped.');
