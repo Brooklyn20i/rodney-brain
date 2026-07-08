@@ -116,3 +116,39 @@ jobs:
             Cadence/web/playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+
+  # After CI passes on a push to main, verify production is actually healthy.
+  # This runs only on main pushes (not PRs, not other branches) so we never hit
+  # prod from a preview branch, and only after `ci` is green. The smoke check is
+  # strictly read-only: it issues GETs against cadence-agent.com and asserts on
+  # status codes, headers, and the /api/health payload — it never writes.
+  prod-smoke:
+    name: Production smoke
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cadence/web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No `npm ci`: prod-smoke.mjs uses only Node built-ins and global fetch,
+      # so it needs no installed dependencies. Vercel deploys independently of
+      # GitHub Actions, so poll until production reports the pushed commit rather
+      # than accepting a healthy-but-old deploy.
+      - name: Production smoke check
+        run: |
+          for attempt in {1..30}; do
+            if npm run smoke:prod -- --expected-commit="$GITHUB_SHA"; then
+              exit 0
+            fi
+            echo "Production smoke attempt ${attempt}/30 did not match ${GITHUB_SHA::7}; waiting for Vercel production deploy..."
+            sleep 10
+          done
+          echo "Production smoke did not pass for ${GITHUB_SHA::7} after 30 attempts" >&2
+          exit 1
