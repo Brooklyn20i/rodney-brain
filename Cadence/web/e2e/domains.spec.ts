@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 
 // Drives the unified super-app's domain switcher (Work / Financial / Fitness)
 // under VITE_E2E. Work uses the in-memory E2E provider; Financial and Fitness
