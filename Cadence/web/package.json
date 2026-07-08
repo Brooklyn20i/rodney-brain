@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:unit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "smoke:prod": "node scripts/prod-smoke.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.4.1",

@@ -31,6 +31,7 @@ assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init 
 assert(read('src/vite-env.d.ts').includes('__BUILD_COMMIT__'), 'vite-env.d.ts must declare __BUILD_COMMIT__.');
 assert(read('tsconfig.json').includes('"api"'), 'typecheck must include Vercel API functions.');
 assert(read('package.json').includes('eslint src api'), 'lint must include Vercel API functions.');
+assert(read('package.json').includes('smoke:prod'), 'package.json must expose production smoke checks.');
 assert(read('eslint.config.js').includes("'api/**/*.ts'"), 'ESLint config must cover api/**/*.ts.');
 assert(existsSync(join(root, 'api/health.ts')), 'api/health.ts must expose deploy provenance.');
 const healthApi = read('api/health.ts');
