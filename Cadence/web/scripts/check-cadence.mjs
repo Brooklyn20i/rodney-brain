@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -52,6 +52,16 @@ const healthApi = read('api/health.ts');
 assert(healthApi.includes("Cache-Control', 'no-store'"), 'api/health.ts must disable caching.');
 assert(healthApi.includes('VERCEL_GIT_COMMIT_SHA') && healthApi.includes('VERCEL_ENV'), 'api/health.ts must return deploy commit and environment.');
 assert(!/SUPABASE|SERVICE_ROLE|PASSWORD|SECRET|TOKEN/.test(healthApi), 'api/health.ts must not reference secrets or data backends.');
+
+const e2eFixture = read('e2e/fixtures.ts');
+assert(e2eFixture.includes("message.type()"), 'E2E fixture must inspect browser console message types.');
+assert(e2eFixture.includes("type !== 'error' && type !== 'warning'"), 'E2E fixture must fail on console errors and warnings.');
+assert(e2eFixture.includes("page.on('pageerror'"), 'E2E fixture must fail on browser page errors.');
+for (const spec of readdirSync(join(root, 'e2e')).filter((name) => name.endsWith('.spec.ts'))) {
+  const source = read(`e2e/${spec}`);
+  assert(source.includes("from './fixtures'"), `${spec} must use the shared E2E browser-error guard fixture.`);
+  assert(!source.includes("from '@playwright/test'"), `${spec} must not bypass the shared E2E browser-error guard fixture.`);
+}
 
 const inviteMigration = read('../backend/migrations/0015_workspace_invites.sql');
 assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites SELECT must not publicly expose invite tokens.');
