@@ -4,6 +4,7 @@
  * runtime bugs that static review misses. The store and the meeting-dates hook
  * are mocked; every other piece of component logic runs for real.
  */
+import type { ReactElement } from 'react';
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emptyData } from '../../lib/types';
@@ -269,7 +270,7 @@ describe('Gantt', () => {
 
 // ── Smoke: every screen renders without crashing (empty + populated) ──────────────
 describe('Screen render smoke', () => {
-  const screens: [string, () => JSX.Element][] = [
+  const screens: [string, () => ReactElement][] = [
     ['Tasks', () => <Tasks onMenu={() => {}} />],
     ['Inbox', () => <Inbox onMenu={() => {}} />],
     ['Notes', () => <Notes onMenu={() => {}} />],
