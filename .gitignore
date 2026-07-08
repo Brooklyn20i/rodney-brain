@@ -1,0 +1,8 @@
+# Repo-level local and secret-bearing artefacts
+.vercel/
+node_modules/
+**/node_modules/
+
+# Supabase CLI local temp state can include project refs / connection strings.
+Cadence/supabase/.temp/
+**/.temp/

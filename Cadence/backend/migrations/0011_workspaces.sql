@@ -36,6 +36,21 @@ create trigger trg_workspaces_updated
 
 alter table public.workspaces enable row level security;
 
+-- ── workspace_members ────────────────────────────────────────────────────────
+-- Create before workspace policies: workspaces_select references this table, and
+-- a clean replay fails if the policy is created before the relation exists.
+create table if not exists public.workspace_members (
+  workspace_id uuid        not null references public.workspaces(id) on delete cascade,
+  user_id      uuid        not null references auth.users(id) on delete cascade,
+  role         text        not null default 'editor'
+                           check (role in ('admin', 'editor', 'viewer')),
+  invited_by   uuid        references auth.users(id),
+  joined_at    timestamptz not null default now(),
+  primary key (workspace_id, user_id)
+);
+
+alter table public.workspace_members enable row level security;
+
 -- Members see their workspaces; workspace creators can manage them.
 drop policy if exists workspaces_select on public.workspaces;
 create policy workspaces_select on public.workspaces
@@ -58,19 +73,6 @@ create policy workspaces_update on public.workspaces
 drop policy if exists workspaces_delete on public.workspaces;
 create policy workspaces_delete on public.workspaces
   for delete using (false);
-
--- ── workspace_members ────────────────────────────────────────────────────────
-create table if not exists public.workspace_members (
-  workspace_id uuid        not null references public.workspaces(id) on delete cascade,
-  user_id      uuid        not null references auth.users(id) on delete cascade,
-  role         text        not null default 'editor'
-                           check (role in ('admin', 'editor', 'viewer')),
-  invited_by   uuid        references auth.users(id),
-  joined_at    timestamptz not null default now(),
-  primary key (workspace_id, user_id)
-);
-
-alter table public.workspace_members enable row level security;
 
 -- Members can see others in the same workspace.
 drop policy if exists workspace_members_select on public.workspace_members;

@@ -63,13 +63,13 @@ security add-generic-password \
 Run:
 
 ```sql
-Cadence/backend/migrations/0003_kobe_agent.sql
+Cadence/backend/migrations/0003_agent_access.sql
 ```
 
 This creates:
 
 - `public.cadence_agent_access`
-- helper function `public.cadence_can_access_owner(target_owner_id, required_access)`
+- helper function `public.cadence_can_access(row_owner, require_write)`
 - dynamic RLS policies for all Cadence operating tables
 
 ### 3. Insert the active grant
@@ -148,9 +148,9 @@ To revoke Kobe access without deleting the user:
 
 ```sql
 update public.cadence_agent_access
-set revoked_at = now(), updated_at = now()
+set revoked_at = now()
 where agent_user_id = (select id from auth.users where email = 'kobe-agent@cadence.app')
-  and owner_user_id = (select id from auth.users where email = 'rbalech@gmail.com')
+  and owner_id = (select id from auth.users where email = 'rbalech@gmail.com')
   and revoked_at is null;
 ```
 
@@ -160,13 +160,11 @@ where agent_user_id = (select id from auth.users where email = 'kobe-agent@caden
 select
   owner_user.email as owner_email,
   agent_user.email as agent_email,
-  a.can_read,
   a.can_write,
   a.revoked_at,
-  a.created_at,
-  a.updated_at
+  a.created_at
 from public.cadence_agent_access a
-join auth.users owner_user on owner_user.id = a.owner_user_id
+join auth.users owner_user on owner_user.id = a.owner_id
 join auth.users agent_user on agent_user.id = a.agent_user_id
 order by a.created_at desc;
 ```

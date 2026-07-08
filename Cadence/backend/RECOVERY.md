@@ -53,23 +53,10 @@ LIMIT 50;
 **Never restore directly into production.** Always restore to a fresh project first, verify, then decide whether to promote or selectively extract rows.
 
 1. Create a **new Supabase project** (free tier is fine for recovery)
-2. In the new project's SQL editor, replay migrations in order:
-   ```
-   0001_init.sql
-   0002_policies.sql
-   0003_agent_access.sql  (or 0003_kobe_agent.sql if that's what's applied)
-   0004_realtime_and_color.sql
-   0005_notes_folder.sql
-   0006_projects_depth.sql
-   0007_people_groups.sql
-   0008_immutable_owner_id.sql
-   0009_activity_append_only.sql
-   0010_owner_validated_child_rows.sql
-   0011_workspaces.sql
-   0012_add_workspace_id.sql
-   0013_backfill_workspace.sql
-   0014_workspace_rls.sql
-   ```
+2. In the new project's SQL editor, replay the canonical files in `Cadence/backend/migrations/` in lexical order.
+   - Use only top-level files matching `0001_*.sql` through the latest numbered migration.
+   - Do **not** apply files under `Cadence/backend/migrations/archive/`; they are retained only for history.
+   - `0003_agent_access.sql` is the canonical agent-access migration. The archived `0003_kobe_agent.sql` used a legacy column shape and is not part of replay.
 3. Use the Supabase PITR restore UI to restore the backup into this scratch project
 4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your `.env.local` to the scratch project
 5. Run the app locally and verify data looks correct
