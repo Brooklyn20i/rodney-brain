@@ -3,10 +3,10 @@
 --
 -- Issue (2026-06-20 security review):
 --   The activity table is intended as a tamper-evident audit trail. However,
---   the RLS policies created in 0002_policies.sql and 0003_kobe_agent.sql grant
---   UPDATE and DELETE on activity to both the owner and any write-authorised
---   agent. This means Rodney or an agent could silently erase or alter audit
---   entries, defeating the purpose of the log.
+--   the RLS policies created in 0002_policies.sql and the agent-access
+--   migration grant UPDATE and DELETE on activity to both the owner and any
+--   write-authorised agent. This means Rodney or an agent could silently erase
+--   or alter audit entries, defeating the purpose of the log.
 --
 -- Fix:
 --   1. Drop any existing UPDATE / DELETE RLS policies on activity — they must

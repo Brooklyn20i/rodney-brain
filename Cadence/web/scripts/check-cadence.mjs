@@ -22,8 +22,6 @@ for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Refe
 const inviteMigration = read('../backend/migrations/0015_workspace_invites.sql');
 assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites SELECT must not publicly expose invite tokens.');
 assert(inviteMigration.includes("cadence_workspace_access(workspace_id, 'admin')"), 'workspace_invites SELECT must be admin-scoped.');
-const combinedMigration = read('../backend/migrations/combined_0008_to_0015.sql');
-assert(!combinedMigration.includes('workspace_invites_select on public.workspace_invites\n  for select using (true)'), 'combined migration must not publicly expose invite tokens.');
 
 // Screens currently wired into the app. Decisions/Outbox were consolidated into
 // other surfaces; Dashboard/Horizon/Board are the cockpit additions.

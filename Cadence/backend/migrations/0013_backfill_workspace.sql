@@ -20,14 +20,16 @@ declare
   rodney_uid uuid;
   kobe_uid   uuid;
   ws_id      uuid;
+  activity_trigger_disabled boolean := false;
 begin
 
   -- ── Locate users ────────────────────────────────────────────────────────────
   select id into rodney_uid from auth.users where email = 'rbalech@gmail.com';
   if rodney_uid is null then
-    raise exception
-      'User rbalech@gmail.com not found in auth.users. '
-      'Rodney must have logged in at least once before this migration runs.';
+    raise notice
+      'User rbalech@gmail.com not found in auth.users; skipping workspace backfill for fresh replay. '
+      'Run this migration again after Rodney has logged in, or use provision_workspace() for new users.';
+    return;
   end if;
 
   select id into kobe_uid from auth.users where email = 'kobe-agent@cadence.app';
@@ -61,21 +63,42 @@ begin
   -- ── Backfill workspace_id on all data tables ────────────────────────────────
   -- Only rows owned by Rodney; other owners (if any) are left null and must be
   -- backfilled separately when their workspaces are created.
-  update public.projects        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.milestones      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.project_updates set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.project_phases  set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.raid_items      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.stakeholders    set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.people          set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.talking_points  set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.work_items      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.comments        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.decisions       set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.notes           set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.outbox          set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.links           set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
-  update public.activity        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+  --
+  -- activity is intentionally append-only from 0009 onward. This historical
+  -- workspace backfill is the one exception: temporarily disable the trigger so
+  -- a replay/data-bearing upgrade can stamp workspace_id, then always re-enable
+  -- it before leaving this block.
+  if exists (select 1 from pg_trigger where tgname = 'trg_activity_append_only') then
+    alter table public.activity disable trigger trg_activity_append_only;
+    activity_trigger_disabled := true;
+  end if;
+
+  begin
+    update public.projects        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.milestones      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.project_updates set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.project_phases  set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.raid_items      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.stakeholders    set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.people          set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.talking_points  set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.work_items      set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.comments        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.decisions       set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.notes           set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.outbox          set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.links           set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+    update public.activity        set workspace_id = ws_id where owner_id = rodney_uid and workspace_id is null;
+  exception when others then
+    if activity_trigger_disabled then
+      alter table public.activity enable trigger trg_activity_append_only;
+    end if;
+    raise;
+  end;
+
+  if activity_trigger_disabled then
+    alter table public.activity enable trigger trg_activity_append_only;
+  end if;
 
   raise notice 'Backfill complete. workspace_id = %', ws_id;
 
