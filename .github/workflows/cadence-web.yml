@@ -7,6 +7,7 @@ on:
       - 'Cadence/backend/**'
       - 'Cadence/agent/**'
       - '.github/workflows/cadence-web.yml'
+      - '.github/dependabot.yml'
   pull_request:
 
 # Required PR checks must always materialize. Do not path-filter

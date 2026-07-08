@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Active Cadence PWA only. Legacy standalone app directories are superseded
+  # reference copies and are intentionally not monitored here.
+  - package-ecosystem: npm
+    directory: /Cadence/web
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      cadence-npm-production:
+        dependency-type: production
+        patterns:
+          - "*"
+      cadence-npm-development:
+        dependency-type: development
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "06:30"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    groups:
+      cadence-github-actions:
+        patterns:
+          - "*"
