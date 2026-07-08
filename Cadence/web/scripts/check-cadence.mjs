@@ -53,6 +53,7 @@ assert(dependabot.includes('package-ecosystem: github-actions') && dependabot.in
 assert(dependabot.includes('open-pull-requests-limit'), 'Dependabot config must cap open pull requests.');
 assert(dependabot.includes('dependency-type: production'), 'Dependabot npm updates must group production dependencies.');
 assert(dependabot.includes('dependency-type: development'), 'Dependabot npm updates must group development dependencies.');
+assert(dependabot.includes('dependency-name: typescript') && dependabot.includes('version-update:semver-major'), 'Dependabot must ignore unsupported TypeScript major updates until lint tooling supports them.');
 assert(!dependabot.includes('CadenceFinancial') && !dependabot.includes('CadenceFitness'), 'Dependabot must not monitor superseded legacy Cadence apps.');
 
 const viteConfig = read('vite.config.ts');

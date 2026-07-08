@@ -10,6 +10,13 @@ updates:
       time: "06:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 5
+    # TypeScript major upgrades must track @typescript-eslint peer support.
+    # PR #53 proved Dependabot will otherwise propose unsupported TS 7 while
+    # @typescript-eslint 8.x still declares peer support below 6.1.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     groups:
       cadence-npm-production:
         dependency-type: production
