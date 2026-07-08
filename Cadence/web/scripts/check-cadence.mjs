@@ -21,6 +21,7 @@ for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Refe
 
 const workflow = read('../../.github/workflows/cadence-web.yml');
 const productionWatchdog = read('../../.github/workflows/cadence-production-watchdog.yml');
+const dependabot = read('../../.github/dependabot.yml');
 assert(!workflow.includes('@v4'), 'Cadence web workflow must not use Node 20-era @v4 GitHub actions.');
 assert(workflow.includes('actions/checkout@v7'), 'Cadence web workflow must use Node 24 checkout action.');
 assert(workflow.includes('actions/setup-node@v6'), 'Cadence web workflow must use Node 24 setup-node action.');
@@ -45,6 +46,14 @@ assert(productionWatchdog.includes('npm run smoke:prod'), 'Cadence production wa
 assert(!productionWatchdog.includes('--expected-commit'), 'Scheduled production watchdog must not require a specific deploy commit.');
 assert(productionWatchdog.includes('actions/checkout@v7'), 'Cadence production watchdog must use Node 24 checkout action.');
 assert(productionWatchdog.includes('actions/setup-node@v6'), 'Cadence production watchdog must use Node 24 setup-node action.');
+assert(workflow.includes("'.github/dependabot.yml'"), 'Cadence web workflow push paths must include Dependabot config changes.');
+assert(dependabot.includes('version: 2'), 'Dependabot config must use version 2.');
+assert(dependabot.includes('package-ecosystem: npm') && dependabot.includes('directory: /Cadence/web'), 'Dependabot must monitor active Cadence web npm dependencies.');
+assert(dependabot.includes('package-ecosystem: github-actions') && dependabot.includes('directory: /'), 'Dependabot must monitor GitHub Actions at repo root.');
+assert(dependabot.includes('open-pull-requests-limit'), 'Dependabot config must cap open pull requests.');
+assert(dependabot.includes('dependency-type: production'), 'Dependabot npm updates must group production dependencies.');
+assert(dependabot.includes('dependency-type: development'), 'Dependabot npm updates must group development dependencies.');
+assert(!dependabot.includes('CadenceFinancial') && !dependabot.includes('CadenceFitness'), 'Dependabot must not monitor superseded legacy Cadence apps.');
 
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
