@@ -61,6 +61,12 @@ insert into public.projects (id, owner_id, name, goal, workspace_id) values
    'e0000000-0000-4000-8000-000000000001', 'WS1 project', 'ws-isolation',
    'b1111111-0000-4000-8000-000000000001');
 
+insert into public.workspace_invites (id, workspace_id, invited_by, role) values
+  ('f1111111-0000-4000-8000-000000000001',
+   'b1111111-0000-4000-8000-000000000001',
+   'e0000000-0000-4000-8000-000000000001',
+   'viewer');
+
 create or replace function pg_temp.assert_visible_count(
   sub uuid,
   q text,
@@ -121,6 +127,84 @@ begin
 
   if n <> expected then
     raise exception 'FAIL[%]: expected % rows affected, got %', label, expected, n;
+  end if;
+end $$;
+
+create or replace function pg_temp.assert_anon_visible_count(
+  q text,
+  expected bigint,
+  label text
+) returns void language plpgsql as $$
+declare n bigint;
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', 'anon', true);
+  set local role anon;
+  execute q into n;
+  reset role;
+
+  if n <> expected then
+    raise exception 'FAIL[%]: expected % rows, got %', label, expected, n;
+  end if;
+end $$;
+
+create or replace function pg_temp.assert_anon_rowcount(
+  stmt text,
+  expected bigint,
+  label text
+) returns void language plpgsql as $$
+declare n bigint;
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', 'anon', true);
+  set local role anon;
+  execute stmt;
+  get diagnostics n = row_count;
+  reset role;
+
+  if n <> expected then
+    raise exception 'FAIL[%]: expected % rows affected, got %', label, expected, n;
+  end if;
+end $$;
+
+create or replace function pg_temp.assert_anon_blocked(
+  stmt text,
+  label text
+) returns void language plpgsql as $$
+declare blocked boolean := false;
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', 'anon', true);
+  set local role anon;
+
+  begin
+    execute stmt;
+  exception when others then
+    blocked := true;
+  end;
+
+  reset role;
+
+  if not blocked then
+    raise exception 'FAIL[%]: statement was NOT blocked', label;
+  end if;
+end $$;
+
+create or replace function pg_temp.assert_auth_json_error(
+  sub uuid,
+  q text,
+  label text
+) returns void language plpgsql as $$
+declare result json;
+begin
+  perform set_config('request.jwt.claim.sub', sub::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  set local role authenticated;
+  execute q into result;
+  reset role;
+
+  if result->>'error' is null then
+    raise exception 'FAIL[%]: expected JSON error, got %', label, result;
   end if;
 end $$;
 
@@ -235,6 +319,45 @@ select pg_temp.assert_blocked(
     values ('a0000000-0000-4000-8000-000000000001',
             'c1111111-0000-4000-8000-000000000001', 'cross-owner child', 'task')$$,
   'work-item-cross-owner-project-blocked'
+);
+
+-- ── External-user surfaces: waitlist and invites ─────────────────────────────
+select pg_temp.assert_anon_rowcount(
+  $$insert into public.waitlist (email, name)
+    values ('valid-waitlist@example.com', 'Valid Visitor')$$,
+  1,
+  'anon-can-join-waitlist'
+);
+
+select pg_temp.assert_anon_blocked(
+  $$insert into public.waitlist (email, name, status)
+    values ('self-approved@example.com', 'Self Approver', 'approved')$$,
+  'anon-cannot-self-approve-waitlist'
+);
+
+select pg_temp.assert_anon_blocked(
+  $$insert into public.waitlist (email, name)
+    values (repeat('a', 250) || '@x.com', 'Oversized Email')$$,
+  'anon-cannot-insert-oversized-email'
+);
+
+select pg_temp.assert_anon_visible_count(
+  $$select count(*) from public.waitlist$$,
+  0,
+  'anon-cannot-read-waitlist'
+);
+
+select pg_temp.assert_visible_count(
+  'e0000000-0000-4000-8000-000000000002',
+  $$select count(*) from public.workspace_invites where workspace_id = 'b1111111-0000-4000-8000-000000000001'$$,
+  0,
+  'workspace-viewer-cannot-list-invites'
+);
+
+select pg_temp.assert_auth_json_error(
+  'c0000000-0000-4000-8000-000000000003',
+  $$select public.accept_workspace_invite('ffffffff-ffff-4fff-8fff-ffffffffffff')$$,
+  'invalid-invite-returns-json-error'
 );
 
 -- ── Append-only activity ────────────────────────────────────────────────────
