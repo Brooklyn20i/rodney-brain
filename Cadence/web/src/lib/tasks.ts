@@ -85,6 +85,15 @@ export const isAgentTask = (w: Pick<WorkItem, 'source'>): boolean =>
 export const isUserTask = (w: Pick<WorkItem, 'done' | 'source'>): boolean =>
   !w.done && !isAgentTask(w);
 
+// A user task that has been TRIAGED out of the Inbox — i.e. a "filed" task that
+// belongs on the Today / Tasks / Board / People / Projects surfaces. Inbox
+// captures (inboxed) are quick captures awaiting triage; they live only in the
+// Inbox — even when tagged with a person or project — until the user files them
+// (which clears `inboxed`). This is what lets Quick Add capture-first: tagging a
+// person/project no longer yanks the note straight into that folder.
+export const isFiledTask = (w: Pick<WorkItem, 'done' | 'source' | 'inboxed'>): boolean =>
+  isUserTask(w) && !w.inboxed;
+
 // Build the work_item payload for a meeting action. An explicit target wins;
 // otherwise fall back to the action's own owner_person_id. The action's due
 // date is always preserved. Unassigned actions land in the triage Inbox.

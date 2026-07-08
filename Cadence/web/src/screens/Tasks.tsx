@@ -6,7 +6,7 @@ import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../lib/util';
 import { parseMeeting, serializeMeeting } from '../lib/meetingData';
-import { collectOpenMeetingActions, buildTaskFromAction, isUserTask } from '../lib/tasks';
+import { collectOpenMeetingActions, buildTaskFromAction, isFiledTask } from '../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../lib/tasks';
 
 // ── Grouping ──────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const openActions = useMemo(() => collectOpenMeetingActions(data.notes), [data.notes]);
 
   const { groups, counts } = useMemo(() => {
-    const open = data.work_items.filter(isUserTask);
+    const open = data.work_items.filter(isFiledTask);
     const counts = {
       total: open.length,
       overdue: open.filter((w) => isOverdue(w.due_date)).length,

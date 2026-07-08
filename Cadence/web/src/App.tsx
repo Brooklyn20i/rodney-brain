@@ -3,7 +3,7 @@ import { useCadence } from './lib/store';
 import { useCadenceFitness } from './fitness/lib/store';
 import { useCadenceFinancial } from './financial/lib/store';
 import { isOverdue } from './lib/util';
-import { isFiled, isUserTask } from './lib/tasks';
+import { isUserTask } from './lib/tasks';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar, type Domain } from './components/Sidebar';
@@ -190,7 +190,7 @@ export function App() {
     // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
     // triage backlog (unprocessed captures waiting to be filed).
     tasks: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: 'red' },
-    inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed && !isFiled(w)).length, cls: '' },
+    inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed).length, cls: '' },
     people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
   }), [data]);
 

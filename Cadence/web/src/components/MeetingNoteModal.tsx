@@ -459,6 +459,12 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // save — a string compare that's robust to JSON formatting differences
   // between the web build, the Swift app and the agent.
   const lastBodyRef = useRef(note.body);
+  // The newest server updated_at we've accepted for this note. Live-sync only
+  // adopts a remote body whose updated_at is strictly newer than this, so a
+  // stale concurrent refetch (which can momentarily revert the row to an older
+  // body while our own save is still committing) can never clobber in-progress
+  // edits. updated_at is server-set on every write, so it orders versions.
+  const lastSeenUpdatedAtRef = useRef(note.updated_at);
 
   const flushSave = useCallback(() => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
@@ -475,8 +481,15 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     // Fire-and-forget (runs on unmount, where we can't await): catch the promise
     // so a failed final save can't raise an unhandled rejection. Real failures
     // still surface via the store's sync-error banner, and network drops are
-    // queued for offline replay — so the edit isn't silently lost.
-    void update('notes', noteIdRef.current, { body } as Partial<Note>).catch(() => {});
+    // queued for offline replay — so the edit isn't silently lost. On success we
+    // record the server's new updated_at so a later stale refetch of an OLDER
+    // version is correctly ignored by the live-sync guard below.
+    void update('notes', noteIdRef.current, { body } as Partial<Note>)
+      .then((row) => {
+        const ts = (row as Note | undefined)?.updated_at;
+        if (typeof ts === 'string' && ts > lastSeenUpdatedAtRef.current) lastSeenUpdatedAtRef.current = ts;
+      })
+      .catch(() => {});
   }, [update]);
 
   const scheduleSave = useCallback(() => {
@@ -504,6 +517,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     rawRef.current = raw;
     dirtyRef.current = false;
     lastBodyRef.current = note.body;
+    lastSeenUpdatedAtRef.current = note.updated_at;
     setShowImport(false);
     setImportSel(new Set());
   }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -516,15 +530,23 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   // an instance left open on one device now tracks, and never overwrites, the
   // other.
   useEffect(() => {
-    if (note.body === lastBodyRef.current) return; // no remote change since we last synced/saved
     if (dirtyRef.current) return; // unsaved local edits win — don't stomp them
+    if (note.body === lastBodyRef.current) return; // no change vs what we already hold
+    // Only adopt a STRICTLY NEWER version. A concurrent refetch can momentarily
+    // revert the row to an older body while our own save is still committing;
+    // without this guard we'd wipe the user's in-progress edits (and rich-text
+    // bullets, which re-sync from the body) back to that stale copy. When the
+    // row carries no timestamp (older data / tests) we fall back to adopting.
+    const incoming = note.updated_at || '';
+    if (incoming && incoming <= lastSeenUpdatedAtRef.current) return;
     const { data: p, raw } = parseMeeting(note.body);
     setAgenda(p.agenda);
     setActions(p.actions);
     setNotes(p.notes);
     rawRef.current = raw;
     lastBodyRef.current = note.body;
-  }, [note.body]);
+    if (incoming) lastSeenUpdatedAtRef.current = incoming;
+  }, [note.body, note.updated_at]);
 
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
