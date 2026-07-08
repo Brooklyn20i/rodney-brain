@@ -6,7 +6,7 @@ import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { isUserTask, isAgentTask } from '../lib/tasks';
+import { isFiledTask, isAgentTask } from '../lib/tasks';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -333,7 +333,9 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [draft, setDraft] = useState('');
 
-  const mine = data.work_items.filter((w) => !isAgentTask(w) && isPersonLinked(w, person.id));
+  // Exclude inboxed captures: a quick note tagged with this person still waits
+  // in the Inbox for triage — it only appears in their folder once filed.
+  const mine = data.work_items.filter((w) => !isAgentTask(w) && !w.inboxed && isPersonLinked(w, person.id));
   const open = mine.filter((w) => !w.done).sort((a, b) => priorityScore(b) - priorityScore(a));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
@@ -480,7 +482,7 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
                   <div key={groupName}>
                     <div className="people-group-hdr">{groupName}</div>
                     {gPeople.map((p, idx) => {
-                      const openCount = data.work_items.filter((w) => isUserTask(w) && isPersonLinked(w, p.id)).length;
+                      const openCount = data.work_items.filter((w) => isFiledTask(w) && isPersonLinked(w, p.id)).length;
                       const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
                       const pMeeting = getNextMeeting(p.id, data.notes, dates);
                       return (

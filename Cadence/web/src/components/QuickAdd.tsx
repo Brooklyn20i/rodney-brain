@@ -172,7 +172,10 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
       ];
 
       const person_id = personIds[0] || null;
-      const taskFiled = !!(person_id || eff.projectId || eff.due);
+      // Quick Add is capture-first: everything lands in the Inbox to triage
+      // later, even when tagged with a person/project/date. Those tags are kept
+      // as metadata (so filing is one tap) but no longer file the item straight
+      // into a folder. Use "More options" to create an already-filed task.
       await insert('work_items', {
         title, type: eff.type, priority: eff.priority,
         due_date: eff.due || null,
@@ -180,7 +183,7 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
         project_id: eff.projectId || null,
         related_entities: relatedEntities.length > 0 ? relatedEntities : [],
         notes: '',
-        inboxed: !taskFiled,
+        inboxed: true,
         source: 'you',
       } as Partial<WorkItem>);
       logActivity('add_item', title);
@@ -336,14 +339,14 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             More options
           </button>
           <button className="btn btn-primary" onClick={add} disabled={!text.trim() || busy}>
-            {busy ? 'Adding…' : !filed ? 'Add to Inbox →' : 'Add Task →'}
+            {busy ? 'Adding…' : 'Add to Inbox →'}
           </button>
         </div>
 
         <p className="quick-add-hint">
           {filed
-            ? `Has ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} — files straight into Tasks.`
-            : 'Tip: set a person, project or date to file it; otherwise it waits in your Inbox.'}
+            ? `Captured to your Inbox with ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} kept — triage it there when you're ready. Use “More options” to file it now.`
+            : 'Lands in your Inbox to triage later. Add a person, project or date now, or sort it out in the Inbox.'}
         </p>
       </div>
     </div>

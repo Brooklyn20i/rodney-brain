@@ -3,7 +3,7 @@ import { useCadence } from '../lib/store';
 import type { WorkItem } from '../lib/types';
 import { PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { isUserTask, reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
+import { isFiledTask, reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
 import { autoColor, priorityScore } from '../lib/util';
 
 type Mode = 'people' | 'projects';
@@ -76,7 +76,7 @@ export function Board({ onMenu }: { onMenu?: () => void }) {
     [data.projects],
   );
 
-  const openTasks = useMemo(() => data.work_items.filter(isUserTask), [data.work_items]);
+  const openTasks = useMemo(() => data.work_items.filter(isFiledTask), [data.work_items]);
 
   // Build the columns for the active mode. Only entities with ≥1 open task get a
   // column, plus a catch-all (Unassigned / No project) when there are loose tasks.

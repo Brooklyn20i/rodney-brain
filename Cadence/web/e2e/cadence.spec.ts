@@ -53,13 +53,15 @@ test('board moves a task to another person and it leaves the old column', async 
   await expect(annaCol).not.toContainText('Overdue review');
 });
 
-// ── Tasks: create a task through Quick Add ───────────────────────────────────────
-test('creates a task via Quick Add and it appears in the list', async ({ page }) => {
+// ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ────
+test('creates a capture via Quick Add and it lands in the Inbox', async ({ page }) => {
   await navTo(page, 'Tasks');
   await page.getByRole('button', { name: 'Add Task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
+  // Capture-first: it waits in the Inbox for triage rather than joining the filed task list.
+  await navTo(page, 'Inbox');
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });
 

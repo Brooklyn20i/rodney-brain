@@ -5,7 +5,7 @@ import { TaskRow, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore } from '../lib/util';
-import { isFiled, isUserTask } from '../lib/tasks';
+import { isUserTask } from '../lib/tasks';
 
 type BucketKey = 'overdue' | 'today' | 'week' | 'later' | 'none';
 const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
@@ -30,14 +30,13 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // The Inbox is the triage queue: unprocessed user-facing captures (inboxed)
-  // that haven't been given a person or project yet. Filing happens by adding
-  // one of those homes (or by explicitly marking the item as triaged).
+  // The Inbox is the triage queue: every unprocessed user-facing capture
+  // (inboxed), INCLUDING ones already tagged with a person or project. Tagging
+  // no longer files an item — capturing is deliberately separate from filing, so
+  // a quick note tagged "Promace" still waits here until you triage it. Filing
+  // (the "Done triaging" button) clears `inboxed` and reveals it in its folders.
   const grouped = useMemo(() => {
-    // Triage queue = inboxed AND still without a filing home (person/project).
-    // The `!isFiled` guard keeps legacy items (older captures that were flagged
-    // inboxed but already have a person or project) out of the triage pile.
-    const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed && !isFiled(w));
+    const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed);
     const grouped: Record<BucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
     open.forEach((w) => grouped[bucketOf(w.due_date)].push(w));
     (['overdue', 'today', 'week', 'later'] as BucketKey[]).forEach((k) =>

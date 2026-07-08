@@ -6,7 +6,7 @@ import { TaskRow, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { isUserTask, isLinkedToPerson } from '../lib/tasks';
+import { isFiledTask, isLinkedToPerson } from '../lib/tasks';
 import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary } from '../lib/selectors';
 
 const initials = (name: string) =>
@@ -96,7 +96,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       .map(({ p, mtg }) => ({
         person: p,
         meeting: mtg as string,
-        openTopics: items.filter((w) => isUserTask(w) && isLinkedToPerson(w, p.id)).length,
+        openTopics: items.filter((w) => isFiledTask(w) && isLinkedToPerson(w, p.id)).length,
         isToday: mtg === today,
       }))
       .sort((a, b) => a.meeting.localeCompare(b.meeting));

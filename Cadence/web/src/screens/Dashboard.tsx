@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { isUserTask, isLinkedToPerson, isLinkedToProject } from '../lib/tasks';
+import { isFiledTask, isLinkedToPerson, isLinkedToProject } from '../lib/tasks';
 import { isOverdue, autoColor, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import {
   getHotThisWeek, getProjectTopActions, inferHealthReason, groupProjectsByPortfolio,
@@ -167,7 +167,7 @@ export function Dashboard({ onMenu, onNavigate }: {
   const personCards = useMemo(() => {
     return people.map((p) => {
       const personItems = data.work_items.filter((w) => isLinkedToPerson(w, p.id));
-      const userItems = personItems.filter(isUserTask);
+      const userItems = personItems.filter(isFiledTask);
       const overdueCount = userItems.filter((w) => isOverdue(w.due_date)).length;
       const hotCount = getHotThisWeek(personItems).length;
       const nextMeeting = getNextMeeting(p.id, data.notes, dates);

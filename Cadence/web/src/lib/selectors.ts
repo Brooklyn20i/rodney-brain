@@ -3,7 +3,7 @@
 
 import type { WorkItem, Project, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
-import { isUserTask, isLinkedToProject } from './tasks';
+import { isFiledTask, isLinkedToProject } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and
@@ -26,7 +26,7 @@ export interface TodoGroup {
 export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
   const today = todayStr();
   const weekEnd = addDaysStr(7);
-  const mine = items.filter((w) => isUserTask(w) && w.type !== 'waitingFor');
+  const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor');
   const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
   for (const w of mine) {
     if (w.due_date && w.due_date < today) overdue.push(w);
@@ -46,7 +46,7 @@ export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
 // Open items Rodney is waiting on someone else for — owed by others, not his to do.
 export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
   return items
-    .filter((w) => isUserTask(w) && w.type === 'waitingFor')
+    .filter((w) => isFiledTask(w) && w.type === 'waitingFor')
     .sort(byDueThenPri);
 }
 
@@ -56,7 +56,7 @@ export function getHotThisWeek(items: WorkItem[]): WorkItem[] {
   const today = todayStr();
   const next7 = addDaysStr(7);
   return items
-    .filter(isUserTask)
+    .filter(isFiledTask)
     .filter((w) => w.due_date && w.due_date >= today && w.due_date <= next7)
     .sort((a, b) => {
       if (a.due_date !== b.due_date) return a.due_date!.localeCompare(b.due_date!);
@@ -87,10 +87,10 @@ export interface LoadSummary {
 }
 
 export function getLoadSummary(items: WorkItem[]): LoadSummary {
-  const inLane = items.filter((w) => isUserTask(w) && w.type !== 'waitingFor');
+  const inLane = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor');
   const active = inLane.length;
   const overdue = inLane.filter((w) => isOverdue(w.due_date)).length;
-  const waiting = items.filter((w) => isUserTask(w) && w.type === 'waitingFor').length;
+  const waiting = items.filter((w) => isFiledTask(w) && w.type === 'waitingFor').length;
   const kobe = items.filter((w) => !w.done && w.source === 'for:kobe').length;
   return { active, overdue, waiting, kobe, overCap: active > ACTIVE_LOAD_CAP };
 }
@@ -263,7 +263,7 @@ const PRI_SCORE: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 export function getProjectTopActions(projectId: string, items: WorkItem[], limit = 3): WorkItem[] {
   return items
-    .filter((w) => !w.done && isLinkedToProject(w, projectId))
+    .filter((w) => !w.done && !w.inboxed && isLinkedToProject(w, projectId))
     .sort((a, b) => {
       const dp = (PRI_SCORE[a.priority] ?? 1) - (PRI_SCORE[b.priority] ?? 1);
       if (dp !== 0) return dp;

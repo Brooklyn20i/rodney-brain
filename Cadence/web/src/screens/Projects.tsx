@@ -205,7 +205,7 @@ const HEALTH_LABEL: Record<Health, string> = { green: 'On track', amber: 'At ris
 function ProjectCard({ project, onClick, strategy }: { project: Project; onClick: () => void; strategy: StrategyContent }) {
   const { data } = useCadence();
   const topActions = useMemo(() => getProjectTopActions(project.id, data.work_items), [data.work_items, project.id]);
-  const totalOpen = useMemo(() => data.work_items.filter((w) => isLinkedToProject(w, project.id) && !w.done).length, [data.work_items, project.id]);
+  const totalOpen = useMemo(() => data.work_items.filter((w) => isLinkedToProject(w, project.id) && !w.done && !w.inboxed).length, [data.work_items, project.id]);
   const healthReason = useMemo(() => inferHealthReason(project, data.project_updates, data.work_items), [project, data.project_updates, data.work_items]);
   const pillar = project.pillar_id ? getPillar(strategy, project.pillar_id) : undefined;
 
@@ -341,8 +341,10 @@ function PlanTab({ project, strategy }: { project: Project; strategy: StrategyCo
   const { data, insert, update, remove } = useCadence();
   const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
   const phases = useMemo(() => data.project_phases.filter((p) => p.project_id === project.id).sort((a, b) => a.sort - b.sort), [data.project_phases, project.id]);
+  // Inboxed captures tagged with this project still wait in the Inbox for
+  // triage — they surface here only once filed.
   const items = useMemo(() => data.work_items.filter((w) =>
-    isLinkedToProject(w, project.id) && !w.done
+    isLinkedToProject(w, project.id) && !w.done && !w.inboxed
   ), [data.work_items, project.id]);
   const [addingItem, setAddingItem] = useState(false);
   const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
