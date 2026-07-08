@@ -19,6 +19,12 @@ for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Refe
   assert(vercelConfig.includes(header), `vercel.json must set ${header}.`);
 }
 
+const workflow = read('../../.github/workflows/cadence-web.yml');
+assert(!workflow.includes('@v4'), 'Cadence web workflow must not use Node 20-era @v4 GitHub actions.');
+assert(workflow.includes('actions/checkout@v7'), 'Cadence web workflow must use Node 24 checkout action.');
+assert(workflow.includes('actions/setup-node@v6'), 'Cadence web workflow must use Node 24 setup-node action.');
+assert(workflow.includes('actions/upload-artifact@v7'), 'Cadence web workflow must use Node 24 upload-artifact action.');
+
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
 assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init must tag errors with the deploy release.');
