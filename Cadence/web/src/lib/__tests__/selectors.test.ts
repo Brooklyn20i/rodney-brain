@@ -4,7 +4,7 @@ import {
   getLoadSummary, ACTIVE_LOAD_CAP, getDecideItems,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
-  getCalendarEvents, groupEventsByDate,
+  getCalendarEvents, groupEventsByDate, getDataHygieneIssues,
 } from '../selectors';
 import { todayStr, addDaysStr } from '../util';
 import type { WorkItem, Project, Milestone, ProjectUpdate, Decision } from '../types';
@@ -269,6 +269,48 @@ describe('getHealthEvidence', () => {
   });
   it('returns null latestUpdate when none exist', () => {
     expect(getHealthEvidence(proj({}), [], []).latestUpdate).toBeNull();
+  });
+});
+
+describe('getDataHygieneIssues', () => {
+  it('surfaces review-only hygiene issues and separates owner/admin gates', () => {
+    const issues = getDataHygieneIssues({
+      work_items: [
+        wi({ id: 'capture', title: 'Old capture', inboxed: true, created_at: addDaysStr(-9) }),
+        wi({ id: 'loose', title: 'Loose filed work', inboxed: false }),
+        wi({ id: 'wait', title: 'Waiting nobody', type: 'waitingFor' }),
+        wi({ id: 'agent', title: 'Agent-created task', source: 'agent:kobe', person_id: 'p1' }),
+        wi({ id: 'decision', title: 'Old decision task', type: 'decision', due_date: addDaysStr(-20), person_id: 'p1' }),
+      ],
+      projects: [
+        proj({ id: 'missing', name: 'Missing control', next_action: '', owner: '', target_date: null }),
+        proj({ id: 'stale', name: 'Stale project', next_action: 'Move', target_date: addDaysStr(20), updated_at: addDaysStr(-40) }),
+      ],
+      decisions: [dec({ id: 'd-old', title: 'Old table decision', due_date: addDaysStr(-21) })],
+    });
+
+    expect(issues.map((i) => i.kind)).toEqual(expect.arrayContaining([
+      'stale-quick-capture', 'filed-without-home', 'waiting-without-link',
+      'agent-provenance', 'stale-decision', 'project-missing-control', 'stale-project',
+    ]));
+    expect(issues.find((i) => i.id === 'agent-provenance:agent')!.detail).toMatch(/provenance only, not delegated ownership/);
+    expect(issues.find((i) => i.id === 'project-missing-control:missing')!.gate).toBe('owner-admin-gated');
+    expect(issues.find((i) => i.id === 'filed-without-home:loose')!.gate).toBe('routine');
+  });
+
+  it('does not flag fresh captures, completed/deleted records or correctly linked projects', () => {
+    const issues = getDataHygieneIssues({
+      work_items: [
+        wi({ id: 'fresh', inboxed: true, created_at: addDaysStr(-1) }),
+        wi({ id: 'done', done: true, inboxed: false }),
+        wi({ id: 'deleted', deleted_at: todayStr(), inboxed: false }),
+        wi({ id: 'linked-waiting', type: 'waitingFor', person_id: 'p1' }),
+        wi({ id: 'delegated', title: 'With Kobe', source: 'for:kobe' }),
+      ],
+      projects: [proj({ id: 'ok', next_action: 'Call owner', owner: 'Rodney', target_date: addDaysStr(10), updated_at: todayStr() })],
+      decisions: [dec({ id: 'future', due_date: addDaysStr(3) })],
+    });
+    expect(issues).toHaveLength(0);
   });
 });
 

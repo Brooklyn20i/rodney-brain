@@ -1,9 +1,9 @@
 // Pure data selectors for the Executive Control Cockpit.
 // No React dependencies — data in, arrays out.
 
-import type { WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
+import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
-import { isFiledTask, isLinkedToProject } from './tasks';
+import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and
@@ -358,4 +358,153 @@ export function getHealthEvidence(
     highOpen: open.filter((w) => w.priority === 'high').length,
     targetOverdue: isOverdue(project.target_date),
   };
+}
+
+// ── Data hygiene review queue ─────────────────────────────────────────────────
+// Read-only detection for confusing Work records. This deliberately returns
+// review prompts, not repair instructions: the UI must route Rodney/Kobe to the
+// relevant screen and never silently bulk-edit live records.
+export type HygieneIssueKind =
+  | 'stale-quick-capture'
+  | 'filed-without-home'
+  | 'project-missing-control'
+  | 'waiting-without-link'
+  | 'stale-decision'
+  | 'stale-project'
+  | 'agent-provenance';
+
+export type HygieneIssueGate = 'routine' | 'owner-admin-gated';
+export type HygieneIssueRoute = 'inbox' | 'tasks' | 'projects' | 'today' | 'kobe';
+
+export interface HygieneIssue {
+  id: string;
+  kind: HygieneIssueKind;
+  title: string;
+  detail: string;
+  gate: HygieneIssueGate;
+  route: HygieneIssueRoute;
+  refId: string;
+}
+
+const hasWorkHome = (w: Pick<WorkItem, 'person_id' | 'project_id' | 'related_entities'>) =>
+  !!(w.person_id || w.project_id || (w.related_entities || []).some((e) => e.type === 'person' || e.type === 'project'));
+
+const isOnOrBefore = (value: string | null | undefined, threshold: string) =>
+  !!value && value.slice(0, 10) <= threshold;
+
+export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'projects' | 'decisions'>): HygieneIssue[] {
+  const issues: HygieneIssue[] = [];
+  const work = data.work_items.filter((w) => !w.deleted_at);
+  const open = work.filter((w) => !w.done);
+  const activeProjects = data.projects.filter((p) => p.status === 'active' && !p.deleted_at);
+  const quickCaptureThreshold = addDaysStr(-7);
+  const staleDecisionThreshold = addDaysStr(-14);
+  const staleProjectThreshold = addDaysStr(-30);
+
+  for (const w of open) {
+    if (w.inboxed && isOnOrBefore(w.created_at, quickCaptureThreshold)) {
+      issues.push({
+        id: `stale-quick-capture:${w.id}`,
+        kind: 'stale-quick-capture',
+        title: w.title,
+        detail: 'Quick Capture older than 7 days — review before filing or dismissing.',
+        gate: 'routine',
+        route: 'inbox',
+        refId: w.id,
+      });
+    }
+
+    if (!w.inboxed && !hasWorkHome(w) && !isAgentTask(w) && !isAgentCreated(w)) {
+      issues.push({
+        id: `filed-without-home:${w.id}`,
+        kind: 'filed-without-home',
+        title: w.title,
+        detail: 'Filed Work has no person or project home — choose where it belongs before tidying.',
+        gate: 'routine',
+        route: 'tasks',
+        refId: w.id,
+      });
+    }
+
+    if (w.type === 'waitingFor' && !hasWorkHome(w)) {
+      issues.push({
+        id: `waiting-without-link:${w.id}`,
+        kind: 'waiting-without-link',
+        title: w.title,
+        detail: 'Waiting item has no person or project link — review who owns the follow-up.',
+        gate: 'routine',
+        route: 'today',
+        refId: w.id,
+      });
+    }
+
+    if (w.type === 'decision' && isOnOrBefore(w.due_date, staleDecisionThreshold)) {
+      issues.push({
+        id: `stale-decision-wi:${w.id}`,
+        kind: 'stale-decision',
+        title: w.title,
+        detail: 'Decision is more than 14 days past due — owner decision needed before closing or deferring.',
+        gate: 'owner-admin-gated',
+        route: 'today',
+        refId: w.id,
+      });
+    }
+
+    if (isAgentCreated(w)) {
+      issues.push({
+        id: `agent-provenance:${w.id}`,
+        kind: 'agent-provenance',
+        title: w.title,
+        detail: `${w.source} is provenance only, not delegated ownership — confirm it is in the right lane.`,
+        gate: 'routine',
+        route: 'tasks',
+        refId: w.id,
+      });
+    }
+  }
+
+  for (const d of data.decisions.filter((d) => d.status === 'pending' && !d.deleted_at)) {
+    if (isOnOrBefore(d.due_date, staleDecisionThreshold)) {
+      issues.push({
+        id: `stale-decision:${d.id}`,
+        kind: 'stale-decision',
+        title: d.title,
+        detail: 'Pending decision is more than 14 days past due — owner decision needed before closing or deferring.',
+        gate: 'owner-admin-gated',
+        route: 'today',
+        refId: d.id,
+      });
+    }
+  }
+
+  for (const p of activeProjects) {
+    const missing = [!p.next_action?.trim() && 'next action', !p.owner?.trim() && 'owner', !p.target_date && 'target evidence'].filter(Boolean) as string[];
+    if (missing.length) {
+      issues.push({
+        id: `project-missing-control:${p.id}`,
+        kind: 'project-missing-control',
+        title: p.name,
+        detail: `Active project missing ${missing.join(' / ')} — review the Control sheet before fixing.`,
+        gate: missing.includes('owner') ? 'owner-admin-gated' : 'routine',
+        route: 'projects',
+        refId: p.id,
+      });
+    }
+    if (isOnOrBefore(p.updated_at, staleProjectThreshold)) {
+      issues.push({
+        id: `stale-project:${p.id}`,
+        kind: 'stale-project',
+        title: p.name,
+        detail: 'Active project has not been updated for 30+ days — review status before changing it.',
+        gate: 'owner-admin-gated',
+        route: 'projects',
+        refId: p.id,
+      });
+    }
+  }
+
+  return issues.sort((a, b) => {
+    const gateRank = a.gate === b.gate ? 0 : a.gate === 'owner-admin-gated' ? -1 : 1;
+    return gateRank || a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title);
+  });
 }

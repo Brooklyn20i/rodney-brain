@@ -38,6 +38,7 @@ export function makeSeed() {
     wi({ id: 'w8', title: 'Cara task', person_id: 'pCara' }),
     wi({ id: 'w9', title: 'Awaiting legal sign-off', type: 'waitingFor', person_id: 'pBob' }),
     wi({ id: 'w10', title: 'Draft summary', source: 'for:kobe' }),
+    wi({ id: 'w11', title: 'Created by Kobe check', source: 'agent:kobe', person_id: 'pAnna' }),
   ];
 
   const milestones = [

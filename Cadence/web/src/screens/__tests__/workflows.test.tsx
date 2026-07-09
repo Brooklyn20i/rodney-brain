@@ -275,6 +275,7 @@ describe('Review workflow', () => {
         wi({ id: 'wait', title: 'Waiting task', type: 'waitingFor', project_id: 'prA' }),
         wi({ id: 'kobe', title: 'Kobe task', source: 'for:kobe' }),
         wi({ id: 'capture', title: 'Loose capture', inboxed: true }),
+        wi({ id: 'agent', title: 'Created by Kobe task', source: 'agent:kobe', person_id: 'pA' }),
       ],
     }});
     render(<Review onMenu={() => {}} />);
@@ -286,9 +287,14 @@ describe('Review workflow', () => {
     expect(within(queue).getByText('With Kobe')).toBeInTheDocument();
     expect(within(queue).getByText('Quick Capture')).toBeInTheDocument();
     expect(within(queue).getByText('Projects')).toBeInTheDocument();
+    expect(within(queue).getByText('Data hygiene')).toBeInTheDocument();
+    expect(screen.getByLabelText('Data hygiene review queue')).toBeInTheDocument();
+    expect(screen.getByText(/Read-only queue for confusing Work records/)).toBeInTheDocument();
+    expect(screen.getByText(/agent:kobe is provenance only/)).toBeInTheDocument();
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
     expect(screen.getByText('Projects needing attention')).toBeInTheDocument();
-    expect(screen.getByText('Apollo')).toBeInTheDocument();
-    expect(screen.getByText('Borealis')).toBeInTheDocument();
+    expect(screen.getAllByText('Apollo').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Borealis').length).toBeGreaterThanOrEqual(1);
   });
 });
 
