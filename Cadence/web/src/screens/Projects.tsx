@@ -337,6 +337,110 @@ function WorkItemRow({ w, phases, onEdit }: { w: WorkItem; phases: ProjectPhase[
   );
 }
 
+function ControlSheetWorkItem({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
+  const { update } = useCadence();
+  return (
+    <div className="proj-control-item">
+      <input type="checkbox" checked={w.done} onChange={() => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>)} />
+      <button className="proj-control-item-main" onClick={() => onEdit(w)}>
+        <span className="proj-control-item-title">{w.title}</span>
+        <span className="proj-control-item-meta">
+          {w.type !== 'task' && <span>{w.type === 'waitingFor' ? 'Waiting' : w.type}</span>}
+          <span className={`pri-${w.priority}`}>{w.priority}</span>
+          {w.due_date && <span className={isOverdue(w.due_date) ? 'tl-overdue' : ''}>{fmtDate(w.due_date)}</span>}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function ControlSection({ title, count, empty, children, accent }: { title: string; count: number; empty: string; children: React.ReactNode; accent?: string }) {
+  return (
+    <section className="proj-control-section" style={accent ? { ['--section-accent' as string]: accent } : undefined}>
+      <div className="proj-control-section-head">
+        <h2>{title}</h2>
+        <span>{count}</span>
+      </div>
+      {count > 0 ? children : <p className="proj-control-empty">{empty}</p>}
+    </section>
+  );
+}
+
+function ProjectControlSheet({ project }: { project: Project }) {
+  const { data, update } = useCadence();
+  const [editingItem, setEditingItem] = useState<WorkItem | null>(null);
+  const [nextAction, setNextAction] = useState(project.next_action || '');
+  useEffect(() => { setNextAction(project.next_action || ''); }, [project.next_action]);
+
+  const projectItems = useMemo(() => data.work_items.filter((w) => isLinkedToProject(w, project.id) && !w.done && !w.inboxed), [data.work_items, project.id]);
+  const actions = useMemo(() => projectItems.filter((w) => w.type !== 'waitingFor' && w.type !== 'decision'), [projectItems]);
+  const waiting = useMemo(() => projectItems.filter((w) => w.type === 'waitingFor'), [projectItems]);
+  const decisions = useMemo(() => projectItems.filter((w) => w.type === 'decision'), [projectItems]);
+  const raid = useMemo(() => data.raid_items.filter((r) => r.project_id === project.id && r.status === 'open'), [data.raid_items, project.id]);
+  const blockers = useMemo(() => raid.filter((r) => r.kind === 'issue' || r.kind === 'dependency' || r.severity === 'high'), [raid]);
+  const latestUpdate = useMemo(() => data.project_updates.filter((u) => u.project_id === project.id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0], [data.project_updates, project.id]);
+  const [pill, pillLabel] = HEALTH_PILL[project.health];
+
+  return (
+    <div className="proj-control-sheet">
+      <div className="proj-control-hero">
+        <div>
+          <div className="proj-control-kicker">Outcome / goal</div>
+          <p>{project.goal || 'No outcome captured yet — define what done looks like.'}</p>
+        </div>
+        <div className="proj-control-facts" aria-label="Project facts">
+          <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
+          <span>Owner: <b>{project.owner || 'Unassigned'}</b></span>
+          <span>Target: <b>{project.target_date ? fmtDate(project.target_date) : 'No date'}</b></span>
+        </div>
+      </div>
+
+      <div className="proj-control-latest">
+        <div className="proj-control-latest-copy">
+          <span className="proj-control-kicker">Latest update / evidence</span>
+          {latestUpdate
+            ? <p>“{latestUpdate.text.slice(0, 220)}{latestUpdate.text.length > 220 ? '…' : ''}” <small>{fmtDMY(latestUpdate.created_at)}{latestUpdate.health ? ` · ${healthIcon(latestUpdate.health)}` : ''}</small></p>
+            : <p className="proj-control-muted">No project update logged yet.</p>}
+        </div>
+        <HealthEvidence project={project} />
+      </div>
+
+      <div className="proj-control-next">
+        <label>Next action</label>
+        <input
+          type="text"
+          value={nextAction}
+          placeholder="The single next step…"
+          onChange={(e) => setNextAction(e.target.value)}
+          onBlur={() => update('projects', project.id, { next_action: nextAction } as Partial<Project>)}
+        />
+      </div>
+
+      <div className="proj-control-grid">
+        <ControlSection title="Blockers / waiting" count={blockers.length + waiting.length} empty="Nothing blocking or waiting." accent="var(--red)">
+          {blockers.map((r) => (
+            <div key={r.id} className="proj-control-raid">
+              <span className={`sev-dot sev-${r.severity}`} />
+              <span>{RAID_LABEL[r.kind]}: {r.text}</span>
+            </div>
+          ))}
+          {waiting.map((w) => <ControlSheetWorkItem key={w.id} w={w} onEdit={setEditingItem} />)}
+        </ControlSection>
+
+        <ControlSection title="Open decisions" count={decisions.length} empty="No explicit decision waiting." accent="var(--orange)">
+          {decisions.map((w) => <ControlSheetWorkItem key={w.id} w={w} onEdit={setEditingItem} />)}
+        </ControlSection>
+
+        <ControlSection title="Open tasks / actions" count={actions.length} empty="No open actions filed to this project." accent="var(--accent)">
+          {actions.map((w) => <ControlSheetWorkItem key={w.id} w={w} onEdit={setEditingItem} />)}
+        </ControlSection>
+      </div>
+      {editingItem && <ItemModal existing={editingItem} onClose={() => setEditingItem(null)} />}
+    </div>
+  );
+}
+
 function PlanTab({ project, strategy }: { project: Project; strategy: StrategyContent }) {
   const { data, insert, update, remove } = useCadence();
   const milestones = useMemo(() => data.milestones.filter((m) => m.project_id === project.id), [data.milestones, project.id]);
@@ -673,8 +777,7 @@ function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
   project: Project; strategy: StrategyContent;
   onBack: () => void; onEdit: () => void; onMenu?: () => void;
 }) {
-  const [tab, setTab] = useState<'update' | 'plan' | 'advanced'>('update');
-  const [pill, pillLabel] = HEALTH_PILL[project.health];
+  const [tab, setTab] = useState<'control' | 'update' | 'timeline' | 'advanced'>('control');
   return (
     <>
       <div className="screen-header">
@@ -689,20 +792,17 @@ function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
       </div>
       <div className="proj-detail-screen">
         <div className="proj-detail-inner">
-          <div className="proj-detail-top">
-            <span className={`health-pill ${pill}`}>{healthIcon(project.health)} {pillLabel}</span>
-            <HealthEvidence project={project} />
-          </div>
-          <div className="proj-detail-tabs">
-            {(['update', 'plan', 'advanced'] as const).map((t) => (
+          <div className="proj-detail-tabs proj-detail-tabs-secondary">
+            {(['control', 'update', 'timeline', 'advanced'] as const).map((t) => (
               <button key={t} className={`proj-sheet-tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-                {t === 'update' ? 'Update' : t === 'plan' ? 'Plan' : 'Advanced'}
+                {t === 'control' ? 'Control sheet' : t === 'update' ? 'Updates' : t === 'timeline' ? 'Timeline' : 'Advanced'}
               </button>
             ))}
           </div>
           <div className="proj-detail-body">
+            {tab === 'control' && <ProjectControlSheet project={project} />}
             {tab === 'update' && <UpdateTab project={project} />}
-            {tab === 'plan' && <PlanTab project={project} strategy={strategy} />}
+            {tab === 'timeline' && <PlanTab project={project} strategy={strategy} />}
             {tab === 'advanced' && <AdvancedTab project={project} onEdit={onEdit} />}
           </div>
         </div>
