@@ -261,6 +261,37 @@ describe('Inbox workflow', () => {
   });
 });
 
+// ── Review ─────────────────────────────────────────────────────────────────────
+describe('Review workflow', () => {
+  it('renders a compact iPad review queue in priority order with project attention', () => {
+    setStore({ data: {
+      projects: [
+        project({ id: 'prA', name: 'Apollo', health: 'red', next_action: 'Lock scope' }),
+        project({ id: 'prB', name: 'Borealis', health: 'green', next_action: '' }),
+      ],
+      work_items: [
+        wi({ id: 'todo', title: 'Rodney task', due_date: addDaysStr(-1) }),
+        wi({ id: 'decide', title: 'Decision task', type: 'decision', project_id: 'prA' }),
+        wi({ id: 'wait', title: 'Waiting task', type: 'waitingFor', project_id: 'prA' }),
+        wi({ id: 'kobe', title: 'Kobe task', source: 'for:kobe' }),
+        wi({ id: 'capture', title: 'Loose capture', inboxed: true }),
+      ],
+    }});
+    render(<Review onMenu={() => {}} />);
+
+    const queue = screen.getByLabelText('Compact work review queue');
+    expect(within(queue).getByText('Needs Rodney / Do now')).toBeInTheDocument();
+    expect(within(queue).getByText('Decide')).toBeInTheDocument();
+    expect(within(queue).getByText('Waiting')).toBeInTheDocument();
+    expect(within(queue).getByText('With Kobe')).toBeInTheDocument();
+    expect(within(queue).getByText('Quick Capture')).toBeInTheDocument();
+    expect(within(queue).getByText('Projects')).toBeInTheDocument();
+    expect(screen.getByText('Projects needing attention')).toBeInTheDocument();
+    expect(screen.getByText('Apollo')).toBeInTheDocument();
+    expect(screen.getByText('Borealis')).toBeInTheDocument();
+  });
+});
+
 // ── Gantt ─────────────────────────────────────────────────────────────────────
 describe('Gantt', () => {
   it('PortfolioTimeline renders a bar per active project and navigates on click', () => {
