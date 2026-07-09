@@ -26,6 +26,9 @@ import {
   slotDestination,
   slotTracking,
 } from '../lib/tracking';
+import { setGymFocusOrientationActive } from '../lib/orientation';
+import { createRestTimerCue } from '../lib/restTimerCue';
+import { shouldFireRestCompleteCue } from '../lib/restTimerState';
 import type { CardioKind, CardioSession, ProgramDay, WorkoutSet } from '../lib/types';
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
@@ -70,58 +73,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
   );
   const [focusIndex, setFocusIndex] = useState(0);
+  const gymFocusOrientationActive = Boolean(active && gymMode);
+  useEffect(() => {
+    setGymFocusOrientationActive(gymFocusOrientationActive);
+    return () => setGymFocusOrientationActive(false);
+  }, [gymFocusOrientationActive]);
 
   // ── Rest-finished chime ───────────────────────────────────────────────────
-  // A short ping when rest ends, so you can look away from the phone. Built on
-  // Web Audio with a "playback" session so on iOS it plays THROUGH the silent /
-  // mute switch (like an alarm) — a gym phone is usually on silent, which is
-  // why the old "ambient" session stayed quiet. The context must be created/
-  // resumed inside a user gesture (a set tap), so we prime it there; by the
-  // time the timer fires it's already unlocked and the chime just plays.
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const primeAudio = () => {
-    if (typeof window === 'undefined') return null;
-    try {
-      if (!audioCtxRef.current) {
-        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!Ctx) return null;
-        // playback = audible even when the phone's mute switch is on (a rest
-        // timer you can't hear is useless in a gym). May duck/pause other audio.
-        const anyNav = navigator as unknown as { audioSession?: { type: string } };
-        if (anyNav.audioSession) anyNav.audioSession.type = 'playback';
-        audioCtxRef.current = new Ctx();
-      }
-      if (audioCtxRef.current.state === 'suspended') void audioCtxRef.current.resume();
-      return audioCtxRef.current;
-    } catch {
-      return null;
-    }
-  };
-  const chime = () => {
-    const ctx = primeAudio();
-    if (!ctx) return;
-    // Two quick rising pings — distinct from a notification, easy over audio.
-    const play = () => {
-      const now = ctx.currentTime;
-      [ [0, 880], [0.16, 1175] ].forEach(([t, freq]) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now + t);
-        gain.gain.exponentialRampToValueAtTime(0.25, now + t + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(now + t);
-        osc.stop(now + t + 0.16);
-      });
-    };
-    // The timer fires outside a user gesture; if iOS parked the context while
-    // the screen was off, scheduling on its stalled clock plays nothing. Resume
-    // first and ping once it's actually running.
-    if (ctx.state === 'suspended') void ctx.resume().then(play).catch(() => {});
-    else play();
-  };
+  // A short Web Audio cue when rest ends. It is primed from the user's set tap
+  // and uses an ambient/mixing audio session where supported, so it should play
+  // over Spotify/podcasts without intentionally pausing them. iOS/Safari still
+  // control foreground/background audio policy; this is the best practical web
+  // behaviour, not a native-app audio override guarantee.
+  const cueRef = useRef(createRestTimerCue());
+  const primeAudio = () => cueRef.current.prime();
+  const chime = () => cueRef.current.play();
 
   // ── Rest timer ──────────────────────────────────────────────────────────
   const [restLeft, setRestLeft] = useState<number | null>(null);
@@ -135,7 +101,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       if (restEndsAt.current !== null) {
         const left = Math.round((restEndsAt.current - Date.now()) / 1000);
         setRestLeft(left);
-        if (left <= 0 && !chimedRef.current) {
+        if (shouldFireRestCompleteCue(left, chimedRef.current)) {
           chimedRef.current = true;
           chime();
           if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
@@ -147,8 +113,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       }
     }, 1000);
     return () => clearInterval(t);
-    // chime is stable enough for this once-mounted interval; deps intentionally empty.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const startRest = (seconds: number) => {
     restEndsAt.current = Date.now() + seconds * 1000;
