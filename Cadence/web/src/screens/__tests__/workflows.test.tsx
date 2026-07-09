@@ -20,7 +20,6 @@ vi.mock('../../lib/meetings', async (orig) => ({
 
 import { Board } from '../Board';
 import { Dashboard } from '../Dashboard';
-import { Horizon } from '../Horizon';
 import { Today } from '../Today';
 import { Tasks } from '../Tasks';
 import { Inbox } from '../Inbox';
@@ -39,11 +38,6 @@ const wi = (o: any) => ({
   notes: '', done: false, inboxed: false, source: '', completed_at: null, related_entities: undefined,
   created_at: '', updated_at: '', deleted_at: null, ...o,
 });
-const milestone = (o: any) => ({
-  id: 'm', project_id: 'pr', title: 'MS', due_date: null, done: false,
-  created_at: '', updated_at: '', deleted_at: null, ...o,
-});
-
 function setStore(over: any = {}) {
   const { data: dataOver, ...rest } = over;
   h.store = {
@@ -140,29 +134,6 @@ describe('Dashboard workflow', () => {
     expect(screen.getByText('Apollo')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Apollo'));
     expect(onNavigate).toHaveBeenCalledWith('projects', 'prA');
-  });
-});
-
-// ── Horizon ─────────────────────────────────────────────────────────────────────
-describe('Horizon workflow', () => {
-  it('renders forward markers and navigates to the project', () => {
-    const onNavigate = vi.fn();
-    setStore({ data: {
-      projects: [project({ id: 'prA', name: 'Apollo', target_date: addDaysStr(10), health: 'amber' })],
-      milestones: [milestone({ id: 'm1', project_id: 'prA', title: 'Kickoff', due_date: addDaysStr(3) })],
-    }});
-    render(<Horizon onMenu={() => {}} onNavigate={onNavigate} />);
-    expect(screen.getByText('Kickoff')).toBeInTheDocument();
-    // Apollo appears twice — milestone subtitle + target title — both expected.
-    expect(screen.getAllByText('Apollo').length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(screen.getByText('Kickoff'));
-    expect(onNavigate).toHaveBeenCalledWith('projects', 'prA');
-  });
-
-  it('shows an empty state with no markers', () => {
-    setStore({ data: {} });
-    render(<Horizon onMenu={() => {}} onNavigate={() => {}} />);
-    expect(screen.getByText(/No upcoming milestones/)).toBeInTheDocument();
   });
 });
 
@@ -276,7 +247,6 @@ describe('Screen render smoke', () => {
     ['Notes', () => <Notes onMenu={() => {}} />],
     ['Review', () => <Review onMenu={() => {}} />],
     ['Dashboard', () => <Dashboard onMenu={() => {}} onNavigate={() => {}} />],
-    ['Horizon', () => <Horizon onMenu={() => {}} onNavigate={() => {}} />],
     ['Board', () => <Board onMenu={() => {}} />],
     ['Today', () => <Today onMenu={() => {}} />],
   ];

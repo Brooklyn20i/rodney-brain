@@ -19,10 +19,11 @@ async function navTo(page: Page, label: string) {
 test('boots straight to Control (no login gate)', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Control' })).toBeVisible();
   await expect(page.getByText('To do')).toBeVisible();
+  await expect(page.locator('#sidebar').getByRole('button', { name: /\bHorizon\b/ })).toHaveCount(0);
 });
 
 // ── Navigation smoke: every screen renders a header in a real browser ───────────
-for (const label of ['Dashboard', 'Horizon', 'Board', 'Tasks', 'Inbox', 'Projects', 'People', 'Notes', 'Review']) {
+for (const label of ['Dashboard', 'Board', 'Tasks', 'Inbox', 'Projects', 'People', 'Notes', 'Review']) {
   test(`navigates to ${label} without crashing`, async ({ page }) => {
     await navTo(page, label);
     await expect(page.locator('.screen-header h1').first()).toBeVisible();
@@ -72,15 +73,7 @@ test('dashboard person card navigates to People', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
 });
 
-// ── Horizon: forward markers render in their buckets ─────────────────────────────
-test('horizon shows milestones, targets and a 1:1', async ({ page }) => {
-  await navTo(page, 'Horizon');
-  await expect(page.getByText('Design freeze')).toBeVisible();
-  await expect(page.getByText('Beta launch')).toBeVisible();
-  await expect(page.getByText('This week')).toBeVisible();
-});
-
-// ── Projects: Analytical evidence-on-demand ──────────────────────────────────────
+// ── Projects: Analytical evidence-on-demand ─────────────────────────────────────
 test('project health evidence reveals raw numbers on demand', async ({ page }) => {
   await navTo(page, 'Projects');
   await page.getByText('Apollo', { exact: true }).first().click();

@@ -85,9 +85,9 @@ assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites 
 assert(inviteMigration.includes("cadence_workspace_access(workspace_id, 'admin')"), 'workspace_invites SELECT must be admin-scoped.');
 
 // Screens currently wired into the app. Decisions/Outbox were consolidated into
-// other surfaces; Dashboard/Horizon/Board are the cockpit additions.
+// other surfaces; Horizon was deliberately retired from the product navigation.
 const SCREENS = [
-  'Dashboard', 'Today', 'Horizon', 'Board', 'Tasks', 'Inbox',
+  'Dashboard', 'Today', 'Board', 'Tasks', 'Inbox',
   'Projects', 'People', 'Meetings', 'Notes', 'Review',
 ];
 
