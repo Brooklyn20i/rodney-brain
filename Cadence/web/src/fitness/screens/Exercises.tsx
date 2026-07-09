@@ -7,6 +7,8 @@ import { EXERCISE_CATALOG } from '../lib/exerciseCatalog';
 import {
   fmtDuration,
   guessTracking,
+  isTimedTracking,
+  isWeightedTracking,
   looksLikeCardio,
   setDuration,
   TRACKING_OPTIONS,
@@ -32,7 +34,7 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
   const [newEquip, setNewEquip] = useState('barbell');
   // Tracking mode for the new exercise. Auto-guessed from the name (so "Plank"
   // defaults to a timed hold) until the user picks one explicitly.
-  const [newTracking, setNewTracking] = useState<ExerciseTracking>('weight_reps');
+  const [newTracking, setNewTracking] = useState<ExerciseTracking>('strength_weighted');
   const [trackingTouched, setTrackingTouched] = useState(false);
   const onNewName = (name: string) => {
     setNewName(name);
@@ -49,7 +51,7 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
       notes: '',
     });
     setNewName('');
-    setNewTracking('weight_reps');
+    setNewTracking('strength_weighted');
     setTrackingTouched(false);
   };
 
@@ -200,7 +202,7 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
     const pr = prs.get(exerciseId);
     const recent = [...history].reverse().slice(0, 12);
     const tracking = trackingOf(e);
-    const isWeighted = tracking === 'weight_reps';
+    const isWeighted = isWeightedTracking(tracking);
 
     return (
       <Card
@@ -296,14 +298,14 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>{tracking === 'time' ? 'Hold' : 'Reps'}</th>
+                  <th>{isTimedTracking(tracking) ? 'Hold' : 'Reps'}</th>
                 </tr>
               </thead>
               <tbody>
                 {recent.map(({ s, w }) => (
                   <tr key={s.id}>
                     <td>{fmtDMY(w!.date)}</td>
-                    <td>{tracking === 'time' ? fmtDuration(setDuration(s)) : s.reps}</td>
+                    <td>{isTimedTracking(tracking) ? fmtDuration(setDuration(s)) : s.reps}</td>
                   </tr>
                 ))}
               </tbody>

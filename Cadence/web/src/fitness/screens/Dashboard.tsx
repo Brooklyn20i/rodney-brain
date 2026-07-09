@@ -12,6 +12,7 @@ import {
   weightTrend,
 } from '../lib/fitnessCalc';
 import { addDays, fmtDayShort, fmtKg, fmtNum, todayISO } from '../lib/util';
+import { cardioTargetSummary, isCardioTracking, slotTracking } from '../lib/tracking';
 
 // The morning glance, reoriented around what actually gets used daily: today's
 // workout first, then calories + macros. Whoop recovery is intentionally not
@@ -52,6 +53,8 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
   const weekMuscle = weeklySetsByMuscle(data.workout_sets, data.workouts, data.exercises, week.start, week.end);
   const weekSets = [...weekMuscle.values()].reduce((a, b) => a + b, 0);
   const weekCardio = data.cardio_sessions.filter((c) => c.date >= week.start && c.date <= week.end);
+  const weekCardioMin = weekCardio.reduce((sum, c) => sum + Number(c.duration_min || 0), 0);
+  const weekCardioKm = weekCardio.reduce((sum, c) => sum + Number(c.distance_km || 0), 0);
   const weekSauna = data.sauna_sessions.filter((s) => s.date >= week.start && s.date <= week.end);
 
   const prs = recentPRs(data.workout_sets, data.workouts, addDays(today, -14));
@@ -97,11 +100,15 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
               {upNext.focus && <div className="dash-hero-sub">{upNext.focus}</div>}
               {upNextExercises.length > 0 && (
                 <div className="dash-chips">
-                  {upNextExercises.slice(0, 3).map((pe) => (
-                    <span className="dash-chip" key={pe.id}>
-                      {exName(pe.exercise_id)} {pe.target_sets}×{pe.rep_min}
-                    </span>
-                  ))}
+                  {upNextExercises.slice(0, 3).map((pe) => {
+                    const exercise = data.exercises.find((e) => e.id === pe.exercise_id);
+                    const tracking = slotTracking(pe, exercise);
+                    return (
+                      <span className="dash-chip" key={pe.id}>
+                        {exName(pe.exercise_id)} {isCardioTracking(tracking) ? cardioTargetSummary(pe) || `${pe.target_duration_min ?? 0} min` : `${pe.target_sets}×${pe.rep_min}`}
+                      </span>
+                    );
+                  })}
                   {upNextExercises.length > 3 && <span className="dash-chip-more">+{upNextExercises.length - 3}</span>}
                 </div>
               )}
@@ -169,7 +176,7 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
               {weekWorkouts.length}
               <span className="dash-metric-unit"> sessions</span>
             </div>
-            <div className="cf-metric-delta cf-tone-neutral">{weekSets} hard sets</div>
+            <div className="cf-metric-delta cf-tone-neutral">{weekSets} hard sets · {fmtNum(weekCardioMin)} min cardio</div>
           </div>
         </div>
 
@@ -177,7 +184,7 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
         <div className="dash-strip">
           <div className="dash-strip-cell"><div className="dash-strip-num">{weekWorkouts.length}</div><div className="dash-strip-lbl">Lifts</div></div>
           <div className="dash-strip-cell"><div className="dash-strip-num">{weekSets}</div><div className="dash-strip-lbl">Sets</div></div>
-          <div className="dash-strip-cell"><div className="dash-strip-num">{weekCardio.length}</div><div className="dash-strip-lbl">Cardio</div></div>
+          <div className="dash-strip-cell"><div className="dash-strip-num">{fmtNum(weekCardioKm, 1)}</div><div className="dash-strip-lbl">Cardio km</div></div>
           <div className="dash-strip-cell"><div className="dash-strip-num">{weekSauna.length}</div><div className="dash-strip-lbl">Sauna</div></div>
         </div>
 

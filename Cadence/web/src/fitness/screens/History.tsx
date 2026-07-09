@@ -3,8 +3,8 @@ import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
 import { weeklySetsByMuscle, weeklyHardSets, weekOf, workoutTonnage } from '../lib/fitnessCalc';
 import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, stripDayPrefix, todayISO } from '../lib/util';
-import { fmtDuration, parseDuration, setDuration, trackingOf } from '../lib/tracking';
-import type { ExerciseTracking, Workout, WorkoutSet } from '../lib/types';
+import { fmtDuration, parseDuration, setDuration, isBodyweightTracking, isTimedTracking, slotTracking } from '../lib/tracking';
+import type { CardioSession, ExerciseTracking, Workout, WorkoutSet } from '../lib/types';
 
 // Session log + weekly volume: what actually happened, week by week.
 // Sessions stay editable after the fact: fix a mistyped weight, add the set
@@ -29,11 +29,19 @@ export function History({ onMenu }: { onMenu: () => void }) {
   // Headline count = every hard set logged this week. The per-muscle table below
   // can read lower because it drops sets whose exercise has no muscle mapping.
   const weekSets = weeklyHardSets(data.workout_sets, data.workouts, thisWeek.start, thisWeek.end);
-  const weekCardio = data.cardio_sessions.filter((c) => c.date >= thisWeek.start && c.date <= thisWeek.end).length;
+  const weekCardioRows = data.cardio_sessions.filter((c) => c.date >= thisWeek.start && c.date <= thisWeek.end);
+  const weekCardio = weekCardioRows.length;
+  const weekCardioMin = weekCardioRows.reduce((sum, c) => sum + Number(c.duration_min || 0), 0);
+  const weekCardioKm = weekCardioRows.reduce((sum, c) => sum + Number(c.distance_km || 0), 0);
+  const weekCardioCals = weekCardioRows.reduce((sum, c) => sum + Number(c.calories || 0), 0);
   const weekSauna = data.sauna_sessions.filter((s) => s.date >= thisWeek.start && s.date <= thisWeek.end).length;
 
   const exName = (id: string) => data.exercises.find((e) => e.id === id)?.name || '?';
-  const trackingFor = (id: string) => trackingOf(data.exercises.find((e) => e.id === id));
+  const trackingFor = (id: string, workout?: Workout) =>
+    slotTracking(
+      workout?.program_day_id ? data.program_exercises.find((s) => s.program_day_id === workout.program_day_id && s.exercise_id === id) : null,
+      data.exercises.find((e) => e.id === id) || null
+    );
 
   return (
     <>
@@ -42,7 +50,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
         <div className="cf-metric-grid">
           <Metric label="Sessions this week" value={String(weekWorkouts.length)} />
           <Metric label="Hard sets this week" value={String(weekSets)} />
-          <Metric label="Cardio this week" value={String(weekCardio)} />
+          <Metric label="Cardio this week" value={`${fmtNum(weekCardioMin)} min`} delta={`${fmtNum(weekCardioKm, 1)} km · ${fmtNum(weekCardioCals)} kcal · ${weekCardio} sessions`} />
           <Metric label="Sauna this week" value={String(weekSauna)} />
         </div>
 
@@ -71,6 +79,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
           )}
           {completed.map((w) => {
             const sets = data.workout_sets.filter((s) => s.workout_id === w.id && s.done);
+            const cardio = data.cardio_sessions.filter((c) => c.workout_id === w.id);
             const openNow = openId === w.id;
             const mins =
               w.started_at && w.completed_at
@@ -85,6 +94,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
                     </div>
                     <div className="pick-sub">
                       {fmtDayShort(w.date)} · {sets.length} sets · {fmtNum(workoutTonnage(data.workout_sets, w.id))}kg total
+                      {cardio.length ? ` · ${fmtNum(cardio.reduce((sum, c) => sum + Number(c.duration_min || 0), 0))} min cardio · ${fmtNum(cardio.reduce((sum, c) => sum + Number(c.distance_km || 0), 0), 1)} km` : ''}
                       {mins !== null ? ` · ${mins} min` : ''}
                     </div>
                   </div>
@@ -94,12 +104,14 @@ export function History({ onMenu }: { onMenu: () => void }) {
                   <SessionDetail
                     workout={w}
                     sets={data.workout_sets.filter((x) => x.workout_id === w.id)}
+                    cardio={cardio}
                     editing={editId === w.id}
                     onToggleEdit={() => setEditId(editId === w.id ? null : w.id)}
                     exName={exName}
-                    trackingFor={trackingFor}
+                    trackingFor={(id) => trackingFor(id, w)}
                     onUpdateWorkout={(patch) => update('workouts', w.id, patch)}
                     onUpdateSet={(id, patch) => update('workout_sets', id, patch)}
+                    onUpdateCardio={(id, patch) => update('cardio_sessions', id, patch)}
                     onAddSet={async (exerciseId) => {
                       const rows = data.workout_sets
                         .filter((x) => x.workout_id === w.id && x.exercise_id === exerciseId)
@@ -159,24 +171,28 @@ export function History({ onMenu }: { onMenu: () => void }) {
 function SessionDetail({
   workout: w,
   sets,
+  cardio,
   editing,
   onToggleEdit,
   exName,
   trackingFor,
   onUpdateWorkout,
   onUpdateSet,
+  onUpdateCardio,
   onAddSet,
   onRemoveSet,
   onDelete,
 }: {
   workout: Workout;
   sets: WorkoutSet[];
+  cardio: CardioSession[];
   editing: boolean;
   onToggleEdit: () => void;
   exName: (id: string) => string;
   trackingFor: (id: string) => ExerciseTracking;
   onUpdateWorkout: (patch: Partial<Workout>) => void;
   onUpdateSet: (id: string, patch: Partial<WorkoutSet>) => void;
+  onUpdateCardio: (id: string, patch: Partial<CardioSession>) => void;
   onAddSet: (exerciseId: string) => void;
   onRemoveSet: (id: string) => void;
   onDelete: () => void;
@@ -217,9 +233,9 @@ function SessionDetail({
             <span style={{ color: 'var(--text2)' }}>
               {sorted
                 .map((s) =>
-                  tracking === 'time'
+                  isTimedTracking(tracking)
                     ? fmtDuration(setDuration(s))
-                    : tracking === 'bodyweight'
+                    : isBodyweightTracking(tracking)
                       ? `${s.reps}`
                       : `${Number(s.weight_kg)}×${s.reps}`
                 )
@@ -230,7 +246,7 @@ function SessionDetail({
               {sorted.map((s) => (
                   <div key={s.id} className="hist-set-edit">
                     <span className="wo-set-num">{s.set_number}</span>
-                    {tracking === 'time' ? (
+                    {isTimedTracking(tracking) ? (
                       <input
                         type="text"
                         inputMode="numeric"
@@ -238,7 +254,7 @@ function SessionDetail({
                         placeholder="m:ss"
                         onBlur={(e) => onUpdateSet(s.id, { duration_seconds: parseDuration(e.target.value) })}
                       />
-                    ) : tracking === 'bodyweight' ? (
+                    ) : isBodyweightTracking(tracking) ? (
                       <input
                         type="number"
                         inputMode="numeric"
@@ -279,6 +295,34 @@ function SessionDetail({
         </div>
         );
       })}
+      {cardio.length > 0 && (
+        <div style={{ fontSize: 13, padding: '6px 0' }}>
+          <strong>Cardio</strong>
+          {cardio.map((c) => (
+            <div key={c.id} style={{ marginTop: 6 }}>
+              {!editing ? (
+                <span style={{ color: 'var(--text2)' }}>
+                  {[
+                    `${c.kind} · ${fmtNum(Number(c.duration_min || 0))} min`,
+                    Number(c.distance_km) > 0 ? `${fmtNum(Number(c.distance_km), 2)} km` : '',
+                    c.avg_hr > 0 ? `${c.avg_hr} avg HR` : '',
+                    c.calories > 0 ? `${c.calories} kcal` : '',
+                    c.notes || '',
+                  ].filter(Boolean).join(' · ')}
+                </span>
+              ) : (
+                <div className="form-grid" style={{ marginTop: 4 }}>
+                  <input type="number" inputMode="numeric" defaultValue={Number(c.duration_min) || ''} placeholder="min" onBlur={(e) => onUpdateCardio(c.id, { duration_min: Math.max(0, Number(e.target.value) || 0) })} />
+                  <input type="number" inputMode="decimal" step="0.1" defaultValue={Number(c.distance_km) || ''} placeholder="km" onBlur={(e) => onUpdateCardio(c.id, { distance_km: Math.max(0, Number(e.target.value) || 0) })} />
+                  <input type="number" inputMode="numeric" defaultValue={c.calories || ''} placeholder="kcal" onBlur={(e) => onUpdateCardio(c.id, { calories: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                  <input type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} placeholder="avg HR" onBlur={(e) => onUpdateCardio(c.id, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                  <input type="text" defaultValue={c.notes || ''} placeholder="pace / speed / incline / intervals" onBlur={(e) => onUpdateCardio(c.id, { notes: e.target.value })} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {editing ? (
         <div style={{ marginTop: 8 }}>
           <label className="field">Notes</label>
