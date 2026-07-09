@@ -1,20 +1,87 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import type { WorkItem } from '../lib/types';
+import type { AgentMessage, WorkItem } from '../lib/types';
 import { fmtDM, fmtDMY } from '../lib/util';
 import { sanitizeHtml } from '../lib/sanitize';
 
-type Tab = 'for_kobe' | 'brief' | 'from_kobe' | 'activity';
+type Tab = 'ask_kobe' | 'for_kobe' | 'brief' | 'from_kobe' | 'activity';
+
+const KOBE_RECIPIENT_KEY = 'agent:kobe';
 
 const fmtAction = (s: string) =>
   s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function Kobe({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, insert } = useCadence();
   const [modal, setModal] = useState<WorkItem | 'new' | null>(null);
-  const [tab, setTab] = useState<Tab>('for_kobe');
+  const [tab, setTab] = useState<Tab>('ask_kobe');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const kobeMessages = useMemo(
+    () =>
+      (data.agent_messages || [])
+        .filter((m) => !m.deleted_at && m.recipient_key === KOBE_RECIPIENT_KEY)
+        .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || '')),
+    [data.agent_messages],
+  );
+
+  useEffect(() => {
+    if (tab === 'ask_kobe' && typeof bottomRef.current?.scrollIntoView === 'function') {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [kobeMessages.length, tab]);
+
+  const contextChips = (m: AgentMessage) => {
+    const chips: { key: string; label: string; className: string }[] = [];
+    if (m.linked_work_item_id) {
+      const item = data.work_items.find((w) => w.id === m.linked_work_item_id);
+      chips.push({ key: `work-${m.linked_work_item_id}`, label: item?.title || 'Linked work', className: 'tag' });
+    }
+    if (m.linked_project_id) {
+      const project = data.projects.find((p) => p.id === m.linked_project_id);
+      chips.push({ key: `project-${m.linked_project_id}`, label: project?.name || 'Linked project', className: 'tag tag-project' });
+    }
+    if (m.linked_person_id) {
+      const person = data.people.find((p) => p.id === m.linked_person_id);
+      chips.push({ key: `person-${m.linked_person_id}`, label: person?.name || 'Linked person', className: 'tag tag-person' });
+    }
+    if (m.linked_note_id) {
+      const note = data.notes.find((n) => n.id === m.linked_note_id);
+      chips.push({ key: `note-${m.linked_note_id}`, label: note?.title || 'Linked note', className: 'tag' });
+    }
+    if (chips.length === 0) return null;
+    return <div className="kobe-message-context">{chips.map((chip) => <span key={chip.key} className={chip.className}>{chip.label}</span>)}</div>;
+  };
+
+  const sendToKobe = async () => {
+    const text = message.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setSendError(null);
+    setMessage('');
+    try {
+      await insert('agent_messages', {
+        sender_type: 'user',
+        recipient_type: 'agent',
+        recipient_key: KOBE_RECIPIENT_KEY,
+        body: text,
+        status: 'unread',
+      } as Partial<AgentMessage>);
+    } catch (e) {
+      console.error('Ask Kobe send failed:', e);
+      setSendError('Could not send to Kobe. Your draft has been restored — check your connection and try again.');
+      setMessage(text);
+    } finally {
+      setSending(false);
+      textareaRef.current?.focus();
+    }
+  };
 
   const kobeAssigned = useMemo(
     () =>
@@ -68,8 +135,11 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
       <ScreenHeader title="Kobe" onMenu={onMenu} />
       <div className="kobe-screen">
         <div className="kobe-tabs">
+          <button className={`kobe-tab${tab === 'ask_kobe' ? ' active' : ''}`} onClick={() => setTab('ask_kobe')}>
+            Ask Kobe
+          </button>
           <button className={`kobe-tab${tab === 'for_kobe' ? ' active' : ''}`} onClick={() => setTab('for_kobe')}>
-            With Kobe
+            For Kobe
             {kobeAssigned.length > 0 && <span className="kobe-tab-count">{kobeAssigned.length}</span>}
           </button>
           <button className={`kobe-tab${tab === 'brief' ? ' active' : ''}`} onClick={() => setTab('brief')}>
@@ -84,6 +154,61 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
             Activity Log
           </button>
         </div>
+
+        {/* ── Ask Kobe — native in-app delegation channel via agent_messages ── */}
+        {tab === 'ask_kobe' && (
+          <div className="kobe-chat-wrap kobe-ask-panel">
+            <div className="kobe-channel-hint">Kobe reads this channel through Cadence and replies here.</div>
+            <div className="kobe-chat-messages" aria-label="Ask Kobe message thread">
+              {kobeMessages.length === 0 ? (
+                <div className="kobe-chat-empty">
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
+                  <p>Ask Kobe to act on Cadence.</p>
+                  <small>Link work, people, projects or meetings over time. Kobe replies here with what changed and what needs approval.</small>
+                </div>
+              ) : (
+                kobeMessages.map((m) => {
+                  const isKobe = m.sender_type === 'agent' || m.sender_type === 'system';
+                  return (
+                    <div key={m.id} className={`kobe-bubble-row${isKobe ? ' kobe-bubble-row--kobe' : ''}`}>
+                      {isKobe && <div className="kobe-bubble-avatar">K</div>}
+                      <div className={`kobe-bubble${isKobe ? ' kobe-bubble--kobe' : ' kobe-bubble--user'}`}>
+                        {isKobe ? (
+                          <div className="kobe-bubble-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(m.body || '') }} />
+                        ) : (
+                          <span>{m.body}</span>
+                        )}
+                        {contextChips(m)}
+                        <div className="kobe-bubble-time">{fmtDM(m.created_at)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={bottomRef} />
+            </div>
+            {sendError && <div className="kobe-chat-error" role="alert">{sendError}</div>}
+            <div className="kobe-chat-input-wrap">
+              <textarea
+                ref={textareaRef}
+                className="kobe-chat-input"
+                placeholder="Ask Kobe to act on Cadence…"
+                value={message}
+                rows={1}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToKobe(); }
+                }}
+              />
+              <button
+                className="btn btn-primary kobe-send-btn"
+                onClick={sendToKobe}
+                disabled={!message.trim() || sending}
+                aria-label="Send to Kobe"
+              >{sending ? '…' : '↑'}</button>
+            </div>
+          </div>
+        )}
 
         {/* ── With Kobe — explicitly delegated via source=for:kobe ── */}
         {tab === 'for_kobe' && (
