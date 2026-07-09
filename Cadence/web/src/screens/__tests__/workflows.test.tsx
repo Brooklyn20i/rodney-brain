@@ -109,6 +109,22 @@ describe('Kobe Ask Kobe message loop', () => {
     expect(input).toHaveValue('');
   });
 
+  it('rejects empty or whitespace-only sends without calling the store', () => {
+    const insert = vi.fn().mockResolvedValue(msg({ id: 'new' }));
+    setStore({ insert });
+    render(<Kobe onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('Ask Kobe to act on Cadence…');
+    const send = screen.getByRole('button', { name: 'Send to Kobe' });
+    // Nothing typed — button disabled and Enter is a no-op.
+    expect(send).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    // Whitespace-only draft stays blocked.
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(send).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('renders user and agent messages with linked context chips in the thread', () => {
     setStore({ data: {
       work_items: [wi({ id: 'w1', title: 'Pricing proof point' })],
