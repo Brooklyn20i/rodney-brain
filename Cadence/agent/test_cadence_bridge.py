@@ -28,6 +28,23 @@ def test_agent_messages_is_owner_scoped_not_workspace_scoped(monkeypatch):
     assert "workspace_id" not in out
 
 
+def test_agent_control_events_is_owner_scoped_not_workspace_scoped(monkeypatch):
+    """`public.agent_control_events` has no workspace_id column (migration 0021).
+
+    Confirmed by a read-only live-schema probe (selecting workspace_id returns
+    a PGRST missing-column error). with_owner_workspace() must add owner_id but
+    must never inject workspace_id for agent_control_events.
+    """
+    _stub_discovery(monkeypatch)
+
+    out = cadence_bridge.with_owner_workspace(
+        "agent_control_events", {"entity_type": "work_item"}
+    )
+
+    assert out["owner_id"] == "owner-123"
+    assert "workspace_id" not in out
+
+
 def test_work_items_still_receives_workspace_id(monkeypatch):
     """Workspace-scoped tables must keep getting workspace_id."""
     _stub_discovery(monkeypatch)
