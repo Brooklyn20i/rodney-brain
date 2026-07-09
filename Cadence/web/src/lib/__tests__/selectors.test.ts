@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   getTodoGroups, getWaitingOnOthers, getHotThisWeek, getKobeHandling,
-  getLoadSummary, ACTIVE_LOAD_CAP,
+  getLoadSummary, ACTIVE_LOAD_CAP, getDecideItems,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
   getCalendarEvents, groupEventsByDate,
 } from '../selectors';
 import { todayStr, addDaysStr } from '../util';
-import type { WorkItem, Project, Milestone, ProjectUpdate } from '../types';
+import type { WorkItem, Project, Milestone, ProjectUpdate, Decision } from '../types';
 
 // Deterministic clock so todayStr()/addDaysStr() are stable across runs.
 beforeEach(() => {
@@ -39,6 +39,11 @@ const upd = (o: Partial<ProjectUpdate>): ProjectUpdate => ({
   created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
 }) as ProjectUpdate;
 
+const dec = (o: Partial<Decision>): Decision => ({
+  id: 'd1', owner_id: 'o', title: 'Decision', status: 'pending', due_date: null,
+  context: '', outcome: '', created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
+}) as Decision;
+
 // ── getTodoGroups ──────────────────────────────────────────────────────────────
 describe('getTodoGroups', () => {
   it('buckets in-lane tasks into Overdue / Today / This week / Later in order', () => {
@@ -56,9 +61,10 @@ describe('getTodoGroups', () => {
     expect(g.find((x) => x.key === 'later')!.items.map((w) => w.id).sort()).toEqual(['later', 'nodue']);
   });
 
-  it('excludes waitingFor, agent tasks and done items', () => {
+  it('excludes waitingFor, decisions, agent tasks and done items', () => {
     const items = [
       wi({ id: 'wait', type: 'waitingFor' }),
+      wi({ id: 'decide', type: 'decision' }),
       wi({ id: 'kobe', source: 'for:kobe' }),
       wi({ id: 'done', done: true }),
       wi({ id: 'keep' }),
@@ -81,6 +87,23 @@ describe('getWaitingOnOthers', () => {
       wi({ id: 'task' }),
     ];
     expect(getWaitingOnOthers(items).map((w) => w.id)).toEqual(['w']);
+  });
+});
+
+// ── getDecideItems ─────────────────────────────────────────────────────────────
+describe('getDecideItems', () => {
+  it('surfaces pending decisions from work items and the decisions table without a migration', () => {
+    const items = [
+      wi({ id: 'wi-decision', title: 'Choose vendor', type: 'decision', due_date: addDaysStr(2) }),
+      wi({ id: 'normal', title: 'Normal task' }),
+      wi({ id: 'done-decision', type: 'decision', done: true }),
+      wi({ id: 'deleted-decision', type: 'decision', deleted_at: '2026-06-10' }),
+    ];
+    const decisions = [
+      dec({ id: 'd-pending', title: 'Approve plan', due_date: todayStr() }),
+      dec({ id: 'd-decided', title: 'Old decision', status: 'decided' }),
+    ];
+    expect(getDecideItems(items, decisions).map((d) => d.title)).toEqual(['Approve plan', 'Choose vendor']);
   });
 });
 

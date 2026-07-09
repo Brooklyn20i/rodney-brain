@@ -68,7 +68,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
   }, [data]);
 
   const sections: { title: string; items: string[] }[] = [
-    { title: '📥 Process Inbox', items: [`Clear ${counts.inbox} inbox item(s)`] },
+    { title: '📥 Process Quick Capture', items: [`Clear ${counts.inbox} quick capture item(s)`] },
     { title: '⚠️ Overdue Items', items: [`Review ${counts.overdue} overdue item(s)`] },
     { title: '⚖ Open Decisions', items: [`${counts.decisions} decision(s) pending`] },
     { title: '▤ Projects Review', items: ['Review each active project', 'Check for stale projects (>2 weeks)', 'Identify next actions for blocked projects'] },

@@ -24,13 +24,13 @@ export function WeeklyReview() {
       <div className="screen-content">
         <div className="metric-grid">
           <Metric label="Active work" value={stats.active} />
-          <Metric label="Inbox" value={stats.inbox} />
+          <Metric label="Quick Capture" value={stats.inbox} />
           <Metric label="Overdue" value={stats.overdue} tone={stats.overdue ? 'bad' : 'good'} />
           <Metric label="Waiting" value={stats.waiting} />
           <Metric label="Decisions" value={stats.decisions} />
           <Metric label="Active projects" value={stats.projects} />
         </div>
-        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear Inbox to zero or explicitly defer.</li><li>Confirm top three priorities for Monday.</li><li>Close or defer stale decisions.</li><li>Review waiting items and choose follow-ups.</li><li>Confirm every active project has a next action.</li></ol></div>
+        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear Quick Capture to zero or explicitly defer.</li><li>Confirm top three priorities for Monday.</li><li>Close or defer stale decisions.</li><li>Review waiting items and choose follow-ups.</li><li>Confirm every active project has a next action.</li></ol></div>
       </div>
     </>
   );

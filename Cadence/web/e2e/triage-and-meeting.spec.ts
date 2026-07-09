@@ -43,17 +43,17 @@ test('meeting note edits persist after closing and reopening', async ({ page }) 
   await expect(page.locator('.agenda-topic-input').first()).toHaveValue('Discuss Q3 roadmap');
 });
 
-// ── Quick Add captures to the Inbox, even when tagged with a person/project ──────
-test('a person/project-tagged quick note waits in the Inbox, not the folder', async ({ page }) => {
-  await navTo(page, 'Inbox');
+// ── Quick Add captures to Quick Capture, even when tagged with a person/project ──
+test('a person/project-tagged quick note waits in Quick Capture, not the folder', async ({ page }) => {
+  await navTo(page, 'Quick Capture');
   await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Talk to Anna about Apollo');
   // Button reflects capture-first behaviour.
-  await expect(page.getByRole('button', { name: /Add to Inbox/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Add to Quick Capture/ })).toBeVisible();
   await input.press('Enter');
 
-  // It lands in the Inbox triage queue.
+  // It lands in the Quick Capture triage queue.
   await expect(page.getByText('Talk to Anna about Apollo')).toBeVisible();
 
   // …and does NOT leak into Anna's folder (still untriaged), while her genuinely

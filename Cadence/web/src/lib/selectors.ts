@@ -1,7 +1,7 @@
 // Pure data selectors for the Executive Control Cockpit.
 // No React dependencies — data in, arrays out.
 
-import type { WorkItem, Project, ProjectUpdate, Milestone } from './types';
+import type { WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
 import { isFiledTask, isLinkedToProject } from './tasks';
 
@@ -9,7 +9,7 @@ import { isFiledTask, isLinkedToProject } from './tasks';
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and
 // deterministic — grouped by date only, no keyword guessing. "In his lane" means
 // his own task (isUserTask excludes agent/Kobe items) that isn't a waitingFor
-// (those are owed by others and live in their own section).
+// (owed by others) or decision (its own lane).
 const PRI: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const byDueThenPri = (a: WorkItem, b: WorkItem) =>
   (a.due_date || '').localeCompare(b.due_date || '') || (PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1);
@@ -26,7 +26,7 @@ export interface TodoGroup {
 export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
   const today = todayStr();
   const weekEnd = addDaysStr(7);
-  const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor');
+  const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor' && w.type !== 'decision');
   const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
   for (const w of mine) {
     if (w.due_date && w.due_date < today) overdue.push(w);
@@ -48,6 +48,30 @@ export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
   return items
     .filter((w) => isFiledTask(w) && w.type === 'waitingFor')
     .sort(byDueThenPri);
+}
+
+// Decisions Rodney needs to make. Uses both current data shapes safely:
+// - work_items.type === 'decision' (editable like any other work item)
+// - decisions.status === 'pending' (legacy/dedicated decision records)
+// No model migration: this is a read-only cockpit lane over existing data.
+export interface DecideItem {
+  id: string;
+  title: string;
+  due_date: string | null;
+  source: 'work_item' | 'decision';
+  workItem?: WorkItem;
+  decision?: Decision;
+}
+
+export function getDecideItems(items: WorkItem[], decisions: Decision[] = []): DecideItem[] {
+  const fromWorkItems = items
+    .filter((w) => isFiledTask(w) && w.type === 'decision' && !w.deleted_at)
+    .map((w) => ({ id: `wi:${w.id}`, title: w.title, due_date: w.due_date, source: 'work_item' as const, workItem: w }));
+  const fromDecisions = decisions
+    .filter((d) => d.status === 'pending' && !d.deleted_at)
+    .map((d) => ({ id: `d:${d.id}`, title: d.title, due_date: d.due_date, source: 'decision' as const, decision: d }));
+  return [...fromWorkItems, ...fromDecisions]
+    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || a.title.localeCompare(b.title));
 }
 
 // ── Hot this week ─────────────────────────────────────────────────────────────
@@ -87,7 +111,7 @@ export interface LoadSummary {
 }
 
 export function getLoadSummary(items: WorkItem[]): LoadSummary {
-  const inLane = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor');
+  const inLane = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor' && w.type !== 'decision');
   const active = inLane.length;
   const overdue = inLane.filter((w) => isOverdue(w.due_date)).length;
   const waiting = items.filter((w) => isFiledTask(w) && w.type === 'waitingFor').length;

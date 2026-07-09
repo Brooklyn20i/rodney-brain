@@ -7,7 +7,7 @@ import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isLinkedToPerson } from '../lib/tasks';
-import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary } from '../lib/selectors';
+import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary, getDecideItems } from '../lib/selectors';
 
 const initials = (name: string) =>
   (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -86,6 +86,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
     const todoGroups = getTodoGroups(items);
     const todoCount = todoGroups.reduce((n, g) => n + g.items.length, 0);
+    const decisions = getDecideItems(items, data.decisions);
     const waiting = getWaitingOnOthers(items);
     const kobe = getKobeHandling(items);
     const load = getLoadSummary(items);
@@ -101,12 +102,12 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       }))
       .sort((a, b) => a.meeting.localeCompare(b.meeting));
 
-    return { todoGroups, todoCount, waiting, kobe, load, oneOnOnes };
+    return { todoGroups, todoCount, decisions, waiting, kobe, load, oneOnOnes };
   }, [data, dates, people]);
 
   return (
     <>
-      <ScreenHeader title="Control" subtitle={fmtHeaderDate(todayStr())} onMenu={onMenu}>
+      <ScreenHeader title="Rodney To Do / Control" subtitle={`${fmtHeaderDate(todayStr())} · do now, decide, waiting, delegated, parked`} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </ScreenHeader>
 
@@ -114,13 +115,28 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
         <LoadStrip load={view.load} />
 
-        {/* My To-Do — the one ranked list, by when it's due */}
-        <Section label="My To-Do" count={view.todoCount} accent="var(--accent)"
+        {/* Do now — the one ranked list, by when it's due */}
+        <Section label="Do now" count={view.todoCount} accent="var(--accent)"
           empty="Nothing on your plate — clear deck.">
           {view.todoGroups.map((g) => (
             <div key={g.key} className="todo-group">
               <div className="todo-group-hdr" style={{ color: TONE[g.tone] }}>{g.label} · {g.items.length}</div>
               {g.items.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)}
+            </div>
+          ))}
+        </Section>
+
+        {/* Decide — explicit decisions from existing work_items/decisions data */}
+        <Section label="Decide" count={view.decisions.length} accent="var(--orange)"
+          empty="No explicit decisions waiting.">
+          {view.decisions.map((d) => d.workItem ? (
+            <TaskRow key={d.id} w={d.workItem} onEdit={setEditing} />
+          ) : (
+            <div key={d.id} className="task-row decision-row">
+              <div className="task-main">
+                <div className="task-title">{d.title}</div>
+                <div className="task-meta">Decision{d.due_date ? ` · due ${d.due_date}` : ''}</div>
+              </div>
             </div>
           ))}
         </Section>
@@ -157,7 +173,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         )}
 
         {/* Waiting on others — owed by others, not yours to own */}
-        <Section label="Waiting on others" count={view.waiting.length} accent="var(--blue)"
+        <Section label="Waiting" count={view.waiting.length} accent="var(--blue)"
           empty="Not waiting on anyone.">
           {view.waiting.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)}
         </Section>
@@ -167,6 +183,8 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
           empty="Nothing delegated to Kobe.">
           {view.kobe.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)}
         </Section>
+
+        <div className="cockpit-footnote">Later / parked work is held inside Do now under “Later” until lane-level parking exists in the data model.</div>
 
       </div>
 
