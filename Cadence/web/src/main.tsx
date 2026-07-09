@@ -6,6 +6,7 @@ import { CadenceFinancialProvider } from './financial/lib/store';
 import { CadenceFitnessProvider } from './fitness/lib/store';
 import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
+import { lockCadencePortrait } from './fitness/lib/orientation';
 import './styles.css';
 
 // Build provenance for operators and bug reports. Vite replaces this at build
@@ -29,16 +30,7 @@ window.addEventListener('vite:preloadError', () => {
 // this (and the manifest's orientation lock), so the CSS `.rotate-guard`
 // overlay stays as the fallback there. lock() throws/rejects on desktop and
 // unsupported browsers, so this is strictly best-effort.
-try {
-  const orientation = window.screen?.orientation as
-    | (ScreenOrientation & { lock?: (o: string) => Promise<void> })
-    | undefined;
-  if (orientation && typeof orientation.lock === 'function') {
-    void Promise.resolve(orientation.lock('portrait')).catch(() => {});
-  }
-} catch {
-  /* not supported here — the CSS rotate-guard handles it */
-}
+lockCadencePortrait();
 
 // Sentry is enabled when VITE_SENTRY_DSN is set (production). Loaded DYNAMICALLY
 // so @sentry/react (~100KB gz) never touches the cold-start path — in dev / when

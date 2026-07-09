@@ -606,11 +606,14 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .save-error-banner button { background: rgba(255,255,255,0.2); color: #fff; border: none; border-radius: 8px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 
 /* Portrait guard — only shown on a touch phone held in landscape. Desktop and
-   tablets (which have the room for landscape) never see it. */
+   tablets (which have the room for landscape) never see it. Gym Focus opts out:
+   its training layout is allowed to stay landscape instead of blocking with the
+   rotate message. */
 .rotate-guard { display: none; }
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
   .rotate-guard { display: flex; position: fixed; inset: 0; z-index: 500; background: var(--sidebar-bg);
     color: #fff; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  body.gym-focus-orientation-active .rotate-guard { display: none; }
   .rotate-guard-card { max-width: 320px; }
   .rotate-guard-icon { font-size: 40px; margin-bottom: 12px; animation: rotate-hint 2.4s ease-in-out infinite; }
   .rotate-guard p { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
@@ -1714,6 +1717,31 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-add { margin-top: 14px; }
 .gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 6px 0; }
 .gym-add .gym-add-body { margin-top: 8px; }
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body.gym-focus-orientation-active .app-shell { min-height: 100dvh; }
+  body.gym-focus-orientation-active .screen-content.gym-mode {
+    padding: 8px 14px calc(8px + var(--safe-bottom));
+    max-width: none;
+  }
+  body.gym-focus-orientation-active .screen-content.gym-mode .rest-timer {
+    position: sticky;
+    top: 4px;
+    z-index: 25;
+    margin-bottom: 8px;
+  }
+  body.gym-focus-orientation-active .screen-content.gym-mode .wo-exercise.gym {
+    padding: 14px;
+  }
+  body.gym-focus-orientation-active .screen-content.gym-mode .wo-exercise.gym .wo-exercise-name {
+    font-size: 20px;
+  }
+  body.gym-focus-orientation-active .screen-content.gym-mode .gym-nav {
+    padding: 8px 0 calc(4px + var(--safe-bottom));
+  }
+  body.gym-focus-orientation-active .screen-content.gym-mode .gym-nav .btn {
+    padding: 12px;
+  }
+}
 
 /* ── Sync setup screen ── */
 .sync-steps { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.55; color: var(--text); }
