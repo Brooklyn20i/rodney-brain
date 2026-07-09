@@ -215,10 +215,14 @@ def discover_workspace_id() -> str | None:
     return workspace_ids[0]
 
 
+# Tables that carry a workspace_id column and must be scoped to the active
+# workspace on insert. `agent_messages` is deliberately excluded: it has no
+# workspace_id column (migration 0020 — agent chat is personal, owner-scoped),
+# so injecting one triggers PGRST204 "Could not find the 'workspace_id' column".
 WORKSPACE_SCOPED_TABLES = {
     "projects", "milestones", "project_updates", "people", "talking_points",
     "work_items", "comments", "decisions", "notes", "outbox", "links", "activity",
-    "agent_messages", "agent_control_events",
+    "agent_control_events",
 }
 
 
