@@ -1,18 +1,22 @@
 import { useMemo } from 'react';
 import { useCadence } from '../lib/store';
-import { isOverdue } from '../lib/util';
+import { getDecideItems, getKobeHandling, getLoadSummary, getWaitingOnOthers } from '../lib/selectors';
+import { isUserTask } from '../lib/tasks';
 
 export function WeeklyReview() {
   const { data } = useCadence();
   const stats = useMemo(() => {
-    const active = data.work_items.filter((w) => !w.done && !w.deleted_at);
+    const work = data.work_items.filter((w) => !w.deleted_at);
+    const active = work.filter((w) => !w.done);
     const completed = data.work_items.filter((w) => w.done && !w.deleted_at);
+    const load = getLoadSummary(work);
     return {
-      active: active.length,
-      inbox: active.filter((w) => w.inboxed).length,
-      overdue: active.filter((w) => isOverdue(w.due_date)).length,
-      waiting: active.filter((w) => w.type === 'waitingFor').length,
-      decisions: data.decisions.filter((d) => d.status === 'pending' && !d.deleted_at).length,
+      doNow: load.active,
+      quickCapture: active.filter((w) => isUserTask(w) && w.inboxed).length,
+      overdue: load.overdue,
+      waiting: getWaitingOnOthers(work).length,
+      decisions: getDecideItems(work, data.decisions).length,
+      withKobe: getKobeHandling(work).length,
       completed: completed.length,
       projects: data.projects.filter((p) => p.status === 'active' && !p.deleted_at).length,
     };
@@ -23,14 +27,15 @@ export function WeeklyReview() {
       <div className="screen-header"><div><h1>Weekly Review</h1><div className="subtitle">Reset the operating loop</div></div></div>
       <div className="screen-content">
         <div className="metric-grid">
-          <Metric label="Active work" value={stats.active} />
-          <Metric label="Quick Capture" value={stats.inbox} />
+          <Metric label="Needs Rodney / Do now" value={stats.doNow} />
+          <Metric label="Quick Capture / untriaged" value={stats.quickCapture} />
           <Metric label="Overdue" value={stats.overdue} tone={stats.overdue ? 'bad' : 'good'} />
-          <Metric label="Waiting" value={stats.waiting} />
-          <Metric label="Decisions" value={stats.decisions} />
+          <Metric label="Waiting / owed by others" value={stats.waiting} />
+          <Metric label="Decide" value={stats.decisions} />
+          <Metric label="With Kobe" value={stats.withKobe} />
           <Metric label="Active projects" value={stats.projects} />
         </div>
-        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear Quick Capture to zero or explicitly defer.</li><li>Confirm top three priorities for Monday.</li><li>Close or defer stale decisions.</li><li>Review waiting items and choose follow-ups.</li><li>Confirm every active project has a next action.</li></ol></div>
+        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear Quick Capture / untriaged to zero or explicitly defer.</li><li>Confirm top three Needs Rodney / Do now priorities for Monday.</li><li>Close or defer stale Decide items.</li><li>Review Waiting / owed by others and choose follow-ups.</li><li>Confirm With Kobe contains only source=for:kobe delegated items.</li><li>Confirm every active project has a next action.</li></ol></div>
       </div>
     </>
   );

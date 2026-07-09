@@ -2,6 +2,7 @@ import React from 'react';
 import type { WorkItem } from '../lib/types';
 import { fmtDate, isOverdue, isDueToday, TYPE_LABEL, priLabel } from '../lib/util';
 import { useCadence } from '../lib/store';
+import { isAgentCreated } from '../lib/tasks';
 
 export const TypeTag = ({ type }: { type: WorkItem['type'] }) => (
   <span className={`tag tag-${type}`}>{TYPE_LABEL[type] || 'Task'}</span>
@@ -13,6 +14,12 @@ export const Due = ({ date }: { date: string | null }) => {
   if (!date) return null;
   const cls = isOverdue(date) ? 'due-overdue' : isDueToday(date) ? 'due-today' : 'due-normal';
   return <span className={cls} style={{ fontSize: 12 }}>{fmtDate(date)}</span>;
+};
+
+const agentName = (source: string | null | undefined): string | null => {
+  const m = /^(?:agent:)(.+)$/.exec(source || '');
+  if (!m) return null;
+  return m[1].replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 // Shared compact task row — one consistent task card across Inbox, Today and
@@ -41,6 +48,7 @@ export function TaskRow({ w, onEdit, showPerson = true }: {
           <div className={`card-title ${w.done ? 'checkbox-done' : ''}`}>{w.title}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <TypeTag type={w.type} /><PriTag priority={w.priority} />
+            {isAgentCreated(w) && <span className="tag tag-note-link">Created by {agentName(w.source) || 'agent'}</span>}
             {entities ? (
               <>
                 {entities.slice(0, 3).map((re) => (

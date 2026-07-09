@@ -8,8 +8,9 @@ import { isFiledTask, isLinkedToProject } from './tasks';
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and
 // deterministic — grouped by date only, no keyword guessing. "In his lane" means
-// his own task (isUserTask excludes agent/Kobe items) that isn't a waitingFor
-// (owed by others) or decision (its own lane).
+// his own task (isUserTask excludes delegated items) that isn't a waitingFor
+// (owed by others) or decision (its own lane). `agent:kobe` is provenance only,
+// so it remains in Rodney's lane unless it is explicitly `for:kobe`.
 const PRI: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const byDueThenPri = (a: WorkItem, b: WorkItem) =>
   (a.due_date || '').localeCompare(b.due_date || '') || (PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1);
@@ -98,8 +99,9 @@ export function getKobeHandling(items: WorkItem[]): WorkItem[] {
 
 // ── Active load (Responsibility #3) ───────────────────────────────────────────
 // How much Rodney is personally carrying right now. "In your lane" = open,
-// non-agent tasks that aren't waitingFor (waiting = owed by others, not a burden)
-// and aren't delegated to Kobe. Surfaced so over-ownership is visible, not silent.
+// non-delegated tasks that aren't waitingFor (waiting = owed by others, not a
+// burden) and aren't delegated to Kobe. Surfaced so over-ownership is visible,
+// not silent.
 export const ACTIVE_LOAD_CAP = 7; // soft threshold; tune in one line
 
 export interface LoadSummary {

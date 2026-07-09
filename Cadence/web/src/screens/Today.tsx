@@ -107,7 +107,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Rodney To Do / Control" subtitle={`${fmtHeaderDate(todayStr())} · do now, decide, waiting, delegated, parked`} onMenu={onMenu}>
+      <ScreenHeader title="Rodney To Do / Control" subtitle={`${fmtHeaderDate(todayStr())} · Needs Rodney / Do now, Decide, Waiting, With Kobe`} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </ScreenHeader>
 
@@ -116,7 +116,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         <LoadStrip load={view.load} />
 
         {/* Do now — the one ranked list, by when it's due */}
-        <Section label="Do now" count={view.todoCount} accent="var(--accent)"
+        <Section label="Needs Rodney / Do now" count={view.todoCount} accent="var(--accent)"
           empty="Nothing on your plate — clear deck.">
           {view.todoGroups.map((g) => (
             <div key={g.key} className="todo-group">
@@ -173,7 +173,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
         )}
 
         {/* Waiting on others — owed by others, not yours to own */}
-        <Section label="Waiting" count={view.waiting.length} accent="var(--blue)"
+        <Section label="Waiting / owed by others" count={view.waiting.length} accent="var(--blue)"
           empty="Not waiting on anyone.">
           {view.waiting.map((w) => <TaskRow key={w.id} w={w} onEdit={setEditing} />)}
         </Section>

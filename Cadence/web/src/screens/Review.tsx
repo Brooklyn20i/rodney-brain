@@ -1,7 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
-import { isOverdue, fmtHeaderDate, todayStr } from '../lib/util';
+import { fmtHeaderDate, todayStr } from '../lib/util';
+import { getDecideItems, getKobeHandling, getLoadSummary, getWaitingOnOthers } from '../lib/selectors';
+import { isUserTask } from '../lib/tasks';
 
 export function Review({ onMenu }: { onMenu?: () => void }) {
   const { data, insert, update } = useCadence();
@@ -58,21 +60,26 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
 
   const counts = useMemo(() => {
     // Exclude soft-deleted rows so counts match WeeklyReview and don't inflate.
-    const open = data.work_items.filter((w) => !w.done && !w.deleted_at);
+    const work = data.work_items.filter((w) => !w.deleted_at);
+    const open = work.filter((w) => !w.done);
+    const load = getLoadSummary(work);
     return {
-      inbox: open.filter((w) => w.inboxed).length,
-      overdue: open.filter((w) => isOverdue(w.due_date)).length,
-      decisions: data.decisions.filter((d) => d.status === 'pending' && !d.deleted_at).length + open.filter((w) => w.type === 'decision').length,
-      waiting: open.filter((w) => w.type === 'waitingFor').length,
+      quickCapture: open.filter((w) => isUserTask(w) && w.inboxed).length,
+      doNow: load.active,
+      overdue: load.overdue,
+      decide: getDecideItems(work, data.decisions).length,
+      waiting: getWaitingOnOthers(work).length,
+      withKobe: getKobeHandling(work).length,
     };
   }, [data]);
 
   const sections: { title: string; items: string[] }[] = [
-    { title: '📥 Process Quick Capture', items: [`Clear ${counts.inbox} quick capture item(s)`] },
-    { title: '⚠️ Overdue Items', items: [`Review ${counts.overdue} overdue item(s)`] },
-    { title: '⚖ Open Decisions', items: [`${counts.decisions} decision(s) pending`] },
+    { title: '📥 Quick Capture / untriaged', items: [`Clear ${counts.quickCapture} untriaged capture(s)`] },
+    { title: '☀ Needs Rodney / Do now', items: [`Review ${counts.doNow} item(s) in Rodney's lane${counts.overdue ? `, including ${counts.overdue} overdue` : ''}`] },
+    { title: '⚖ Decide', items: [`${counts.decide} decision(s) pending`] },
     { title: '▤ Projects Review', items: ['Review each active project', 'Check for stale projects (>2 weeks)', 'Identify next actions for blocked projects'] },
-    { title: '✦ Waiting On Others', items: [`Follow up on ${counts.waiting} outstanding item(s)`] },
+    { title: '✦ Waiting / owed by others', items: [`Follow up on ${counts.waiting} outstanding item(s)`] },
+    { title: '⚡ With Kobe / delegated to Kobe', items: [`Check ${counts.withKobe} delegated item(s)`] },
     { title: '📅 Next Week', items: ['Schedule focus time for top 3 priorities', 'Block time for deep work', 'Review upcoming deadlines'] },
   ];
 

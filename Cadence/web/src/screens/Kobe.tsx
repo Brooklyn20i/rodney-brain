@@ -69,7 +69,7 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
       <div className="kobe-screen">
         <div className="kobe-tabs">
           <button className={`kobe-tab${tab === 'for_kobe' ? ' active' : ''}`} onClick={() => setTab('for_kobe')}>
-            For Kobe
+            With Kobe
             {kobeAssigned.length > 0 && <span className="kobe-tab-count">{kobeAssigned.length}</span>}
           </button>
           <button className={`kobe-tab${tab === 'brief' ? ' active' : ''}`} onClick={() => setTab('brief')}>
@@ -85,17 +85,17 @@ export function Kobe({ onMenu }: { onMenu?: () => void }) {
           </button>
         </div>
 
-        {/* ── For Kobe ── */}
+        {/* ── With Kobe — explicitly delegated via source=for:kobe ── */}
         {tab === 'for_kobe' && (
           <div className="kobe-panel">
             <div className="kobe-panel-actions">
-              <button className="btn btn-primary" onClick={() => setModal('new')}>+ Task for Kobe</button>
+              <button className="btn btn-primary" onClick={() => setModal('new')}>+ Delegate to Kobe</button>
             </div>
             {kobeAssigned.length === 0 ? (
               <div className="empty-state">
                 <div className="icon">⚡</div>
-                <p>No tasks for Kobe</p>
-                <small>Add non-urgent tasks here. Kobe checks this regularly and actions them without interrupting you.</small>
+                <p>Nothing with Kobe</p>
+                <small>Only tasks explicitly delegated to Kobe appear here. Items created by Kobe stay in Rodney's lanes unless delegated.</small>
               </div>
             ) : (
               <div className="kobe-task-list">{kobeAssigned.map(taskRow)}</div>

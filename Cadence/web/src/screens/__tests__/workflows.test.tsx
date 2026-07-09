@@ -169,16 +169,19 @@ describe('Control workflow', () => {
         wi({ id: 'd1', title: 'Decision task', type: 'decision' }),
         wi({ id: 'wf', title: 'Vendor reply', type: 'waitingFor', person_id: 'pA' }),
         wi({ id: 'k1', title: 'Kobe task', source: 'for:kobe' }),
+        wi({ id: 'ak1', title: 'Created by Kobe task', source: 'agent:kobe' }),
       ],
     }});
     render(<Today onMenu={() => {}} />);
     // urgency group headers and control lanes
     expect(screen.getByText(/Overdue · 1/)).toBeInTheDocument();
     expect(screen.getByText(/This week · 1/)).toBeInTheDocument();
-    expect(screen.getByText('Do now')).toBeInTheDocument();
+    expect(screen.getByText('Needs Rodney / Do now')).toBeInTheDocument();
     expect(screen.getByText('Decide')).toBeInTheDocument();
     expect(screen.getByText('Decision task')).toBeInTheDocument();
-    // waiting + kobe are their own sections, not in the to-do
+    expect(screen.getByText('Created by Kobe task')).toBeInTheDocument();
+    expect(screen.getByText('Created by Kobe')).toBeInTheDocument();
+    // waiting + delegated-to-kobe are their own sections, not in the to-do
     expect(screen.getByText('Vendor reply')).toBeInTheDocument();
     expect(screen.getByText('Kobe task')).toBeInTheDocument();
     // tapping a task opens the editor
