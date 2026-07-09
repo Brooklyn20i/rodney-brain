@@ -13,7 +13,6 @@ import { Today } from './screens/Today'; // eager — the default landing screen
 // the shell. The per-screen chunks (vite manualChunks) are now actually
 // deferred instead of eagerly imported by this module.
 const Dashboard = lazy(() => import('./screens/Dashboard').then((m) => ({ default: m.Dashboard })));
-const Horizon = lazy(() => import('./screens/Horizon').then((m) => ({ default: m.Horizon })));
 const Calendar = lazy(() => import('./screens/Calendar').then((m) => ({ default: m.Calendar })));
 const Board = lazy(() => import('./screens/Board').then((m) => ({ default: m.Board })));
 const Tasks = lazy(() => import('./screens/Tasks').then((m) => ({ default: m.Tasks })));
@@ -258,7 +257,6 @@ export function App() {
     switch (screen) {
       case 'dashboard': return <Dashboard onMenu={onMenu} onNavigate={navigate} />;
       case 'today': return <Today onMenu={onMenu} />;
-      case 'horizon': return <Horizon onMenu={onMenu} onNavigate={navigate} />;
       case 'calendar': return <Calendar onMenu={onMenu} onNavigate={navigate} />;
       case 'tasks': return <Tasks onMenu={onMenu} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
