@@ -25,11 +25,16 @@ export type MuscleGroup =
 
 export type ProgramStatus = 'draft' | 'active' | 'completed' | 'archived';
 
-// How an exercise is logged. 'weight_reps' is the default (barbell/dumbbell/
-// machine work); 'bodyweight' logs reps alone (push-ups, pull-ups); 'time'
-// logs a hold duration (planks, dead hangs, wall sits). Running/rowing/riding
-// are cardio, not exercises — they live in cardio_sessions.
-export type ExerciseTracking = 'weight_reps' | 'bodyweight' | 'time';
+// How an exercise/program slot is logged. Legacy rows may still carry
+// weight_reps/bodyweight/time in the database; always read via trackingOf(),
+// which normalises them to this first-class modality contract.
+export type ExerciseTracking =
+  | 'strength_weighted'
+  | 'strength_bodyweight'
+  | 'timed_hold'
+  | 'cardio_distance'
+  | 'cardio_duration'
+  | 'cardio_interval';
 
 export type WorkoutStatus = 'in_progress' | 'completed' | 'skipped';
 
@@ -63,10 +68,9 @@ export interface Exercise {
   muscle_group: MuscleGroup;
   secondary_muscles: string; // free text, e.g. "triceps, front delts"
   equipment: string; // 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | free text
-  // How this movement is logged. May be absent on rows written before the
-  // tracking migration / by an older client — read via trackingOf(), which
-  // defaults to 'weight_reps'.
-  tracking?: ExerciseTracking;
+  // How this movement is logged. May be absent or legacy-valued on rows written
+  // by an older client — read via trackingOf().
+  tracking?: ExerciseTracking | 'weight_reps' | 'bodyweight' | 'time';
   notes: string;
   created_at: string;
   updated_at: string;
@@ -104,7 +108,7 @@ export interface ProgramDay {
   deleted_at: string | null;
 }
 
-// An exercise slot in a program day with its set/rep targets.
+// An exercise/cardio slot in a program day with modality-specific targets.
 export interface ProgramExercise {
   id: string;
   owner_id: string;
@@ -116,6 +120,15 @@ export interface ProgramExercise {
   rep_max: number;
   target_rpe: number | null;
   rest_seconds: number;
+  tracking_type?: ExerciseTracking | 'weight_reps' | 'bodyweight' | 'time' | null;
+  cardio_kind?: CardioKind | null;
+  target_duration_min?: number | null;
+  target_distance_km?: number | null;
+  target_calories?: number | null;
+  target_avg_hr?: number | null;
+  target_pace?: string | null;
+  target_incline?: string | null;
+  interval_notes?: string | null;
   notes: string; // progression cues, e.g. "+2.5kg when all sets hit top reps"
   created_at: string;
   updated_at: string;

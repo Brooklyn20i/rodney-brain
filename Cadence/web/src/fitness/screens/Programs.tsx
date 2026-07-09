@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useCadenceFitness } from '../lib/store';
 import { ScreenHeader, Card, Tag } from '../components/bits';
 import { cyclePosition } from '../lib/fitnessCalc';
-import { fmtDMY, todayISO } from '../lib/util';
-import type { Program, ProgramDay } from '../lib/types';
+import { CARDIO_KIND_LABEL, CARDIO_KINDS, fmtDMY, todayISO } from '../lib/util';
+import { cardioKindForName, cardioTargetSummary, isCardioTracking, isTimedTracking, TRACKING_LABEL, TRACKING_OPTIONS, trackingOf } from '../lib/tracking';
+import type { ExerciseTracking, Program, ProgramDay } from '../lib/types';
 
 // Program builder: days -> exercise slots with set/rep/rest targets, run in
 // N-week cycles (the MacroFactor-workout-style mesocycle view). Exactly one
@@ -253,20 +254,32 @@ function DayEditor({
     .filter((s) => s.program_day_id === day.id)
     .sort((a, b) => a.ex_order - b.ex_order);
   const exercises = [...data.exercises].sort((a, b) => a.name.localeCompare(b.name));
-  const exName = (id: string) => exercises.find((e) => e.id === id)?.name || '?';
+  const ex = (id: string) => exercises.find((e) => e.id === id) || null;
+  const exName = (id: string) => ex(id)?.name || '?';
 
   const [exId, setExId] = useState('');
   const addSlot = async () => {
     if (!exId) return;
+    const exercise = ex(exId);
+    const tracking = trackingOf(exercise);
     await insert('program_exercises', {
       program_day_id: day.id,
       exercise_id: exId,
       ex_order: (slots[slots.length - 1]?.ex_order ?? 0) + 1,
-      target_sets: 3,
-      rep_min: 8,
-      rep_max: 12,
-      target_rpe: 8,
-      rest_seconds: 120,
+      target_sets: isCardioTracking(tracking) ? 1 : 3,
+      rep_min: isTimedTracking(tracking) ? 30 : isCardioTracking(tracking) ? 0 : 8,
+      rep_max: isTimedTracking(tracking) ? 60 : isCardioTracking(tracking) ? 0 : 12,
+      target_rpe: isCardioTracking(tracking) ? null : 8,
+      rest_seconds: isCardioTracking(tracking) ? 0 : 120,
+      tracking_type: tracking,
+      cardio_kind: isCardioTracking(tracking) ? cardioKindForName(exercise?.name || '') : null,
+      target_duration_min: isCardioTracking(tracking) ? 15 : null,
+      target_distance_km: null,
+      target_calories: null,
+      target_avg_hr: null,
+      target_pace: '',
+      target_incline: '',
+      interval_notes: '',
       notes: '',
     });
     setExId('');
@@ -310,57 +323,99 @@ function DayEditor({
             <thead>
               <tr>
                 <th>Exercise</th>
-                <th>Sets</th>
-                <th>Reps</th>
-                <th>RPE</th>
-                <th>Rest (s)</th>
+                <th>Modality</th>
+                <th>Targets</th>
+                <th>Notes</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {slots.map((s, i) => (
+              {slots.map((s, i) => {
+                const tracking = trackingOf(s.tracking_type ? s : ex(s.exercise_id));
+                const cardio = isCardioTracking(tracking);
+                return (
                 <tr key={s.id}>
                   <td>{exName(s.exercise_id)}</td>
                   <td>
-                    <input
-                      type="number"
-                      style={{ width: 56, textAlign: 'right' }}
-                      defaultValue={s.target_sets}
-                      onBlur={(e) => update('program_exercises', s.id, { target_sets: Math.max(1, Number(e.target.value) || 1) })}
-                    />
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <input
-                      type="number"
-                      style={{ width: 52, textAlign: 'right' }}
-                      defaultValue={s.rep_min}
-                      onBlur={(e) => update('program_exercises', s.id, { rep_min: Math.max(1, Number(e.target.value) || 1) })}
-                    />
-                    {' – '}
-                    <input
-                      type="number"
-                      style={{ width: 52, textAlign: 'right' }}
-                      defaultValue={s.rep_max}
-                      onBlur={(e) => update('program_exercises', s.id, { rep_max: Math.max(1, Number(e.target.value) || 1) })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      step="0.5"
-                      style={{ width: 56, textAlign: 'right' }}
-                      defaultValue={s.target_rpe ?? ''}
-                      onBlur={(e) =>
-                        update('program_exercises', s.id, { target_rpe: e.target.value === '' ? null : Number(e.target.value) })
+                    <select
+                      value={tracking}
+                      onChange={(e) =>
+                        update('program_exercises', s.id, {
+                          tracking_type: e.target.value as ExerciseTracking,
+                          target_sets: isCardioTracking(e.target.value as ExerciseTracking) ? 1 : Math.max(1, s.target_sets || 1),
+                          cardio_kind: isCardioTracking(e.target.value as ExerciseTracking)
+                            ? s.cardio_kind || cardioKindForName(exName(s.exercise_id))
+                            : null,
+                        })
                       }
-                    />
+                    >
+                      {TRACKING_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </td>
                   <td>
-                    <input
-                      type="number"
-                      style={{ width: 64, textAlign: 'right' }}
-                      defaultValue={s.rest_seconds}
-                      onBlur={(e) => update('program_exercises', s.id, { rest_seconds: Math.max(0, Number(e.target.value) || 0) })}
+                    {cardio ? (
+                      <div className="form-grid form-grid-2">
+                        <div>
+                          <label className="field">Kind</label>
+                          <select value={s.cardio_kind || cardioKindForName(exName(s.exercise_id))} onChange={(e) => update('program_exercises', s.id, { cardio_kind: e.target.value as never })}>
+                            {CARDIO_KINDS.map((k) => <option key={k} value={k}>{CARDIO_KIND_LABEL[k]}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="field">Duration min</label>
+                          <input type="number" inputMode="numeric" defaultValue={s.target_duration_min ?? ''} onBlur={(e) => update('program_exercises', s.id, { target_duration_min: e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0) })} />
+                        </div>
+                        <div>
+                          <label className="field">Distance km</label>
+                          <input type="number" inputMode="decimal" step="0.1" defaultValue={s.target_distance_km ?? ''} onBlur={(e) => update('program_exercises', s.id, { target_distance_km: e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0) })} />
+                        </div>
+                        <div>
+                          <label className="field">Avg HR</label>
+                          <input type="number" inputMode="numeric" defaultValue={s.target_avg_hr ?? ''} onBlur={(e) => update('program_exercises', s.id, { target_avg_hr: e.target.value === '' ? null : Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                        </div>
+                        <div>
+                          <label className="field">Pace / speed</label>
+                          <input type="text" defaultValue={s.target_pace || ''} placeholder="e.g. 6:00/km" onBlur={(e) => update('program_exercises', s.id, { target_pace: e.target.value })} />
+                        </div>
+                        <div>
+                          <label className="field">Incline</label>
+                          <input type="text" defaultValue={s.target_incline || ''} placeholder="e.g. 3%" onBlur={(e) => update('program_exercises', s.id, { target_incline: e.target.value })} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="form-grid form-grid-2">
+                        <div>
+                          <label className="field">Sets</label>
+                          <input type="number" inputMode="numeric" defaultValue={s.target_sets} onBlur={(e) => update('program_exercises', s.id, { target_sets: Math.max(1, Number(e.target.value) || 1) })} />
+                        </div>
+                        <div>
+                          <label className="field">{isTimedTracking(tracking) ? 'Hold seconds' : 'Reps'}</label>
+                          <span style={{ display: 'flex', gap: 4 }}>
+                            <input type="number" inputMode="numeric" defaultValue={s.rep_min} onBlur={(e) => update('program_exercises', s.id, { rep_min: Math.max(0, Number(e.target.value) || 0) })} />
+                            <input type="number" inputMode="numeric" defaultValue={s.rep_max} onBlur={(e) => update('program_exercises', s.id, { rep_max: Math.max(0, Number(e.target.value) || 0) })} />
+                          </span>
+                        </div>
+                        <div>
+                          <label className="field">RPE</label>
+                          <input type="number" step="0.5" defaultValue={s.target_rpe ?? ''} onBlur={(e) => update('program_exercises', s.id, { target_rpe: e.target.value === '' ? null : Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <label className="field">Rest (s)</label>
+                          <input type="number" inputMode="numeric" defaultValue={s.rest_seconds} onBlur={(e) => update('program_exercises', s.id, { rest_seconds: Math.max(0, Number(e.target.value) || 0) })} />
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                      {cardio ? cardioTargetSummary(s) || 'Add duration/distance/intensity targets.' : TRACKING_LABEL[tracking]}
+                    </div>
+                  </td>
+                  <td>
+                    <textarea
+                      defaultValue={cardio ? s.interval_notes || s.notes : s.notes}
+                      placeholder={cardio ? 'Intervals, progressive run, incline, pace/speed cues…' : 'Progression cues…'}
+                      onBlur={(e) => update('program_exercises', s.id, cardio ? { interval_notes: e.target.value } : { notes: e.target.value })}
                     />
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -381,7 +436,8 @@ function DayEditor({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

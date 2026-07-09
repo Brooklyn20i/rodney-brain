@@ -160,7 +160,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         muscle_group: e.muscle_group,
         secondary_muscles: '',
         equipment: e.equipment,
-        tracking: e.tracking ?? 'weight_reps',
+        tracking: e.tracking ?? 'strength_weighted',
         notes: '',
         created_at: now,
         updated_at: now,
