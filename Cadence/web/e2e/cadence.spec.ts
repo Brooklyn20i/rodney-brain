@@ -70,6 +70,21 @@ test('creates a capture via Quick Add and it lands in Quick Capture', async ({ p
 });
 
 // ── Projects: Analytical evidence-on-demand ─────────────────────────────────────
+test('project detail opens as a practical control sheet', async ({ page }) => {
+  await navTo(page, 'Projects');
+  await page.getByText('Apollo', { exact: true }).first().click();
+  await expect(page.getByRole('button', { name: 'Control sheet' })).toHaveClass(/active/);
+  await expect(page.getByText('Outcome / goal')).toBeVisible();
+  await expect(page.getByText('Ship v2')).toBeVisible();
+  await expect(page.getByText(/Owner:/)).toBeVisible();
+  await expect(page.getByText(/Anna Lee/)).toBeVisible();
+  await expect(page.getByText('Next action')).toBeVisible();
+  await expect(page.locator('.proj-control-next input')).toHaveValue('Lock the scope');
+  await expect(page.getByRole('heading', { name: 'Open tasks / actions' })).toBeVisible();
+  await expect(page.getByText('Finalise vendor list')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Timeline' })).toBeVisible();
+});
+
 test('project health evidence reveals raw numbers on demand', async ({ page }) => {
   await navTo(page, 'Projects');
   await page.getByText('Apollo', { exact: true }).first().click();
