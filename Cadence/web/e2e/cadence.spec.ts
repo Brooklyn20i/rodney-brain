@@ -41,6 +41,22 @@ test('control shows do-now, decide, waiting and Kobe sections', async ({ page })
   await expect(page.getByText('Draft summary')).toBeVisible();             // With Kobe
 });
 
+// ── iPad/tablet review mode ────────────────────────────────────────────────────
+test('iPad review mode presents the compact Work review queue without clutter', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await navTo(page, 'Review');
+  await expect(page.getByRole('heading', { name: 'Review Mode' })).toBeVisible();
+  const queue = page.getByLabel('Compact work review queue');
+  await expect(queue).toBeVisible();
+  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Quick Capture', 'Projects']) {
+    await expect(queue.getByText(label)).toBeVisible();
+  }
+  await expect(page.getByText('Projects needing attention', { exact: true })).toBeVisible();
+  await expect(page.locator('#sidebar')).toBeVisible();
+  await expect(page.locator('.review-queue-card')).toHaveCount(6);
+  await expect(page.locator('.review-queue-card').first()).toBeInViewport();
+});
+
 // ── Board: reassign a task across columns (the Arranger core) ────────────────────
 test('board moves a task to another person and it leaves the old column', async ({ page }) => {
   await navTo(page, 'Board');

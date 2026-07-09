@@ -3,7 +3,69 @@ import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { fmtHeaderDate, todayStr } from '../lib/util';
 import { getDecideItems, getKobeHandling, getLoadSummary, getWaitingOnOthers } from '../lib/selectors';
-import { isUserTask } from '../lib/tasks';
+import { isFiledTask, isLinkedToProject, isUserTask } from '../lib/tasks';
+import type { Project, WorkItem } from '../lib/types';
+
+type ReviewTone = 'blue' | 'orange' | 'teal' | 'purple' | 'muted' | 'red';
+
+function ReviewQueueCard({ title, count, hint, tone }: { title: string; count: number; hint: string; tone: ReviewTone }) {
+  return (
+    <div className={`review-queue-card ${tone}`}>
+      <div className="review-queue-count">{count}</div>
+      <div className="review-queue-copy">
+        <strong>{title}</strong>
+        <span>{hint}</span>
+      </div>
+    </div>
+  );
+}
+
+function projectAttention(projects: Project[], workItems: WorkItem[]) {
+  const active = projects.filter((p) => p.status === 'active' && !p.deleted_at);
+  return active
+    .map((p) => {
+      const linked = workItems.filter((w) => isFiledTask(w) && isLinkedToProject(w, p.id));
+      const waiting = linked.filter((w) => w.type === 'waitingFor').length;
+      const decisions = linked.filter((w) => w.type === 'decision').length;
+      const needsAttention = p.health === 'red' || p.health === 'amber' || !p.next_action || waiting > 0 || decisions > 0;
+      const reason = [
+        (p.health === 'red' || p.health === 'amber') && `${p.health} health`,
+        !p.next_action && 'no next action',
+        decisions > 0 && `${decisions} decision${decisions === 1 ? '' : 's'}`,
+        waiting > 0 && `${waiting} waiting`,
+      ].filter(Boolean).join(' · ');
+      return { project: p, reason: reason || 'on track', linked: linked.length, needsAttention };
+    })
+    .filter((p) => p.needsAttention)
+    .sort((a, b) => {
+      const healthRank: Record<string, number> = { red: 0, amber: 1, green: 2 };
+      return (healthRank[a.project.health || 'green'] ?? 3) - (healthRank[b.project.health || 'green'] ?? 3) || a.project.name.localeCompare(b.project.name);
+    });
+}
+
+const LEGACY_REVIEW_SECTION_IDS = [
+  'quick-capture',
+  'do-now',
+  'decide',
+  'projects-attention',
+  'waiting',
+  'with-kobe',
+  'capture-clear',
+];
+
+function migrateReviewChecklistKeys(saved: Record<string, boolean>) {
+  const migrated: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(saved)) {
+    const legacy = /^(\d+)-(\d+)$/.exec(key);
+    if (legacy) {
+      const sectionId = LEGACY_REVIEW_SECTION_IDS[Number(legacy[1])];
+      if (sectionId) migrated[`${sectionId}-${legacy[2]}`] = value;
+    } else {
+      migrated[key] = value;
+    }
+  }
+  return migrated;
+}
 
 export function Review({ onMenu }: { onMenu?: () => void }) {
   const { data, insert, update } = useCadence();
@@ -24,7 +86,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
       reviewNoteRef.current = reviewNote.id;
       try {
         const saved = JSON.parse(reviewNote.body || '{}');
-        if (saved && typeof saved === 'object') setChecked(saved);
+        if (saved && typeof saved === 'object') setChecked(migrateReviewChecklistKeys(saved));
       } catch { /* ignore */ }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -58,11 +120,12 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     });
   };
 
-  const counts = useMemo(() => {
+  const review = useMemo(() => {
     // Exclude soft-deleted rows so counts match WeeklyReview and don't inflate.
     const work = data.work_items.filter((w) => !w.deleted_at);
     const open = work.filter((w) => !w.done);
     const load = getLoadSummary(work);
+    const projects = projectAttention(data.projects, work);
     return {
       quickCapture: open.filter((w) => isUserTask(w) && w.inboxed).length,
       doNow: load.active,
@@ -70,40 +133,74 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
       decide: getDecideItems(work, data.decisions).length,
       waiting: getWaitingOnOthers(work).length,
       withKobe: getKobeHandling(work).length,
+      projects,
     };
   }, [data]);
 
-  const sections: { title: string; items: string[] }[] = [
-    { title: '📥 Quick Capture / untriaged', items: [`Clear ${counts.quickCapture} untriaged capture(s)`] },
-    { title: '☀ Needs Rodney / Do now', items: [`Review ${counts.doNow} item(s) in Rodney's lane${counts.overdue ? `, including ${counts.overdue} overdue` : ''}`] },
-    { title: '⚖ Decide', items: [`${counts.decide} decision(s) pending`] },
-    { title: '▤ Projects Review', items: ['Review each active project', 'Check for stale projects (>2 weeks)', 'Identify next actions for blocked projects'] },
-    { title: '✦ Waiting / owed by others', items: [`Follow up on ${counts.waiting} outstanding item(s)`] },
-    { title: '⚡ With Kobe / delegated to Kobe', items: [`Check ${counts.withKobe} delegated item(s)`] },
-    { title: '📅 Next Week', items: ['Schedule focus time for top 3 priorities', 'Block time for deep work', 'Review upcoming deadlines'] },
+  const sections: { id: string; title: string; items: string[] }[] = [
+    { id: 'do-now', title: '☀ Needs Rodney / Do now', items: [`Review ${review.doNow} item(s) in Rodney's lane${review.overdue ? `, including ${review.overdue} overdue` : ''}`] },
+    { id: 'decide', title: '⚖ Decide', items: [`${review.decide} decision(s) pending`] },
+    { id: 'waiting', title: '✦ Waiting / owed by others', items: [`Follow up on ${review.waiting} outstanding item(s)`] },
+    { id: 'with-kobe', title: '⚡ With Kobe / delegated to Kobe', items: [`Check ${review.withKobe} delegated item(s)`] },
+    { id: 'quick-capture', title: '📥 Quick Capture / untriaged', items: [`Clear ${review.quickCapture} untriaged capture(s)`] },
+    { id: 'projects-attention', title: '▤ Projects needing attention', items: [`Review ${review.projects.length} active project(s) with amber/red health, no next action, decisions or waiting items`] },
+    { id: 'capture-clear', title: '📅 Capture / clear', items: ['Capture anything still in your head', 'Close or defer anything that is not for this week'] },
   ];
 
   const dateLabel = fmtHeaderDate(todayStr());
 
   return (
     <>
-      <ScreenHeader title="Weekly Review" subtitle={dateLabel} onMenu={onMenu} />
-      <div className="screen-content">
-        <div style={{ background: 'linear-gradient(135deg,#EBF3FD,#F0F6FF)', border: '1px solid #C8DEF5', borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 16 }}>
-          <small style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--accent)', display: 'block', marginBottom: 4 }}>Weekly Review Checklist</small>
-          <p style={{ fontSize: 15, fontWeight: 600 }}>Systematically review your commitments and capture new ones.</p>
+      <ScreenHeader title="Review Mode" subtitle={`${dateLabel} · two-minute iPad scan`} onMenu={onMenu} />
+      <div className="screen-content review-mode-content">
+        <div className="review-hero">
+          <div>
+            <small>Work review queue</small>
+            <p>Scan what needs Rodney, what is blocked, what Kobe owns, and what must be cleared.</p>
+          </div>
+          <div className="review-hero-action">Start at top →</div>
         </div>
-        {sections.map((s, si) => {
-          const allDone = s.items.every((_, ii) => checked[`${si}-${ii}`]);
+
+        <div className="review-queue" aria-label="Compact work review queue">
+          <ReviewQueueCard title="Needs Rodney / Do now" count={review.doNow} hint={review.overdue ? `${review.overdue} overdue` : 'your active lane'} tone={review.overdue ? 'red' : 'blue'} />
+          <ReviewQueueCard title="Decide" count={review.decide} hint="pending decisions" tone="orange" />
+          <ReviewQueueCard title="Waiting" count={review.waiting} hint="owed by others" tone="teal" />
+          <ReviewQueueCard title="With Kobe" count={review.withKobe} hint="delegated to Kobe" tone="purple" />
+          <ReviewQueueCard title="Quick Capture" count={review.quickCapture} hint="untriaged" tone="muted" />
+          <ReviewQueueCard title="Projects" count={review.projects.length} hint="need attention" tone={review.projects.length ? 'orange' : 'muted'} />
+        </div>
+
+        <div className="review-project-strip">
+          <div className="review-strip-header">
+            <strong>Projects needing attention</strong>
+            <span>{review.projects.length}</span>
+          </div>
+          {review.projects.length === 0 ? (
+            <div className="review-project-empty">No project is flagging for review.</div>
+          ) : (
+            <div className="review-project-list">
+              {review.projects.slice(0, 6).map(({ project, reason, linked }) => (
+                <div className="review-project-pill" key={project.id}>
+                  <span className={`review-health-dot ${project.health || 'green'}`} />
+                  <strong>{project.name}</strong>
+                  <span>{reason}</span>
+                  {linked > 0 && <em>{linked} open</em>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {sections.map((s) => {
+          const allDone = s.items.every((_, ii) => checked[`${s.id}-${ii}`]);
           return (
-            <div className="review-section" key={si}>
+            <div className="review-section" key={s.id}>
               <div className="review-section-header">
                 <strong style={{ fontSize: 14 }}>{s.title}</strong>
                 <span className={`tag ${allDone ? 'tag-action' : 'tag-followUp'}`}>{allDone ? 'Done' : 'Pending'}</span>
               </div>
               <div className="review-section-body">
                 {s.items.map((it, ii) => {
-                  const k = `${si}-${ii}`;
+                  const k = `${s.id}-${ii}`;
                   return (
                     <label className={`review-check-item ${checked[k] ? 'done' : ''}`} key={ii}>
                       <input type="checkbox" checked={!!checked[k]} onChange={() => toggle(k)} />
