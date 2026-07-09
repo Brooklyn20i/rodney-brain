@@ -50,8 +50,8 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Inbox" subtitle="Unprocessed captures — file each to Tasks" onMenu={onMenu}>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Add Task</button>
+      <ScreenHeader title="Inbox" subtitle="Unprocessed captures — file each to My To Do" onMenu={onMenu}>
+        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
       <div className="screen-content">
         {totalOpen === 0 ? (

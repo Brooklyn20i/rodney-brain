@@ -46,7 +46,7 @@ test('meeting note edits persist after closing and reopening', async ({ page }) 
 // ── Quick Add captures to the Inbox, even when tagged with a person/project ──────
 test('a person/project-tagged quick note waits in the Inbox, not the folder', async ({ page }) => {
   await navTo(page, 'Inbox');
-  await page.getByRole('button', { name: 'Add Task' }).click();
+  await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Talk to Anna about Apollo');
   // Button reflects capture-first behaviour.

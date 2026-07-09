@@ -148,13 +148,13 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
-  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
+  const subtitle = `Rodney's personal list · ${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
     + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
 
   return (
     <>
-      <ScreenHeader title="Tasks" subtitle={subtitle} onMenu={onMenu}>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Add Task</button>
+      <ScreenHeader title="My To Do" subtitle={subtitle} onMenu={onMenu}>
+        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
       <div className="hub-toolbar">
@@ -179,7 +179,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
         {openActions.length > 0 && (
           <>
             <div className="section-header">
-              <h2>From meetings — needs filing</h2>
+              <h2>Meeting actions to file</h2>
               <span className="section-count" style={{ background: 'var(--purple)' }}>{openActions.length}</span>
             </div>
             {openActions.map((a) => (
@@ -190,7 +190,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
         )}
 
         {groups.length === 0 && openActions.length === 0 && (
-          <EmptyState icon="✓" title="No open tasks" sub="Capture one with + Add Task or enjoy the clear deck" />
+          <EmptyState icon="✓" title="My To Do is clear" sub="Capture a task when needed; quick captures still land in the Inbox for triage." />
         )}
 
         {groups.map((g) => (

@@ -9,7 +9,7 @@ export const WORK_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
     { id: 'today', label: 'Control', icon: '☀' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'tasks', label: 'Tasks', icon: '◎' },
+    { id: 'tasks', label: 'My To Do', icon: '◎' },
     { id: 'inbox', label: 'Inbox', icon: '↓' },
     { id: 'notes', label: 'Notes', icon: '✎' },
   ]},

@@ -26,6 +26,7 @@ import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
 import { Review } from '../Review';
 import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
+import { WORK_NAV } from '../../components/Sidebar';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
 const person = (o: any) => ({ id: 'p', name: 'P', type: 'person', color: '#123', role: '', ...o });
@@ -55,6 +56,18 @@ beforeEach(() => {
   h.dates = {};
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+// ── Work navigation ─────────────────────────────────────────────────────────────
+describe('Work navigation', () => {
+  it('surfaces My To Do before Inbox so Rodney has a first-class personal list', () => {
+    const dayItems = WORK_NAV.find((group) => group.section === 'Day')?.items || [];
+    expect(dayItems.map((item) => item.id)).toEqual([
+      'dashboard', 'today', 'calendar', 'tasks', 'inbox', 'notes',
+    ]);
+    expect(dayItems.find((item) => item.id === 'tasks')?.label).toBe('My To Do');
+    expect(dayItems.find((item) => item.id === 'inbox')?.label).toBe('Inbox');
+  });
+});
 
 // ── Board ───────────────────────────────────────────────────────────────────────
 describe('Board workflow', () => {
@@ -179,15 +192,17 @@ describe('Control workflow', () => {
 
 // ── Tasks ────────────────────────────────────────────────────────────────────────
 describe('Tasks workflow', () => {
-  it('groups by due date and reflects the subtitle counts', () => {
+  it('reads as Rodney\'s personal to-do surface, not a generic task database', () => {
     setStore({ data: { work_items: [
       wi({ id: 't1', title: 'Overdue one', due_date: addDaysStr(-1) }),
       wi({ id: 't2', title: 'Later one', due_date: addDaysStr(20) }),
     ]}});
     render(<Tasks onMenu={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'My To Do' })).toBeInTheDocument();
     expect(screen.getByText('Overdue one')).toBeInTheDocument();
     expect(screen.getByText('Later one')).toBeInTheDocument();
     expect(screen.getByText(/2 open · 1 overdue/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
   });
 
   it('switches grouping to Person', () => {
@@ -200,6 +215,22 @@ describe('Tasks workflow', () => {
     // 'Anna' shows as both the group header and the task's person tag.
     expect(screen.getAllByText('Anna').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Hers')).toBeInTheDocument();
+  });
+});
+
+// ── Inbox ──────────────────────────────────────────────────────────────────────
+describe('Inbox workflow', () => {
+  it('stays the quick-capture triage queue that files into My To Do', () => {
+    setStore({ data: { work_items: [
+      wi({ id: 'in1', title: 'Captured note', inboxed: true }),
+    ]}});
+    render(<Inbox onMenu={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(screen.getByText('Unprocessed captures — file each to My To Do')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
+    expect(screen.getByText('Captured note')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Done triaging' }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'in1', { inboxed: false });
   });
 });
 

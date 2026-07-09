@@ -11,19 +11,19 @@ test.beforeEach(async ({ page }) => {
 
 async function navTo(page: Page, label: string) {
   // Word-boundary, case-sensitive match on the accessible name. Survives a
-  // badge count suffix ("◎ Tasks 1") and avoids "Board" matching "Dashboard".
+  // badge count suffix ("◎ My To Do 1") and avoids "Board" matching "Dashboard".
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 test('boots straight to Control (no login gate)', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Control' })).toBeVisible();
-  await expect(page.getByText('To do')).toBeVisible();
+  await expect(page.locator('.control-load-lbl', { hasText: /^To do/ })).toBeVisible();
   await expect(page.locator('#sidebar').getByRole('button', { name: /\bHorizon\b/ })).toHaveCount(0);
 });
 
 // ── Navigation smoke: every screen renders a header in a real browser ───────────
-for (const label of ['Dashboard', 'Board', 'Tasks', 'Inbox', 'Projects', 'People', 'Notes', 'Review']) {
+for (const label of ['Dashboard', 'Board', 'My To Do', 'Inbox', 'Projects', 'People', 'Notes', 'Review']) {
   test(`navigates to ${label} without crashing`, async ({ page }) => {
     await navTo(page, label);
     await expect(page.locator('.screen-header h1').first()).toBeVisible();
@@ -56,8 +56,8 @@ test('board moves a task to another person and it leaves the old column', async 
 
 // ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ────
 test('creates a capture via Quick Add and it lands in the Inbox', async ({ page }) => {
-  await navTo(page, 'Tasks');
-  await page.getByRole('button', { name: 'Add Task' }).click();
+  await navTo(page, 'My To Do');
+  await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
