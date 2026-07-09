@@ -5,7 +5,7 @@
  * are mocked; every other piece of component logic runs for real.
  */
 import type { ReactElement } from 'react';
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WORK_NAV } from '../../components/Sidebar';
 import { emptyData } from '../../lib/types';
@@ -26,6 +26,7 @@ import { Tasks } from '../Tasks';
 import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
 import { Review } from '../Review';
+import { Kobe } from '../Kobe';
 import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
@@ -38,6 +39,12 @@ const wi = (o: any) => ({
   id: 'w', title: 'T', type: 'task', priority: 'medium', due_date: null, project_id: null, person_id: null,
   notes: '', done: false, inboxed: false, source: '', completed_at: null, related_entities: undefined,
   created_at: '', updated_at: '', deleted_at: null, ...o,
+});
+const msg = (o: any) => ({
+  id: 'm', owner_id: 'me', sender_type: 'user', sender_id: null, recipient_type: 'agent', recipient_key: 'agent:kobe',
+  body: 'Message', status: 'unread', linked_work_item_id: null, linked_project_id: null, linked_person_id: null,
+  linked_note_id: null, metadata: {}, created_at: '2026-06-20T09:00:00.000Z', updated_at: '2026-06-20T09:00:00.000Z',
+  processed_at: null, deleted_at: null, ...o,
 });
 function setStore(over: any = {}) {
   const { data: dataOver, ...rest } = over;
@@ -56,6 +63,75 @@ beforeEach(() => {
   h.dates = {};
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+// ── Kobe native message loop ───────────────────────────────────────────────────
+describe('Kobe Ask Kobe message loop', () => {
+  it('defaults to Ask Kobe and keeps the existing tabs available', () => {
+    setStore();
+    render(<Kobe onMenu={() => {}} />);
+    expect(screen.getByText('Kobe reads this channel through Cadence and replies here.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ask Kobe' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: 'For Kobe' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Briefings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'From Kobe' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Activity Log' })).toBeInTheDocument();
+  });
+
+  it('filters the thread to agent:kobe and excludes Ace or other agents', () => {
+    setStore({ data: { agent_messages: [
+      msg({ id: 'u1', body: 'Rodney request', sender_type: 'user', recipient_key: 'agent:kobe', created_at: '2026-06-20T09:00:00.000Z' }),
+      msg({ id: 'k1', body: '<p>Kobe reply</p>', sender_type: 'agent', recipient_key: 'agent:kobe', created_at: '2026-06-20T09:01:00.000Z' }),
+      msg({ id: 'a1', body: 'Ace reply', sender_type: 'agent', recipient_key: 'agent:ace', created_at: '2026-06-20T09:02:00.000Z' }),
+      msg({ id: 'x1', body: 'Other agent', sender_type: 'agent', recipient_key: 'agent:other', created_at: '2026-06-20T09:03:00.000Z' }),
+    ] } });
+    render(<Kobe onMenu={() => {}} />);
+    expect(screen.getByText('Rodney request')).toBeInTheDocument();
+    expect(screen.getByText('Kobe reply')).toBeInTheDocument();
+    expect(screen.queryByText('Ace reply')).not.toBeInTheDocument();
+    expect(screen.queryByText('Other agent')).not.toBeInTheDocument();
+  });
+
+  it('inserts the correct user-to-agent payload and clears the composer', async () => {
+    vi.useRealTimers();
+    const insert = vi.fn().mockResolvedValue(msg({ id: 'new' }));
+    setStore({ insert });
+    render(<Kobe onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('Ask Kobe to act on Cadence…');
+    fireEvent.change(input, { target: { value: '  Chase the pricing decision  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(insert).toHaveBeenCalledWith('agent_messages', {
+      sender_type: 'user',
+      recipient_type: 'agent',
+      recipient_key: 'agent:kobe',
+      body: 'Chase the pricing decision',
+      status: 'unread',
+    }));
+    expect(input).toHaveValue('');
+  });
+
+  it('renders user and agent messages with linked context chips in the thread', () => {
+    setStore({ data: {
+      work_items: [wi({ id: 'w1', title: 'Pricing proof point' })],
+      projects: [project({ id: 'p1', name: 'CTS' })],
+      people: [person({ id: 'person1', name: 'Milad' })],
+      notes: [{ id: 'n1', title: 'Meeting note', body: '', owner_id: 'me', created_at: '', updated_at: '', deleted_at: null }],
+      agent_messages: [
+        msg({ id: 'user', body: 'Please chase this', sender_type: 'user' }),
+        msg({
+          id: 'ctx', body: '<p>Done</p>', sender_type: 'agent', linked_work_item_id: 'w1', linked_project_id: 'p1',
+          linked_person_id: 'person1', linked_note_id: 'n1', created_at: '2026-06-20T09:01:00.000Z',
+        }),
+      ],
+    } });
+    render(<Kobe onMenu={() => {}} />);
+    expect(screen.getByText('Please chase this')).toBeInTheDocument();
+    expect(screen.getByText('Done')).toBeInTheDocument();
+    expect(screen.getByText('Pricing proof point')).toBeInTheDocument();
+    expect(screen.getByText('CTS')).toBeInTheDocument();
+    expect(screen.getByText('Milad')).toBeInTheDocument();
+    expect(screen.getByText('Meeting note')).toBeInTheDocument();
+  });
+});
 
 // ── Work navigation ─────────────────────────────────────────────────────────────
 describe('Work navigation', () => {
