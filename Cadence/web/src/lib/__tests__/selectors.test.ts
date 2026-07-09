@@ -61,16 +61,17 @@ describe('getTodoGroups', () => {
     expect(g.find((x) => x.key === 'later')!.items.map((w) => w.id).sort()).toEqual(['later', 'nodue']);
   });
 
-  it('excludes waitingFor, decisions, agent tasks and done items', () => {
+  it('excludes waitingFor, decisions, delegated tasks and done items, but keeps agent-created provenance', () => {
     const items = [
       wi({ id: 'wait', type: 'waitingFor' }),
       wi({ id: 'decide', type: 'decision' }),
       wi({ id: 'kobe', source: 'for:kobe' }),
+      wi({ id: 'agent', source: 'agent:kobe' }),
       wi({ id: 'done', done: true }),
       wi({ id: 'keep' }),
     ];
     const ids = getTodoGroups(items).flatMap((g) => g.items.map((w) => w.id));
-    expect(ids).toEqual(['keep']);
+    expect(ids.sort()).toEqual(['agent', 'keep']);
   });
 
   it('omits empty groups', () => {
@@ -147,10 +148,10 @@ describe('getLoadSummary', () => {
       wi({ id: 'a2', due_date: addDaysStr(-1) }), // overdue, still active
       wi({ id: 'wait', type: 'waitingFor' }),
       wi({ id: 'kobe', source: 'for:kobe' }),
-      wi({ id: 'agent', source: 'agent:kobe' }), // not in lane, not counted as active
+      wi({ id: 'agent', source: 'agent:kobe' }), // provenance only, still in Rodney's lane
     ];
     const s = getLoadSummary(items);
-    expect(s.active).toBe(2);
+    expect(s.active).toBe(3);
     expect(s.overdue).toBe(1);
     expect(s.waiting).toBe(1);
     expect(s.kobe).toBe(1);

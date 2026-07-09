@@ -29,7 +29,8 @@ describe('triage model — inboxed captures are Inbox-only until filed', () => {
     expect(isFiledTask(filed)).toBe(true);
 
     expect(isFiledTask(wi({ inboxed: false, done: true }))).toBe(false); // completed
-    expect(isFiledTask(wi({ inboxed: false, source: 'for:kobe' }))).toBe(false); // agent-owned
+    expect(isFiledTask(wi({ inboxed: false, source: 'for:kobe' }))).toBe(false); // delegated to Kobe
+    expect(isFiledTask(wi({ inboxed: false, source: 'agent:kobe' }))).toBe(true); // provenance only
   });
 
   it("Today's to-do groups exclude an inboxed capture even if it is due today", () => {

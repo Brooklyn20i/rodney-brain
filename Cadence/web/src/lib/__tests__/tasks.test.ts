@@ -60,9 +60,9 @@ describe('isAgentTask', () => {
   it('flags tasks delegated to Kobe', () => {
     expect(isAgentTask({ source: 'for:kobe' })).toBe(true);
   });
-  it('flags tasks created by an agent', () => {
-    expect(isAgentTask({ source: 'agent:kobe' })).toBe(true);
-    expect(isAgentTask({ source: 'agent:ace' })).toBe(true);
+  it('does not treat agent-created provenance as ownership', () => {
+    expect(isAgentTask({ source: 'agent:kobe' })).toBe(false);
+    expect(isAgentTask({ source: 'agent:ace' })).toBe(false);
   });
   it('does not flag ordinary user tasks', () => {
     expect(isAgentTask({ source: 'you' })).toBe(false);
@@ -79,9 +79,9 @@ describe('isUserTask', () => {
   it('excludes completed work', () => {
     expect(isUserTask({ done: true, source: 'you' })).toBe(false);
   });
-  it('excludes agent-owned work', () => {
+  it('excludes delegated work but keeps agent-created provenance in Rodney\'s lane', () => {
     expect(isUserTask({ done: false, source: 'for:kobe' })).toBe(false);
-    expect(isUserTask({ done: false, source: 'agent:ace' })).toBe(false);
+    expect(isUserTask({ done: false, source: 'agent:ace' })).toBe(true);
   });
 });
 

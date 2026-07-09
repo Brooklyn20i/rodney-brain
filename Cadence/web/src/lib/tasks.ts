@@ -74,13 +74,18 @@ export interface PushTarget {
 export const isFiled = (w: Pick<WorkItem, 'person_id' | 'project_id'>): boolean =>
   !!(w.person_id || w.project_id);
 
-// Tasks owned by an agent rather than the user. `for:kobe` = delegated to Kobe;
-// `agent:kobe` / `agent:ace` = created by an agent. These belong on the Kobe/Ace
-// screens, not in the user's own Today / Tasks / Inbox lists or counts.
+// Tasks delegated away from Rodney. `for:kobe` = delegated to Kobe and is the
+// only source that should read as "With Kobe" in user-facing lanes/counts.
+// `agent:kobe` / `agent:ace` are provenance only (created by an agent), not
+// ownership; if they are filed and open, they remain Rodney's work unless some
+// other field moves them to Waiting/Decide/etc.
 export const isAgentTask = (w: Pick<WorkItem, 'source'>): boolean =>
-  /^(for:|agent:)/.test(w.source || '');
+  /^(for:)/.test(w.source || '');
 
-// The user's own open work — excludes completed and agent-owned items. This is
+export const isAgentCreated = (w: Pick<WorkItem, 'source'>): boolean =>
+  /^(agent:)/.test(w.source || '');
+
+// Rodney's own open work — excludes completed and delegated-away items. This is
 // the canonical base filter for every user-facing task list and count.
 export const isUserTask = (w: Pick<WorkItem, 'done' | 'source'>): boolean =>
   !w.done && !isAgentTask(w);

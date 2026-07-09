@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useCadence } from './lib/store';
 import { useCadenceFitness } from './fitness/lib/store';
 import { useCadenceFinancial } from './financial/lib/store';
-import { isOverdue } from './lib/util';
 import { isUserTask } from './lib/tasks';
+import { getLoadSummary, getWaitingOnOthers } from './lib/selectors';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar, type Domain } from './components/Sidebar';
@@ -186,11 +186,12 @@ export function App() {
   }, [session, inviteToken]);
 
   const badges = useMemo(() => ({
-    // Tasks badge = anything overdue (the urgent signal); Inbox badge = the
-    // triage backlog (unprocessed captures waiting to be filed).
-    tasks: { count: data.work_items.filter((w) => !w.done && isOverdue(w.due_date)).length, cls: 'red' },
+    // Rodney To Do badge = overdue in Rodney's own lane. Quick Capture badge =
+    // unprocessed captures waiting to be filed. People badge = Waiting / owed
+    // by others. Keep these aligned with Control vocabulary.
+    tasks: { count: getLoadSummary(data.work_items).overdue, cls: 'red' },
     inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed).length, cls: '' },
-    people: { count: data.work_items.filter((w) => w.type === 'waitingFor' && !w.done).length, cls: 'blue' },
+    people: { count: getWaitingOnOthers(data.work_items).length, cls: 'blue' },
   }), [data]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;

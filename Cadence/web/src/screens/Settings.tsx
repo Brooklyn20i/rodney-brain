@@ -296,8 +296,8 @@ export function Settings({ onMenu, email, onSignOut }: { onMenu?: () => void; em
   const myRole = workspaceMembers.find((m) => m.user_id === session?.user?.id)?.role;
   const isAdmin = myRole === 'admin';
 
-  // Count the user's own items (exclude agent-owned tasks) so the stats match
-  // what's shown across the app rather than inflating with Kobe/Ace rows.
+  // Count Rodney's own items (exclude delegated-away tasks) so the stats match
+  // what's shown across the app. agent:* is provenance only, not ownership.
   const userItems = data.work_items.filter((w) => !isAgentTask(w));
   const total = userItems.length;
   const completed = userItems.filter((w) => w.done).length;
