@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useCadence } from '../lib/store';
 import { ScreenHeader } from '../components/bits';
 import { fmtHeaderDate, todayStr } from '../lib/util';
-import { getDecideItems, getKobeHandling, getLoadSummary, getWaitingOnOthers } from '../lib/selectors';
+import { getDataHygieneIssues, getDecideItems, getKobeHandling, getLoadSummary, getWaitingOnOthers } from '../lib/selectors';
 import { isFiledTask, isLinkedToProject, isUserTask } from '../lib/tasks';
 import type { Project, WorkItem } from '../lib/types';
 
@@ -134,6 +134,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
       waiting: getWaitingOnOthers(work).length,
       withKobe: getKobeHandling(work).length,
       projects,
+      hygiene: getDataHygieneIssues({ work_items: work, projects: data.projects, decisions: data.decisions }),
     };
   }, [data]);
 
@@ -168,6 +169,33 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
           <ReviewQueueCard title="With Kobe" count={review.withKobe} hint="delegated to Kobe" tone="purple" />
           <ReviewQueueCard title="Quick Capture" count={review.quickCapture} hint="untriaged" tone="muted" />
           <ReviewQueueCard title="Projects" count={review.projects.length} hint="need attention" tone={review.projects.length ? 'orange' : 'muted'} />
+          <ReviewQueueCard title="Data hygiene" count={review.hygiene.length} hint="needs review" tone={review.hygiene.length ? 'orange' : 'muted'} />
+        </div>
+
+        <div className="review-section" aria-label="Data hygiene review queue">
+          <div className="review-section-header">
+            <strong style={{ fontSize: 14 }}>Data hygiene</strong>
+            <span className="tag tag-followUp">Review before fixing</span>
+          </div>
+          <div className="review-section-body">
+            <p style={{ margin: '0 0 10px', color: 'var(--text2)', fontSize: 13 }}>
+              Read-only queue for confusing Work records. Nothing here auto-rewrites live data.
+            </p>
+            {review.hygiene.length === 0 ? (
+              <div className="review-project-empty">No hygiene items need review.</div>
+            ) : (
+              review.hygiene.slice(0, 8).map((issue) => (
+                <div className="review-check-item" key={issue.id}>
+                  <span>
+                    <strong>{issue.title}</strong> — {issue.detail} <em>Open {issue.route}</em>
+                  </span>
+                  <span className={`tag ${issue.gate === 'owner-admin-gated' ? 'tag-risk' : 'tag-action'}`}>
+                    {issue.gate === 'owner-admin-gated' ? 'Owner/admin gated' : 'Needs review'}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <div className="review-project-strip">

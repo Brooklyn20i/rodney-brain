@@ -48,12 +48,17 @@ test('iPad review mode presents the compact Work review queue without clutter', 
   await expect(page.getByRole('heading', { name: 'Review Mode' })).toBeVisible();
   const queue = page.getByLabel('Compact work review queue');
   await expect(queue).toBeVisible();
-  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Quick Capture', 'Projects']) {
+  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Quick Capture', 'Projects', 'Data hygiene']) {
     await expect(queue.getByText(label)).toBeVisible();
   }
+  await expect(page.getByLabel('Data hygiene review queue')).toBeVisible();
+  await expect(page.getByText(/Read-only queue for confusing Work records/)).toBeVisible();
+  await expect(page.getByText('Review before fixing')).toBeVisible();
+  await expect(page.getByText(/Nothing here auto-rewrites live data/)).toBeVisible();
+  await expect(page.getByText(/agent:kobe is provenance only|Loose idea|Ceres/).first()).toBeVisible();
   await expect(page.getByText('Projects needing attention', { exact: true })).toBeVisible();
   await expect(page.locator('#sidebar')).toBeVisible();
-  await expect(page.locator('.review-queue-card')).toHaveCount(6);
+  await expect(page.locator('.review-queue-card')).toHaveCount(7);
   await expect(page.locator('.review-queue-card').first()).toBeInViewport();
 });
 
