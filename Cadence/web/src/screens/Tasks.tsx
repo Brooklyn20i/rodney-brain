@@ -129,13 +129,15 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
     }
     filing.current.add(guardKey);
     try {
-      await insert('work_items', buildTaskFromAction(action, action.noteTitle, target) as Partial<WorkItem>);
+      const payload = buildTaskFromAction(action, action.noteTitle, target) as Partial<WorkItem>;
+      if (!target) payload.inboxed = false;
+      await insert('work_items', payload);
       // Re-read the freshest note body right before writing so we don't clobber
       // a concurrent edit to a sibling action in the same note.
       const fresh = data.notes.find((n) => n.id === action.noteId);
       if (fresh) {
         const { data: parsed, raw } = parseMeeting(fresh.body);
-        const label = target ? target.name : (action.owner_person_id ? 'your tasks' : 'Inbox');
+        const label = target ? target.name : 'Filed Work';
         const updated = parsed.actions.map((a) =>
           a.id === action.id ? { ...a, pushed: true, pushed_to: label } : a);
         await update('notes', action.noteId, { body: serializeMeeting({ ...parsed, actions: updated }, raw) } as Partial<Note>);
@@ -148,12 +150,12 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
-  const subtitle = `Rodney's personal list · ${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
+  const subtitle = `Filed work browser · ${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
     + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
 
   return (
     <>
-      <ScreenHeader title="My To Do" subtitle={subtitle} onMenu={onMenu}>
+      <ScreenHeader title="Filed Work" subtitle={subtitle} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
@@ -190,7 +192,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
         )}
 
         {groups.length === 0 && openActions.length === 0 && (
-          <EmptyState icon="✓" title="My To Do is clear" sub="Capture a task when needed; quick captures still land in the Inbox for triage." />
+          <EmptyState icon="✓" title="Filed Work is clear" sub="Capture a task when needed; quick captures still land in Quick Capture for triage." />
         )}
 
         {groups.map((g) => (
@@ -257,7 +259,7 @@ function MeetingActionRow({ action, people, projects, onFile }: {
                 <div className="send-picker-section">Or</div>
                 <button className="send-picker-option"
                   onClick={() => { onFile(action, null); setOpen(false); }}>
-                  ↓ Send to my tasks
+                  ↓ Send to Filed Work
                 </button>
               </div>
             </>

@@ -5,19 +5,18 @@ export type Domain = 'work' | 'financial' | 'fitness';
 export interface NavItem { id: string; label: string; icon: string; }
 
 export const WORK_NAV: { section: string; items: NavItem[] }[] = [
-  { section: 'Day', items: [
-    { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-    { id: 'today', label: 'Control', icon: '☀' },
+  { section: 'Control', items: [
+    { id: 'today', label: 'Rodney To Do', icon: '☀' },
+    { id: 'inbox', label: 'Quick Capture', icon: '↓' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'tasks', label: 'My To Do', icon: '◎' },
-    { id: 'inbox', label: 'Inbox', icon: '↓' },
+    { id: 'tasks', label: 'Filed Work', icon: '◎' },
     { id: 'notes', label: 'Notes', icon: '✎' },
   ]},
   { section: 'Work', items: [
-    { id: 'board', label: 'Board', icon: '▦' },
-    { id: 'projects', label: 'Projects', icon: '▤' },
     { id: 'people', label: 'People', icon: '✦' },
     { id: 'meetings', label: 'Meetings', icon: '🗓' },
+    { id: 'projects', label: 'Projects', icon: '▤' },
+    { id: 'board', label: 'Board', icon: '▦' },
   ]},
   { section: 'Agents', items: [
     { id: 'ace', label: 'Ace', icon: '◆' },

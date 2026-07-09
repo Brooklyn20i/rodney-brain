@@ -253,7 +253,7 @@ function ActionItemRow({ item, personName, onChange, onDelete, isGroupMeeting, p
           {item.pushed_to ? (
             <span className="pushed-label">→ {item.pushed_to}</span>
           ) : item.pushed ? (
-            <span className="pushed-label">→ In Tasks</span>
+            <span className="pushed-label">→ Filed</span>
           ) : onSend ? (
             <div style={{ position: 'relative' }}>
               <button className="action-send-btn"
@@ -727,7 +727,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
             <button className={`btn btn-secondary btn-sm${showPrep ? ' btn-active' : ''}`}
               onClick={() => setShowPrep((s) => !s)} title="Meeting prep brief">✦ Prep</button>
             <button className="btn btn-secondary btn-sm" onClick={pushAllToTasks}
-              title="Create tasks in your system for all action items">→ Push to Tasks</button>
+              title="Create work items for all action items">→ Push actions</button>
             <button className="btn btn-share btn-sm" onClick={() => setShowShare(true)}>📤 Share</button>
             <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
             <button className="btn btn-primary btn-sm" onClick={handleClose}>Save &amp; Close</button>

@@ -339,14 +339,14 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
             More options
           </button>
           <button className="btn btn-primary" onClick={add} disabled={!text.trim() || busy}>
-            {busy ? 'Adding…' : 'Add to Inbox →'}
+            {busy ? 'Adding…' : 'Add to Quick Capture →'}
           </button>
         </div>
 
         <p className="quick-add-hint">
           {filed
-            ? `Captured to your Inbox with ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} kept — triage it there when you're ready. Use “More options” to file it now.`
-            : 'Lands in your Inbox to triage later. Add a person, project or date now, or sort it out in the Inbox.'}
+            ? `Captured to Quick Capture with ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} kept — triage it there when you're ready. Use “More options” to file it now.`
+            : 'Lands in Quick Capture to triage later. Add a person, project or date now, or sort it out in Quick Capture.'}
         </p>
       </div>
     </div>

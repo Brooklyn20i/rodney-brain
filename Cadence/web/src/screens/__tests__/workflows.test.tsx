@@ -7,6 +7,7 @@
 import type { ReactElement } from 'react';
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { WORK_NAV } from '../../components/Sidebar';
 import { emptyData } from '../../lib/types';
 import { addDaysStr } from '../../lib/util';
 
@@ -26,7 +27,6 @@ import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
 import { Review } from '../Review';
 import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
-import { WORK_NAV } from '../../components/Sidebar';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
 const person = (o: any) => ({ id: 'p', name: 'P', type: 'person', color: '#123', role: '', ...o });
@@ -59,13 +59,12 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 // ── Work navigation ─────────────────────────────────────────────────────────────
 describe('Work navigation', () => {
-  it('surfaces My To Do before Inbox so Rodney has a first-class personal list', () => {
-    const dayItems = WORK_NAV.find((group) => group.section === 'Day')?.items || [];
-    expect(dayItems.map((item) => item.id)).toEqual([
-      'dashboard', 'today', 'calendar', 'tasks', 'inbox', 'notes',
+  it('puts Rodney To Do / Control first and keeps database-style task browsing secondary', () => {
+    expect(WORK_NAV[0].section).toBe('Control');
+    expect(WORK_NAV[0].items.map((i) => i.label)).toEqual([
+      'Rodney To Do', 'Quick Capture', 'Calendar', 'Filed Work', 'Notes',
     ]);
-    expect(dayItems.find((item) => item.id === 'tasks')?.label).toBe('My To Do');
-    expect(dayItems.find((item) => item.id === 'inbox')?.label).toBe('Inbox');
+    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'dashboard')).toBeUndefined();
   });
 });
 
@@ -167,14 +166,18 @@ describe('Control workflow', () => {
       work_items: [
         wi({ id: 'o1', title: 'Overdue task', due_date: addDaysStr(-1) }),
         wi({ id: 'w1', title: 'Week task', due_date: addDaysStr(3) }),
+        wi({ id: 'd1', title: 'Decision task', type: 'decision' }),
         wi({ id: 'wf', title: 'Vendor reply', type: 'waitingFor', person_id: 'pA' }),
         wi({ id: 'k1', title: 'Kobe task', source: 'for:kobe' }),
       ],
     }});
     render(<Today onMenu={() => {}} />);
-    // urgency group headers
+    // urgency group headers and control lanes
     expect(screen.getByText(/Overdue · 1/)).toBeInTheDocument();
     expect(screen.getByText(/This week · 1/)).toBeInTheDocument();
+    expect(screen.getByText('Do now')).toBeInTheDocument();
+    expect(screen.getByText('Decide')).toBeInTheDocument();
+    expect(screen.getByText('Decision task')).toBeInTheDocument();
     // waiting + kobe are their own sections, not in the to-do
     expect(screen.getByText('Vendor reply')).toBeInTheDocument();
     expect(screen.getByText('Kobe task')).toBeInTheDocument();
@@ -192,13 +195,13 @@ describe('Control workflow', () => {
 
 // ── Tasks ────────────────────────────────────────────────────────────────────────
 describe('Tasks workflow', () => {
-  it('reads as Rodney\'s personal to-do surface, not a generic task database', () => {
+  it('reads as Filed Work, not the primary Control cockpit', () => {
     setStore({ data: { work_items: [
       wi({ id: 't1', title: 'Overdue one', due_date: addDaysStr(-1) }),
       wi({ id: 't2', title: 'Later one', due_date: addDaysStr(20) }),
     ]}});
     render(<Tasks onMenu={() => {}} />);
-    expect(screen.getByRole('heading', { name: 'My To Do' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Filed Work' })).toBeInTheDocument();
     expect(screen.getByText('Overdue one')).toBeInTheDocument();
     expect(screen.getByText('Later one')).toBeInTheDocument();
     expect(screen.getByText(/2 open · 1 overdue/)).toBeInTheDocument();
@@ -216,17 +219,38 @@ describe('Tasks workflow', () => {
     expect(screen.getAllByText('Anna').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Hers')).toBeInTheDocument();
   });
+
+  it('files an unassigned meeting action directly into Filed Work', async () => {
+    const body = JSON.stringify({
+      agenda: [],
+      actions: [{ id: 'a1', title: 'Unassigned meeting action', owner: 'me', due: '', done: false, pushed: false }],
+      notes: '',
+    });
+    setStore({ data: { notes: [{ id: 'n1', title: 'Ops sync', folder: '__mtg__team', body }] } });
+    render(<Tasks onMenu={() => {}} />);
+    fireEvent.click(screen.getByText('File →'));
+    fireEvent.click(screen.getByText('↓ Send to Filed Work'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.store.insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
+      title: 'Unassigned meeting action',
+      inboxed: false,
+    }));
+    expect(h.store.update).toHaveBeenCalledWith('notes', 'n1', expect.objectContaining({
+      body: expect.stringContaining('"pushed_to":"Filed Work"'),
+    }));
+  });
 });
 
 // ── Inbox ──────────────────────────────────────────────────────────────────────
 describe('Inbox workflow', () => {
-  it('stays the quick-capture triage queue that files into My To Do', () => {
+  it('stays the quick-capture triage queue', () => {
     setStore({ data: { work_items: [
       wi({ id: 'in1', title: 'Captured note', inboxed: true }),
     ]}});
     render(<Inbox onMenu={() => {}} />);
-    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
-    expect(screen.getByText('Unprocessed captures — file each to My To Do')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quick Capture' })).toBeInTheDocument();
+    expect(screen.getByText('Unprocessed captures — file each into Control or Filed Work')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
     expect(screen.getByText('Captured note')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Done triaging' }));

@@ -43,8 +43,8 @@ describe('Quick Add captures to the Inbox', () => {
     setStore({ people: [person({ id: 'amy', name: 'Amy Jones' })], projects: [project({ id: 'promace', name: 'Promace' })] });
     render(<QuickAdd onClose={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Call Amy about Promace' } });
-    // Parser should have tagged both — the button stays "Add to Inbox", not "Add Task".
-    fireEvent.click(screen.getByText('Add to Inbox →'));
+    // Parser should have tagged both — the button stays "Add to Quick Capture", not "Add Task".
+    fireEvent.click(screen.getByText('Add to Quick Capture →'));
     await waitFor(() => expect(h.store.insert).toHaveBeenCalledTimes(1));
     const [table, row] = h.store.insert.mock.calls[0];
     expect(table).toBe('work_items');

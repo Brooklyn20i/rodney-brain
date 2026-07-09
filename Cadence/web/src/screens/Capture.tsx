@@ -106,7 +106,7 @@ export function Capture({ onMenu }: { onMenu?: () => void }) {
                       <div className="ri-tags"><TypeTag type={r.type} /><PriTag priority={r.priority} /></div></div>
                   </div>
                 ))}
-                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addChecked} disabled={adding}>{adding ? 'Adding…' : 'Add Checked to Inbox'}</button>
+                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addChecked} disabled={adding}>{adding ? 'Adding…' : 'Add Checked to Quick Capture'}</button>
               </>}
             </div>
           </div>
