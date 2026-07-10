@@ -20,7 +20,6 @@ export const WORK_NAV: { section: string; items: NavItem[] }[] = [
   ]},
   { section: 'Agents', items: [
     { id: 'ace', label: 'Ace', icon: '◆' },
-    { id: 'kobe', label: 'Kobe', icon: '⚡' },
   ]},
 ];
 const WORK_FOOTER: NavItem[] = [

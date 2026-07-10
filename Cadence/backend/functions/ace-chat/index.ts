@@ -6,18 +6,33 @@
 // Deploy:
 //   supabase functions deploy ace-chat --project-ref uimjzehrykeebocphdna
 //
-// Required secrets (set in Supabase dashboard → Edge Functions → ace-chat → Secrets):
-//   ANTHROPIC_API_KEY   your Anthropic API key
+// Required secrets (set in Supabase dashboard → Edge Functions → ace-chat →
+// Secrets). All are server-side only — no key ever reaches the browser:
+//   ACE_API_KEY | ANTHROPIC_API_KEY | ANTHROPIC   Anthropic API key (first set wins)
+// Optional:
+//   ACE_MODEL      model id (default: claude-opus-4-8)
+//   ACE_PROVIDER   provider id (default: anthropic; only anthropic is supported)
+// SUPABASE_URL and SUPABASE_ANON_KEY are injected automatically and used to
+// scope every read/write to the caller's JWT (RLS) — no service role here.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.3";
 import { marked } from "https://esm.sh/marked@15";
+import { AceConfigError, resolveAceProviderConfig } from "./provider.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+
+// A single Cadence message is a chat turn, not a document. Bound it so a
+// malformed or abusive payload can't drive unbounded token spend.
+const MAX_MESSAGE_LENGTH = 8000;
 
 const SYSTEM_PROMPT = `You are Ace, the built-in operations assistant for Cadence — a personal work management system used by Rodney Balech.
 
@@ -170,9 +185,10 @@ async function executeTool(
       if (input.person_id) q = q.eq("person_id", input.person_id);
       if (input.source) q = q.eq("source", input.source);
       if ("inboxed" in input) q = q.eq("inboxed", input.inboxed);
-      const { data } = await q
+      const { data, error } = await q
         .order("created_at", { ascending: false })
         .limit((input.limit as number) || 20);
+      if (error) return { error: error.message };
       return data || [];
     }
 
@@ -180,25 +196,28 @@ async function executeTool(
       let q = supabase.from("projects").select("*").is("deleted_at", null);
       if (input.status) q = q.eq("status", input.status);
       if (input.health) q = q.eq("health", input.health);
-      const { data } = await q.order("name");
+      const { data, error } = await q.order("name");
+      if (error) return { error: error.message };
       return data || [];
     }
 
     case "list_people": {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("people")
         .select("*")
         .is("deleted_at", null)
         .order("name");
+      if (error) return { error: error.message };
       return data || [];
     }
 
     case "get_decisions": {
       let q = supabase.from("decisions").select("*").is("deleted_at", null);
       if (input.status) q = q.eq("status", input.status);
-      const { data } = await q
+      const { data, error } = await q
         .order("created_at", { ascending: false })
         .limit(20);
+      if (error) return { error: error.message };
       return data || [];
     }
 
@@ -211,6 +230,8 @@ async function executeTool(
         supabase.from("projects").select("id,name,status,health,target_date").ilike("name", pattern).is("deleted_at", null).limit(5),
         supabase.from("people").select("id,name,role,email").ilike("name", pattern).is("deleted_at", null).limit(5),
       ]);
+      const readError = tasks.error || notes.error || projects.error || people.error;
+      if (readError) return { error: readError.message };
       return {
         tasks: tasks.data || [],
         notes: notes.data || [],
@@ -286,18 +307,43 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors });
   }
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
+
+  // Resolve provider config up front and fail closed with a useful, value-free
+  // message if the function is misconfigured — before touching the DB or the
+  // model. Never spend tokens or write rows against a broken configuration.
+  let providerConfig;
+  try {
+    providerConfig = resolveAceProviderConfig((name) => Deno.env.get(name));
+  } catch (err) {
+    if (err instanceof AceConfigError) {
+      console.error("ace-chat config error:", err.message);
+      return json({ error: err.message }, 500);
+    }
+    throw err;
+  }
+
+  // Guard the Authorization header before creating any client, so a missing or
+  // malformed token is a clean 401 rather than a downstream crash.
+  const authHeader = req.headers.get("Authorization") || "";
+  if (!/^Bearer\s+\S+/i.test(authHeader)) {
+    return json({ error: "Unauthorized" }, 401);
+  }
 
   try {
-    const { message } = await req.json();
-    if (!message?.trim()) {
-      return new Response(JSON.stringify({ error: "Empty message" }), {
-        status: 400,
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
+    let payload: { message?: unknown };
+    try {
+      payload = await req.json();
+    } catch {
+      return json({ error: "Invalid JSON" }, 400);
+    }
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    if (!message) return json({ error: "Empty message" }, 400);
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return json({ error: `Message too long (max ${MAX_MESSAGE_LENGTH} characters)` }, 413);
     }
 
-    // Build a Supabase client scoped to the authenticated user
-    const authHeader = req.headers.get("Authorization")!;
+    // Build a Supabase client scoped to the authenticated user (RLS).
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -306,14 +352,13 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
+      return json({ error: "Unauthorized" }, 401);
     }
 
-    // Fetch conversation history (last 20 messages, oldest first)
-    const { data: history } = await supabase
+    // Fetch conversation history (last 20 messages, oldest first). A read
+    // failure means we can't build a correct conversation — fail closed rather
+    // than reply from a truncated or empty context.
+    const { data: history, error: historyError } = await supabase
       .from("agent_messages")
       .select("sender_type, body, created_at")
       .eq("owner_id", user.id)
@@ -321,6 +366,10 @@ serve(async (req) => {
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(20);
+    if (historyError) {
+      console.error("ace-chat history read error:", historyError.message);
+      return json({ error: "Could not load your conversation. Please try again." }, 500);
+    }
 
     const historyMsgs = ((history || []).reverse()).map((m) => ({
       role: m.sender_type === "user" ? "user" : "assistant",
@@ -332,24 +381,29 @@ serve(async (req) => {
       historyMsgs.shift();
     }
 
-    // Save user's message now (so it appears immediately via Realtime)
-    await supabase.from("agent_messages").insert({
+    // Save user's message now (so it appears immediately via Realtime). If this
+    // write fails, stop — don't spend model tokens on a turn we couldn't record.
+    const { error: userInsertError } = await supabase.from("agent_messages").insert({
       owner_id: user.id,
       sender_type: "user",
       recipient_type: "agent",
       recipient_key: "agent:ace",
-      body: message.trim(),
+      body: message,
       status: "unread",
     });
+    if (userInsertError) {
+      console.error("ace-chat user message insert error:", userInsertError.message);
+      return json({ error: "Could not save your message. Please try again." }, 500);
+    }
 
     // Build message list for Claude
     const messages: Anthropic.MessageParam[] = [
       ...historyMsgs as Anthropic.MessageParam[],
-      { role: "user", content: message.trim() },
+      { role: "user", content: message },
     ];
 
     // Agentic loop
-    const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+    const anthropic = new Anthropic({ apiKey: providerConfig.apiKey });
     let replyText = "";
     let iterations = 0;
     const MAX_ITERATIONS = 8;
@@ -357,7 +411,7 @@ serve(async (req) => {
     while (iterations < MAX_ITERATIONS) {
       iterations++;
       const response = await anthropic.messages.create({
-        model: "claude-opus-4-8",
+        model: providerConfig.model,
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
@@ -399,8 +453,10 @@ serve(async (req) => {
     // Convert markdown to HTML for rich display in Cadence
     const replyHtml = await marked.parse(replyText);
 
-    // Save Ace's reply (Realtime pushes it to the browser)
-    await supabase.from("agent_messages").insert({
+    // Save Ace's reply (Realtime pushes it to the browser). If this write
+    // fails, report it — the client relies on Realtime and would otherwise
+    // never see the reply.
+    const { error: replyInsertError } = await supabase.from("agent_messages").insert({
       owner_id: user.id,
       sender_type: "agent",
       recipient_type: "user",
@@ -408,15 +464,14 @@ serve(async (req) => {
       body: replyHtml,
       status: "processed",
     });
+    if (replyInsertError) {
+      console.error("ace-chat reply insert error:", replyInsertError.message);
+      return json({ error: "Ace replied but the reply could not be saved. Please try again." }, 500);
+    }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+    return json({ ok: true });
   } catch (err) {
     console.error("ace-chat error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
-      { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
-    );
+    return json({ error: err instanceof Error ? err.message : "Internal error" }, 500);
   }
 });

@@ -24,7 +24,6 @@ const Notes = lazy(() => import('./screens/Notes').then((m) => ({ default: m.Not
 const Review = lazy(() => import('./screens/Review').then((m) => ({ default: m.Review })));
 const Search = lazy(() => import('./screens/Search').then((m) => ({ default: m.Search })));
 const Settings = lazy(() => import('./screens/Settings').then((m) => ({ default: m.Settings })));
-const Kobe = lazy(() => import('./screens/Kobe').then((m) => ({ default: m.Kobe })));
 const Ace = lazy(() => import('./screens/Ace').then((m) => ({ default: m.Ace })));
 
 // ── Financial domain ──────────────────────────────────────────────────────
@@ -269,7 +268,6 @@ export function App() {
       case 'review': return <Review onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
       case 'ace': return <Ace onMenu={onMenu} />;
-      case 'kobe': return <Kobe onMenu={onMenu} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
       default: return <Today onMenu={onMenu} />;
     }
