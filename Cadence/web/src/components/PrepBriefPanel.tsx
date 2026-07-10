@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Person, WorkItem, Project, ProjectUpdate } from '../lib/types';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
@@ -40,6 +40,11 @@ export function PrepBriefPanel({
   const [aceBusy, setAceBusy] = useState(false);
   const [aceError, setAceError] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  // Idempotency key for the in-flight brief, bound to the exact prompt it was
+  // minted for. Reused across retries of that same prompt (so an ambiguous
+  // accepted-but-response-lost send can't duplicate the brief); cleared once the
+  // function accepts the turn. A different prompt/person mints a fresh id.
+  const pendingBrief = useRef<{ id: string; prompt: string } | null>(null);
 
   const alreadyInAgenda = useMemo(
     () => new Set(agenda.map((a) => a.title.toLowerCase())),
@@ -96,20 +101,28 @@ export function PrepBriefPanel({
     setAceBusy(true);
     setAceError(null);
     const prompt = `Summarise what I should cover in my 1:1 with ${person.name} today. Include key open actions, any blockers, and suggested agenda items based on our recent history.`;
+    // Reuse the prior id only when retrying the exact same prompt; mint a fresh
+    // one when the prompt (and thus the person) changed. This keeps an ambiguous
+    // accepted-but-response-lost retry from creating a second brief server-side.
+    const requestId = pendingBrief.current?.prompt === prompt ? pendingBrief.current.id : crypto.randomUUID();
+    pendingBrief.current = { id: requestId, prompt };
     try {
-      // request_id makes this send idempotent server-side (a fresh id per click,
-      // since this is a one-shot brief with no retry loop).
       const { error } = await supabase.functions.invoke('ace-chat', {
-        body: { message: prompt, request_id: crypto.randomUUID() },
+        body: { message: prompt, request_id: requestId },
       });
       if (error) {
-        // Don't claim "sent" on failure — surface it and keep the button usable.
+        // Not accepted — keep the id+prompt so an identical retry reuses it,
+        // surface the failure, and never claim "sent".
         console.error('Prep brief → Ace failed:', error);
         setAceError("Couldn't reach Ace — try again.");
       } else {
+        // Accepted — this turn is done; a later brief mints a fresh id.
+        pendingBrief.current = null;
         setAceSent(true);
       }
     } catch (e) {
+      // Transport error: the turn may not have been accepted. Keep the id+prompt
+      // for an idempotent retry of the same prompt.
       console.error('Prep brief → Ace failed:', e);
       setAceError("Couldn't reach Ace — try again.");
     } finally {
