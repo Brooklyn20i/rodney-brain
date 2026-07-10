@@ -158,6 +158,14 @@ describe('Work navigation', () => {
     ]);
     expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'dashboard')).toBeUndefined();
   });
+
+  it('makes Ace the sole in-app Work agent — Kobe is no longer a Work nav surface', () => {
+    const agents = WORK_NAV.find((g) => g.section === 'Agents');
+    expect(agents).toBeDefined();
+    expect(agents!.items.map((i) => i.id)).toEqual(['ace']);
+    // Kobe must not appear anywhere in the Work sidebar.
+    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'kobe')).toBeUndefined();
+  });
 });
 
 // ── Board ───────────────────────────────────────────────────────────────────────

@@ -12,6 +12,12 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Idempotency key for the in-flight turn, bound to the exact text it was minted
+  // for. Reused only when retrying that *same* instruction after a not-accepted
+  // send; cleared once the function accepts the turn. If Rodney edits the restored
+  // draft, the text no longer matches and a fresh id is minted — so a changed
+  // instruction is never sent under the previous turn's id.
+  const pendingTurn = useRef<{ id: string; text: string } | null>(null);
 
   const aceMessages = useMemo(
     () =>
@@ -31,16 +37,28 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
     setSending(true);
     setError(null);
     setMessage('');
+    // Reuse the prior id only when retrying the exact same instruction; mint a
+    // fresh one for a new or edited turn.
+    const requestId = pendingTurn.current?.text === text ? pendingTurn.current.id : crypto.randomUUID();
+    pendingTurn.current = { id: requestId, text };
     try {
       const { error } = await supabase.functions.invoke('ace-chat', {
-        body: { message: text },
+        body: { message: text, request_id: requestId },
       });
       if (error) {
+        // Not accepted (or an ambiguous failure). Keep the id+text so an
+        // identical retry reuses it, and restore the draft so nothing is lost.
         console.error('Ace error:', error);
         setError("Ace couldn't respond. Make sure the ace-chat function is deployed, then try again.");
-        setMessage(text); // restore so the message isn't lost
+        setMessage(text);
+      } else {
+        // Accepted. The reply — or an explicit failure notice — arrives in the
+        // thread via Realtime; never resubmit this turn.
+        pendingTurn.current = null;
       }
     } catch (e) {
+      // Transport error: the turn may not have been accepted. Keep the id+text
+      // for an idempotent retry of the same instruction and restore the draft.
       console.error('Ace error:', e);
       setError('Could not reach Ace — check your connection and try again.');
       setMessage(text);

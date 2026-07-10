@@ -550,18 +550,24 @@ def write_kobe_note(title: str, content: str, folder: str = "__kobe__") -> dict:
 
 
 @mcp.tool()
-def list_agent_messages(status: str | None = None, since_iso: str | None = None, limit: int = 50) -> list[dict]:
-    """Read messages from the Cadence in-app chat.
+def list_agent_messages(
+    status: str | None = None,
+    since_iso: str | None = None,
+    recipient_key: str | None = "agent:kobe",
+    limit: int = 50,
+) -> list[dict]:
+    """Read messages from the Cadence Kobe chat thread.
     status: filter by 'unread', 'processing', 'processed', 'failed' — omit for all.
     since_iso: ISO 8601 timestamp — returns only messages created after this time.
+    recipient_key: defaults to 'agent:kobe' so the poll only ever sees Kobe's own
+      thread. The in-app Ace agent writes to the SAME owner-scoped agent_messages
+      table with recipient_key='agent:ace'; keeping this default ensures Kobe
+      never consumes an Ace turn. Pass None/'all' to inspect across recipients
+      (e.g. to review the full Kobe-thread history regardless of status).
     Messages where sender_type='user' are from Rodney; sender_type='agent' are Kobe's own replies.
     Poll with status='unread' on a ~30s loop to pick up new messages promptly."""
     try:
-        q = "select=*&deleted_at=is.null&order=created_at.asc"
-        if status:
-            q += f"&status=eq.{status}"
-        if since_iso:
-            q += f"&created_at=gt.{since_iso}"
+        q = bridge.agent_messages_query(status=status, since_iso=since_iso, recipient_key=recipient_key)
         return bridge.select("agent_messages", q, limit=limit)
     except Exception as e:
         return [{"error": str(e)}]
