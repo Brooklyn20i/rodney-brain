@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage",
     "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:unit",
     "test:e2e": "playwright test",
+    "test:e2e:gym": "playwright test --config=playwright.gymfocus.config.ts",
     "smoke:prod": "node scripts/prod-smoke.mjs"
   },
   "dependencies": {
