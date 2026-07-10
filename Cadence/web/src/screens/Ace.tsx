@@ -7,7 +7,7 @@ import { sanitizeHtml } from '../lib/sanitize';
 import type { AgentMessage } from '../lib/types';
 
 export function Ace({ onMenu }: { onMenu?: () => void }) {
-  const { data } = useCadence();
+  const { data, workspace } = useCadence();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +95,11 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
     pendingTurn.current = { id: requestId, text };
     try {
       const { error } = await supabase.functions.invoke('ace-chat', {
-        body: { message: text, request_id: requestId },
+        body: {
+          message: text,
+          request_id: requestId,
+          ...(workspace?.id ? { workspace_id: workspace.id } : {}),
+        },
       });
       if (error) {
         // Not accepted (or an ambiguous failure). Keep the id+text so an
@@ -125,8 +129,8 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
   return (
     <>
       <ScreenHeader title="Ace" onMenu={onMenu} />
-      <div className="kobe-chat-wrap">
-        <div className="kobe-chat-messages">
+      <div className="kobe-chat-wrap ace-chat-wrap">
+        <div className="kobe-chat-messages ace-chat-messages">
           {aceMessages.length === 0 ? (
             <div className="kobe-chat-empty">
               <div style={{ fontSize: 32, marginBottom: 12 }}>◆</div>
@@ -137,7 +141,7 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
             aceMessages.map((m) => {
               const isAce = m.sender_type === 'agent' || m.sender_type === 'system';
               return (
-                <div key={m.id} className={`kobe-bubble-row${isAce ? ' kobe-bubble-row--kobe' : ''}`}>
+                <div key={m.id} className={`kobe-bubble-row ace-bubble-row${isAce ? ' kobe-bubble-row--kobe ace-bubble-row--ace' : ' ace-bubble-row--user'}`}>
                   {isAce && <div className="kobe-bubble-avatar ace-avatar">◆</div>}
                   <div className={`kobe-bubble${isAce ? ' kobe-bubble--kobe' : ' kobe-bubble--user'}`}>
                     {isAce ? (
@@ -152,7 +156,7 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
             })
           )}
           {sending && (
-            <div className="kobe-bubble-row kobe-bubble-row--kobe">
+            <div className="kobe-bubble-row kobe-bubble-row--kobe ace-bubble-row ace-bubble-row--ace">
               <div className="kobe-bubble-avatar ace-avatar">◆</div>
               <div className="kobe-bubble kobe-bubble--kobe kobe-bubble--thinking">
                 <span className="ace-thinking-dots"><span /><span /><span /></span>
