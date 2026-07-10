@@ -4,12 +4,9 @@ import type { WorkItem } from '../lib/types';
 import { PriTag, Due, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { isFiledTask, reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
-import { autoColor, priorityScore } from '../lib/util';
+import { autoColor, initials, priorityScore } from '../lib/util';
 
 type Mode = 'people' | 'projects';
-
-const initials = (name: string) =>
-  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const UNASSIGNED = '_none';
 

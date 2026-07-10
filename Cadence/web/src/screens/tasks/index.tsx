@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
 import { ScreenHeader, EmptyState } from '../../components/bits';
+import { StatTile } from '../../components/StatTile';
 import { QuickAdd } from '../../components/QuickAdd';
 import { TaskList, MeetingActionRow } from './TaskList';
 import type { TaskGroup } from './TaskList';
@@ -168,11 +169,9 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
     + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
 
-  const tile = (key: DateFilter, num: number, label: string, cls = '') => (
-    <button className={`hub-stat${filter === key ? ' on' : ''}`} onClick={() => setFilter(filter === key ? 'all' : key)}>
-      <span className={`hub-stat-num ${cls}`}>{num}</span>
-      <span className="hub-stat-lbl">{label}</span>
-    </button>
+  const tile = (key: DateFilter, num: number, label: string, tone: 'default' | 'red' | 'orange' = 'default') => (
+    <StatTile num={num} label={label} tone={tone} active={filter === key}
+      onClick={() => setFilter(filter === key ? 'all' : key)} />
   );
 
   return (
@@ -202,8 +201,8 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
         <div className="split-left task-hub-left">
           <div className="split-panel-body">
             <div className="hub-stats" aria-label="Task filters">
-              {tile('overdue', counts.overdue, 'Overdue', counts.overdue ? 'red' : '')}
-              {tile('today', counts.today, 'Today', counts.today ? 'orange' : '')}
+              {tile('overdue', counts.overdue, 'Overdue', counts.overdue ? 'red' : 'default')}
+              {tile('today', counts.today, 'Today', counts.today ? 'orange' : 'default')}
               {tile('week', counts.week, 'This week')}
               {tile('none', counts.none, 'No date')}
             </div>

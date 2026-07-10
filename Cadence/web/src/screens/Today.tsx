@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import { autoColor, fmtHeaderDate, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { autoColor, initials, fmtHeaderDate, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import type { WorkItem } from '../lib/types';
 import { TaskRow, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
@@ -11,9 +11,6 @@ import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary, get
 import { AceBriefingCard } from '../components/AceBriefingCard';
 import { useAceUi } from '../lib/aceUi';
 import { meetingPrepPrompt } from '../lib/acePrompts';
-
-const initials = (name: string) =>
-  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 
 const fmtMtgDay = (iso: string) => {
   if (iso === todayStr()) return 'Today';
@@ -154,7 +151,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
             <div className="cockpit-1on1s">
               {view.oneOnOnes.map(({ person, meeting, openTopics, isToday }) => (
                 <div key={person.id} className="cockpit-1on1-card">
-                  <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 32, height: 32, fontSize: 12, flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+                  <span className="avatar avatar-md" style={{ background: autoColor(person.id || person.name) }}>
                     {initials(person.name)}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>

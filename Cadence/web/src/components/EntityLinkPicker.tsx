@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCadence } from '../lib/store';
+import { initials } from '../lib/util';
 import type { RelatedEntity } from '../lib/types';
 
 // Multi-link chips + pickers for people / projects / meeting notes — extracted
@@ -63,8 +64,8 @@ export function EntityLinkPicker({ links, onChange }: {
                   return (
                     <button key={p.id} className={`link-picker-option${sel ? ' selected' : ''}`}
                       onClick={() => sel ? (removeLink(p.id), setPicker(null)) : addLink({ type: 'person', id: p.id, name: p.name })}>
-                      <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 20, height: 20, fontSize: 9, flexShrink: 0 }}>
-                        {p.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                      <span className="avatar avatar-sm" style={{ background: p.color || '#3A7CA5' }}>
+                        {initials(p.name)}
                       </span>
                       {p.name}
                       {sel && <span className="link-picker-check">✓</span>}

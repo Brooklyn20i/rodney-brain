@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
 import { TypeTag, PriTag, Due } from '../../components/bits';
-import { fmtDM, isOverdue } from '../../lib/util';
+import { fmtDM, initials, isOverdue } from '../../lib/util';
 import { isAgentCreated } from '../../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../../lib/tasks';
 
@@ -139,8 +139,8 @@ export function MeetingActionRow({ action, people, projects, onFile }: {
                 {people.map((p) => (
                   <button key={p.id} className="send-picker-option"
                     onClick={() => { onFile(action, { id: p.id, type: 'person', name: p.name }); setOpen(false); }}>
-                    <span className="avatar" style={{ background: p.color || '#3A7CA5', width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                      {(p.name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')}
+                    <span className="avatar avatar-sm" style={{ background: p.color || '#3A7CA5' }}>
+                      {initials(p.name)}
                     </span>
                     {p.name}
                   </button>

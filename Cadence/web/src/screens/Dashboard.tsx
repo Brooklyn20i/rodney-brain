@@ -2,17 +2,17 @@ import { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isLinkedToPerson, isLinkedToProject } from '../lib/tasks';
-import { isOverdue, autoColor, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { isOverdue, autoColor, initials, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import {
   getHotThisWeek, getProjectTopActions, inferHealthReason, groupProjectsByPortfolio,
   getStaleTasks, getStaleProjects, STALE_DAYS,
 } from '../lib/selectors';
 import { ScreenHeader } from '../components/bits';
 import { AceBriefingCard } from '../components/AceBriefingCard';
+import { StatTile } from '../components/StatTile';
 import { HEALTH_LABEL } from '../lib/health';
-
-const initials = (name: string) =>
-  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+import { readStrategy, kpiList } from '../lib/strategy';
+import { useWinState } from './projects/hooks';
 
 const fmtNext = (iso: string) => {
   if (iso === todayStr()) return 'Today';
@@ -33,11 +33,7 @@ function PersonCard({ person, openCount, overdueCount, hotCount, nextMeeting, on
   return (
     <button className={`dash-card dash-card-${health}`} onClick={onClick}>
       <div className="dash-card-hdr">
-        <span className="avatar" style={{
-          background: avatarBg, width: 36, height: 36, fontSize: 13, flexShrink: 0,
-          borderRadius: '50%', display: 'inline-flex', alignItems: 'center',
-          justifyContent: 'center', color: '#fff', fontWeight: 700,
-        }}>
+        <span className="avatar" style={{ background: avatarBg }}>
           {initials(person.name)}
         </span>
         <div className="dash-card-identity">
@@ -149,6 +145,31 @@ function ProjectCard({ project, openCount, overdueCount, topActions, healthReaso
   );
 }
 
+// ── KPI strip: the scoreboard's headline numbers, at the briefing home ───────
+function KpiStrip() {
+  const { data } = useCadence();
+  const strategy = useMemo(() => readStrategy(data.notes), [data.notes]);
+  const { state: winState } = useWinState();
+  const kpis = kpiList(strategy);
+  if (!kpis.length) return null;
+
+  return (
+    <div className="dash-kpi-strip" aria-label="KPI scoreboard">
+      {kpis.map((k) => {
+        const readings = winState.readings[k.id] || [];
+        const latest = readings.length ? readings[readings.length - 1] : null;
+        const met = !!(k.target && latest && latest.value >= k.target);
+        return (
+          <StatTile key={k.id}
+            num={latest ? `${latest.value}${k.unit || ''}` : '—'}
+            label={k.targetLabel ? `${k.name} / ${k.targetLabel}` : k.name}
+            tone={met ? 'green' : 'default'} />
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Needs attention: deterministic stale-work flags (no LLM) ─────────────────
 function NeedsAttention({ onNavigate }: { onNavigate: (screen: string, entityId?: string) => void }) {
   const { data } = useCadence();
@@ -225,6 +246,7 @@ export function Dashboard({ onMenu, onNavigate }: {
       <ScreenHeader title="Dashboard" onMenu={onMenu} />
       <div className="screen-content" style={{ paddingTop: 0 }}>
         <AceBriefingCard />
+        <KpiStrip />
         <NeedsAttention onNavigate={onNavigate} />
         <div className="dash-tabs">
           <button className={`dash-tab${tab === 'people' ? ' active' : ''}`} onClick={() => setTab('people')}>

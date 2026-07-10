@@ -4,7 +4,7 @@ import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
-import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { autoColor, AVATAR_COLORS, initials, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isAgentTask } from '../lib/tasks';
 import { AceActionButton } from '../components/AceActionButton';
@@ -17,7 +17,6 @@ const isPersonLinked = (w: WorkItem, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const initials = (name: string) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
 const mtgFolder = (personId: string) => `__mtg__${personId}`;

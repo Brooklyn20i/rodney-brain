@@ -105,6 +105,11 @@ export const TYPE_LABEL: Record<string, string> = {
 
 export const priLabel = (p: Priority) => p[0].toUpperCase() + p.slice(1);
 
+// Up-to-two-letter initials for avatar bubbles — one implementation for every
+// screen (was copy-pasted five times with drifting details).
+export const initials = (name: string): string =>
+  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+
 export const AVATAR_COLORS = [
   '#1B5E9E', '#1A7F37', '#6B3FA0', '#C0392B',
   '#B9770E', '#0E7490', '#BE2D6E', '#2C3E50',
