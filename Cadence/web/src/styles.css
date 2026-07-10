@@ -1822,15 +1822,23 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-head-done { color: var(--green); font-weight: 700; }
 .wo-exercise.gym { padding: 20px 18px; border-radius: 18px; }
 .wo-exercise.gym .wo-exercise-name { font-size: 23px; }
-.wo-exercise.gym .wo-set-labels,
-.wo-exercise.gym .wo-set-row { grid-template-columns: 30px 1.2fr 1fr 50px; gap: 7px; }
-.wo-exercise.gym .wo-set-labels.wo-single,
-.wo-exercise.gym .wo-set-row.wo-single { grid-template-columns: 30px 1fr 50px; }
-.wo-exercise.gym .wo-set-row { padding: 8px 6px; }
-.wo-exercise.gym .wo-set-row input { padding: 13px 2px; font-size: 17px; }
-.wo-exercise.gym .wo-set-check { width: 50px; height: 50px; font-size: 22px; border-radius: 12px; }
-.wo-exercise.gym .wo-step { width: 34px; font-size: 18px; border-radius: 9px; }
-.gym-nav { position: sticky; bottom: 0; display: flex; gap: 10px; margin-top: 16px; padding: 12px 0 calc(6px + var(--safe-bottom)); background: linear-gradient(to top, var(--app-bg) 72%, transparent); }
+/* Gym Focus set rows stack vertically: a number/check header line, then each
+   stepper on its own full-width row — so the value is always readable and every
+   touch target clears 44px, even on a 320px phone, where a single side-by-side
+   row (weight ± / reps ± / check) collapsed the inputs to a few pixels. */
+.wo-exercise.gym .wo-set-labels { display: none; }
+.wo-exercise.gym .wo-set-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+.wo-set-row-head { display: flex; align-items: center; justify-content: space-between; }
+.wo-set-fields { display: flex; flex-direction: column; gap: 8px; }
+.wo-exercise.gym .wo-step-group { width: 100%; gap: 6px; }
+.wo-exercise.gym .wo-step-group input { flex: 1; min-width: 0; padding: 12px 4px; font-size: 18px; }
+.wo-exercise.gym .wo-set-check { flex-shrink: 0; width: 46px; height: 46px; font-size: 22px; border-radius: 12px; }
+.wo-exercise.gym .wo-step { flex-shrink: 0; width: 46px; height: 46px; font-size: 22px; border-radius: 10px; }
+.wo-step-label { flex: 0 0 28px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text3); }
+/* Non-sticky nav: keeping it stuck to the viewport bottom used to overlay (and
+   block taps on) the lower set rows on short screens. It now sits after the
+   exercise, always clear of the sets. */
+.gym-nav { position: static; display: flex; gap: 10px; margin-top: 16px; padding: 12px 0 calc(6px + var(--safe-bottom)); }
 .gym-nav .btn { flex: 1; justify-content: center; padding: 16px; font-size: 15px; font-weight: 700; border-radius: 14px; }
 .gym-add { margin-top: 14px; }
 .gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 6px 0; }

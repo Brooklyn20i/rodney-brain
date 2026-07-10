@@ -29,7 +29,15 @@ import {
 import { setGymFocusOrientationActive } from '../lib/orientation';
 import { createRestTimerCue } from '../lib/restTimerCue';
 import { shouldFireRestCompleteCue } from '../lib/restTimerState';
+import { applyStep, shouldCarryWeight } from '../lib/setStepper';
+import { elapsedMsSince, formatElapsed } from '../lib/elapsedClock';
+import { clearRestTimer, loadRestTimer, saveRestTimer } from '../lib/restTimerPersistence';
+import { finishConfirmMessage, summariseFinish } from '../lib/finishGuard';
+import { clearDrafts, loadDrafts, saveDrafts } from '../lib/draftPersistence';
+import { createWakeLock } from '../lib/wakeLock';
 import type { CardioKind, CardioSession, ProgramDay, WorkoutSet } from '../lib/types';
+
+const localStore = (): Storage | undefined => (typeof localStorage === 'undefined' ? undefined : localStorage);
 
 // Guided gym mode: start today's program day (or an ad-hoc session), tick off
 // sets with weight/reps, see what you did last time, and run a rest timer.
@@ -73,11 +81,34 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
   );
   const [focusIndex, setFocusIndex] = useState(0);
-  const gymFocusOrientationActive = Boolean(active && gymMode);
+  // The whole Workout screen is landscape-capable — not just an active Gym
+  // Focus session. Otherwise the rotate guard intercepts the Start button when
+  // the phone is already sideways, and you can't begin a session in landscape.
   useEffect(() => {
-    setGymFocusOrientationActive(gymFocusOrientationActive);
+    setGymFocusOrientationActive(true);
     return () => setGymFocusOrientationActive(false);
-  }, [gymFocusOrientationActive]);
+  }, []);
+
+  // Keep the screen awake during an active Gym Focus session so the phone
+  // doesn't dim/lock between sets. Feature-detected; a no-op where unsupported.
+  const wakeLockRef = useRef(createWakeLock());
+  const gymSessionActive = Boolean(active && gymMode);
+  useEffect(() => {
+    const wl = wakeLockRef.current;
+    if (!gymSessionActive) {
+      void wl.release();
+      return;
+    }
+    void wl.request();
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') void wl.request();
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+      void wl.release();
+    };
+  }, [gymSessionActive]);
 
   // ── Rest-finished chime ───────────────────────────────────────────────────
   // A short Web Audio cue when rest ends. It is primed from the user's set tap
@@ -109,25 +140,69 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         if (left <= -30) {
           restEndsAt.current = null;
           setRestLeft(null);
+          clearRestTimer(localStore());
         }
       }
     }, 1000);
     return () => clearInterval(t);
   }, []);
+  // Restore an in-flight rest timer from its absolute deadline when the Workout
+  // screen remounts (e.g. Dashboard → Workout round-trip). Scoped to the active
+  // workout and expired safely if long past.
+  useEffect(() => {
+    if (!active) return;
+    const snap = loadRestTimer(localStore(), active.id, Date.now());
+    if (!snap) return;
+    restEndsAt.current = snap.endsAt;
+    const left = Math.round((snap.endsAt - Date.now()) / 1000);
+    chimedRef.current = left <= 0; // already elapsed → don't re-chime on restore
+    setRestTotal(snap.total);
+    setRestLeft(left);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
   const startRest = (seconds: number) => {
-    restEndsAt.current = Date.now() + seconds * 1000;
+    const endsAt = Date.now() + seconds * 1000;
+    restEndsAt.current = endsAt;
     chimedRef.current = false;
     setRestTotal(seconds);
     setRestLeft(seconds);
+    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total: seconds });
   };
   const stopRest = () => {
     restEndsAt.current = null;
     chimedRef.current = false;
     setRestLeft(null);
+    clearRestTimer(localStore());
   };
 
   // Local input drafts so typing doesn't hit Supabase per keystroke.
   const [drafts, setDrafts] = useState<Record<string, { weight?: string; reps?: string; dur?: string }>>({});
+
+  // Live overlay for the +/- steppers. Each tap writes through to the store, but
+  // the store round-trip is async, so a burst of rapid taps would otherwise each
+  // read the same stale render value (105 → 107.5 instead of 112.5). This map
+  // holds the latest intended value per field so consecutive taps accumulate; it
+  // is reconciled away once the store catches up (and by any external change).
+  const pendingStepRef = useRef<Map<string, number>>(new Map());
+  const stepKey = (id: string, field: 'weight' | 'reps' | 'dur') => `${id}:${field}`;
+  const liveWeight = (s: WorkoutSet): number => {
+    const k = stepKey(s.id, 'weight');
+    if (pendingStepRef.current.has(k)) return pendingStepRef.current.get(k)!;
+    const d = drafts[s.id]?.weight;
+    return d !== undefined ? Number(d) || 0 : Number(s.weight_kg) || 0;
+  };
+  const liveReps = (s: WorkoutSet): number => {
+    const k = stepKey(s.id, 'reps');
+    if (pendingStepRef.current.has(k)) return pendingStepRef.current.get(k)!;
+    const d = drafts[s.id]?.reps;
+    return d !== undefined ? Math.max(0, Math.round(Number(d) || 0)) : s.reps || 0;
+  };
+  const liveDuration = (s: WorkoutSet): number => {
+    const k = stepKey(s.id, 'dur');
+    if (pendingStepRef.current.has(k)) return pendingStepRef.current.get(k)!;
+    const d = drafts[s.id]?.dur;
+    return d !== undefined ? parseDuration(d) : setDuration(s);
+  };
 
   const exName = (exerciseId: string) => data.exercises.find((e) => e.id === exerciseId)?.name || 'Exercise';
   // How a given exercise is logged (weight×reps / bodyweight reps / timed hold).
@@ -137,8 +212,26 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       data.exercises.find((e) => e.id === exerciseId)
     );
 
+  // Serialise the heavy lifecycle actions (start / finish / discard) so a rapid
+  // double-tap can't kick off two sessions, two completions or two deletes. The
+  // ref guards re-entry synchronously; the state disables the buttons.
+  const actionLock = useRef(false);
+  const [pendingAction, setPendingAction] = useState<'start' | 'finish' | 'discard' | null>(null);
+  const runGuarded = async (kind: 'start' | 'finish' | 'discard', fn: () => Promise<void>) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    setPendingAction(kind);
+    try {
+      await fn();
+    } finally {
+      actionLock.current = false;
+      setPendingAction(null);
+    }
+  };
+
   // ── Start a session ─────────────────────────────────────────────────────
-  const startSession = async (day: ProgramDay | null) => {
+  const startSession = (day: ProgramDay | null) => runGuarded('start', () => beginSession(day));
+  const beginSession = async (day: ProgramDay | null) => {
     const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
     const workout = await insert('workouts', {
       date: today,
@@ -187,6 +280,33 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     () => (active ? data.workout_sets.filter((s) => s.workout_id === active.id) : []),
     [data.workout_sets, active]
   );
+
+  // Drop pending stepper overlays once the store reflects them (or an external
+  // realtime change lands), so the map never masks the real committed value.
+  useEffect(() => {
+    const map = pendingStepRef.current;
+    if (map.size === 0) return;
+    for (const s of sessionSets) {
+      if (map.get(stepKey(s.id, 'weight')) === (Number(s.weight_kg) || 0)) map.delete(stepKey(s.id, 'weight'));
+      if (map.get(stepKey(s.id, 'reps')) === (s.reps || 0)) map.delete(stepKey(s.id, 'reps'));
+      if (map.get(stepKey(s.id, 'dur')) === setDuration(s)) map.delete(stepKey(s.id, 'dur'));
+    }
+  }, [sessionSets]);
+
+  // Durably persist typed-but-uncommitted drafts, scoped to the active workout,
+  // so navigating away (or backgrounding) before an input blurs doesn't lose
+  // them. Restored on return; cleared on finish/discard.
+  useEffect(() => {
+    if (!active) return;
+    const restored = loadDrafts(localStore(), active.id);
+    if (Object.keys(restored).length) setDrafts((p) => ({ ...restored, ...p }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
+  useEffect(() => {
+    if (!active) return;
+    saveDrafts(localStore(), active.id, drafts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts, active?.id]);
 
   const daySlots = useMemo(
     () =>
@@ -283,55 +403,59 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setFocusIndex((i) => Math.min(i, Math.max(0, exerciseIds.length - 1)));
   }, [exerciseIds.length]);
 
-  // Entering a weight on an exercise's FIRST set carries it down to the sets
-  // below that are still blank — you rarely change load between straight sets,
-  // so this saves re-typing it three times. Only fills sets that are still 0 and
-  // not yet done, so it never clobbers a weight you deliberately set.
-  const propagateWeightToBlanks = async (set: WorkoutSet, weight: number) => {
-    if (weight <= 0) return;
+  // Straight-set carry-forward. Changing the FIRST set's load moves the sibling
+  // sets that are still just inherited (blank, or still equal to the previous
+  // load) to the new weight — you rarely change load between straight sets, so
+  // this saves re-typing it. A done row, or one you deliberately set to a
+  // different weight, is never clobbered. Reads the live overlay so a burst of
+  // taps cascades correctly.
+  const carryForwardWeight = async (set: WorkoutSet, prevWeight: number, newWeight: number) => {
+    if (newWeight <= 0) return;
     const siblings = sessionSets.filter((s) => s.exercise_id === set.exercise_id);
     const firstNum = Math.min(...siblings.map((s) => s.set_number));
     if (set.set_number !== firstNum) return;
     for (const s of siblings) {
       if (s.id === set.id || s.done) continue;
-      const draftWeight = drafts[s.id]?.weight;
-      const cur = draftWeight !== undefined ? Number(draftWeight) || 0 : Number(s.weight_kg) || 0;
-      if (cur > 0) continue;
-      await update('workout_sets', s.id, { weight_kg: weight });
+      if (!shouldCarryWeight(liveWeight(s), prevWeight, newWeight)) continue;
+      pendingStepRef.current.set(stepKey(s.id, 'weight'), newWeight);
+      await update('workout_sets', s.id, { weight_kg: newWeight });
     }
   };
 
   const commitSet = async (set: WorkoutSet, extra?: Partial<WorkoutSet>) => {
     const d = drafts[set.id] || {};
     const patch: Partial<WorkoutSet> = { ...extra };
+    const prevWeight = Number(set.weight_kg) || 0;
     if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
     if (d.reps !== undefined) patch.reps = Math.max(0, Math.round(Number(d.reps) || 0));
     if (d.dur !== undefined) patch.duration_seconds = parseDuration(d.dur);
     if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
-    if (patch.weight_kg !== undefined) await propagateWeightToBlanks(set, patch.weight_kg);
+    if (patch.weight_kg !== undefined) {
+      pendingStepRef.current.set(stepKey(set.id, 'weight'), patch.weight_kg);
+      await carryForwardWeight(set, prevWeight, patch.weight_kg);
+    }
   };
 
-  // One-handed steppers: read draft-or-stored, apply the step, write through
-  // immediately and drop the draft so the row shows the committed value.
+  // One-handed steppers: read the LIVE value (pending overlay → draft → stored),
+  // apply the step, record the new intent in the overlay so rapid taps stack,
+  // then write through and drop the draft so the row shows the committed value.
   const stepWeight = async (set: WorkoutSet, delta: number) => {
-    const d = drafts[set.id] || {};
-    const cur = d.weight !== undefined ? Number(d.weight) || 0 : Number(set.weight_kg) || 0;
-    const next = Math.max(0, Math.round((cur + delta) * 100) / 100);
+    const prev = liveWeight(set);
+    const next = applyStep(prev, delta, { min: 0, round: 2 });
+    pendingStepRef.current.set(stepKey(set.id, 'weight'), next);
     setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], weight: undefined } }));
     await update('workout_sets', set.id, { weight_kg: next });
-    await propagateWeightToBlanks(set, next);
+    await carryForwardWeight(set, prev, next);
   };
   const stepReps = async (set: WorkoutSet, delta: number) => {
-    const d = drafts[set.id] || {};
-    const cur = d.reps !== undefined ? Math.round(Number(d.reps)) || 0 : set.reps || 0;
-    const next = Math.max(0, cur + delta);
+    const next = applyStep(liveReps(set), delta, { min: 0, round: 0 });
+    pendingStepRef.current.set(stepKey(set.id, 'reps'), next);
     setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], reps: undefined } }));
     await update('workout_sets', set.id, { reps: next });
   };
   const stepDuration = async (set: WorkoutSet, delta: number) => {
-    const d = drafts[set.id] || {};
-    const cur = d.dur !== undefined ? parseDuration(d.dur) : setDuration(set);
-    const next = Math.max(0, cur + delta);
+    const next = applyStep(liveDuration(set), delta, { min: 0, round: 0 });
+    pendingStepRef.current.set(stepKey(set.id, 'dur'), next);
     setDrafts((p) => ({ ...p, [set.id]: { ...p[set.id], dur: undefined } }));
     await update('workout_sets', set.id, { duration_seconds: next });
   };
@@ -412,8 +536,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setExSearch('');
   };
 
-  const finishSession = async () => {
+  const finishSession = () => runGuarded('finish', doFinishSession);
+  const doFinishSession = async () => {
     if (!active) return;
+    // Warn before ending an incomplete session so a stray tap can't silently
+    // finish with 0/16 done (and log nothing). Counts are draft-aware, matching
+    // the fold-in logic below.
+    const finishRows = sessionSets.map((s) => {
+      const d = drafts[s.id] || {};
+      const reps = d.reps !== undefined ? Math.max(0, Math.round(Number(d.reps) || 0)) : s.reps;
+      const dur = d.dur !== undefined ? parseDuration(d.dur) : setDuration(s);
+      const value = isTimedTracking(trackingFor(s.exercise_id)) ? dur : reps;
+      return { done: s.done, value };
+    });
+    const confirmMessage = finishConfirmMessage(summariseFinish(finishRows));
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
     // Fold in any weight/reps typed but not yet blurred, then decide each set's
     // fate from its EFFECTIVE reps (draft beats stored). A set you filled in but
     // forgot to tick still counts as trained — that was the "did 12, logged 11"
@@ -444,17 +581,22 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     }
     await update('workouts', active.id, { status: 'completed', completed_at: new Date().toISOString() });
     stopRest();
+    pendingStepRef.current.clear();
+    clearDrafts(localStore());
     setDrafts({});
     onNavigate('history');
   };
 
-  const discardSession = async () => {
+  const discardSession = () => runGuarded('discard', doDiscardSession);
+  const doDiscardSession = async () => {
     if (!active) return;
     if (!window.confirm('Discard this session and all its sets?')) return;
     for (const s of sessionSets) await remove('workout_sets', s.id);
     for (const c of sessionCardio) await remove('cardio_sessions', c.id);
     await remove('workouts', active.id);
     stopRest();
+    pendingStepRef.current.clear();
+    clearDrafts(localStore());
     setDrafts({});
   };
 
@@ -499,7 +641,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                     Up next: <strong>{stripDayPrefix(suggested.name)}</strong>
                     {suggested.focus ? ` — ${suggested.focus}` : ''}
                     <div style={{ marginTop: 10 }}>
-                      <button className="btn btn-primary" onClick={() => startSession(suggested)}>
+                      <button className="btn btn-primary" onClick={() => startSession(suggested)} disabled={pendingAction === 'start'}>
                         ▶ Start {stripDayPrefix(suggested.name)}
                       </button>
                     </div>
@@ -511,7 +653,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                       <div className="pick-title">{stripDayPrefix(d.name)}</div>
                       {d.focus && <div className="pick-sub">{d.focus}</div>}
                     </div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)} disabled={pendingAction === 'start'}>
                       Start
                     </button>
                   </div>
@@ -525,7 +667,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </div>
           )}
           <Card title="Ad-hoc">
-            <button className="btn btn-secondary" onClick={() => startSession(null)}>
+            <button className="btn btn-secondary" onClick={() => startSession(null)} disabled={pendingAction === 'start'}>
               Start empty session
             </button>
           </Card>
@@ -658,6 +800,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             isTimedTracking(tracking) ? (
               big ? (
                 <div className="wo-step-group">
+                  <span className="wo-step-label" aria-hidden="true">Hold</span>
                   <button className="wo-step" aria-label="15 seconds fewer" onClick={() => stepDuration(s, -15)}>
                     −
                   </button>
@@ -672,6 +815,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             ) : isBodyweightTracking(tracking) ? (
               big ? (
                 <div className="wo-step-group">
+                  <span className="wo-step-label" aria-hidden="true">Reps</span>
                   <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
                     −
                   </button>
@@ -686,6 +830,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             ) : big ? (
               <>
                 <div className="wo-step-group">
+                  <span className="wo-step-label" aria-hidden="true">Kg</span>
                   <button className="wo-step" aria-label="Weight down 2.5kg" onClick={() => stepWeight(s, -2.5)}>
                     −
                   </button>
@@ -695,6 +840,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                   </button>
                 </div>
                 <div className="wo-step-group">
+                  <span className="wo-step-label" aria-hidden="true">Reps</span>
                   <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
                     −
                   </button>
@@ -710,17 +856,32 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 {repsField}
               </>
             );
-          return (
-            <div key={s.id} className={`wo-set-row ${big ? 'gym' : ''} ${single ? 'wo-single' : ''} ${s.done ? 'wo-set-done' : ''}`}>
+          const checkButton = (
+            <button
+              className={`wo-set-check ${s.done ? 'checked' : ''}`}
+              aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
+              onClick={() => toggleSet(s)}
+            >
+              ✓
+            </button>
+          );
+          // Gym Focus stacks vertically: a number/check header line, then each
+          // stepper on its own full-width row, so the value stays readable and
+          // every target clears 44px even on a 320px phone. List mode keeps the
+          // compact single-line grid.
+          return big ? (
+            <div key={s.id} className={`wo-set-row gym ${single ? 'wo-single' : ''} ${s.done ? 'wo-set-done' : ''}`}>
+              <div className="wo-set-row-head">
+                <span className="wo-set-num">{s.set_number}</span>
+                {checkButton}
+              </div>
+              <div className="wo-set-fields">{fields}</div>
+            </div>
+          ) : (
+            <div key={s.id} className={`wo-set-row ${single ? 'wo-single' : ''} ${s.done ? 'wo-set-done' : ''}`}>
               <span className="wo-set-num">{s.set_number}</span>
               {fields}
-              <button
-                className={`wo-set-check ${s.done ? 'checked' : ''}`}
-                aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
-                onClick={() => toggleSet(s)}
-              >
-                ✓
-              </button>
+              {checkButton}
             </div>
           );
         })}
@@ -933,12 +1094,12 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   );
 
   // ── Render: active session ───────────────────────────────────────────────
-  const elapsedMin = active.started_at
-    ? Math.max(0, Math.floor((Date.now() - new Date(active.started_at).getTime()) / 60000))
-    : 0;
+  // Live, compact elapsed clock (m:ss → h:mm:ss). The 1s forceTick above
+  // re-renders this so it visibly advances, instead of "0 min" for a minute.
+  const elapsedClock = formatElapsed(elapsedMsSince(active.started_at, Date.now()));
   const doneCount = sessionSets.filter((s) => s.done).length;
   const summary = [
-    `${elapsedMin} min`,
+    elapsedClock,
     sessionSets.length ? `${doneCount}/${sessionSets.length} sets` : null,
     sessionCardio.length ? `${sessionCardio.length} cardio` : null,
   ].filter(Boolean);
@@ -989,8 +1150,8 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
           {gymMode ? '☰ List' : '⛶ Focus'}
         </button>
-        <button className="btn btn-primary" onClick={finishSession}>
-          Finish
+        <button className="btn btn-primary" onClick={finishSession} disabled={pendingAction !== null}>
+          {pendingAction === 'finish' ? 'Finishing…' : 'Finish'}
         </button>
       </ScreenHeader>
 
@@ -1034,14 +1195,14 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                     Next →
                   </button>
                 ) : (
-                  <button className="btn btn-primary" onClick={finishSession}>
-                    Finish ✓
+                  <button className="btn btn-primary" onClick={finishSession} disabled={pendingAction !== null}>
+                    {pendingAction === 'finish' ? 'Finishing…' : 'Finish ✓'}
                   </button>
                 )}
               </div>
               {addExerciseControl('plain')}
               {renderCardioBlock()}
-              <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession}>
+              <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession} disabled={pendingAction !== null}>
                 Discard session
               </button>
             </>
@@ -1058,7 +1219,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 onBlur={(e) => update('workouts', active.id, { notes: e.target.value })}
               />
             </Card>
-            <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession}>
+            <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession} disabled={pendingAction !== null}>
               Discard session
             </button>
             <p style={{ fontSize: 11, color: 'var(--text3)' }}>
