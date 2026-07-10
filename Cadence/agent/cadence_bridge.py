@@ -148,6 +148,35 @@ def select(table: str, query: str = "", limit: int | None = None) -> Any:
     return request_json("GET", url, rest_headers(anon, token))
 
 
+# Sentinels that opt out of the recipient scope (inspect every recipient).
+_ALL_RECIPIENTS = (None, "all", "*", "")
+
+
+def agent_messages_query(
+    status: str | None = None,
+    since_iso: str | None = None,
+    recipient_key: str | None = "agent:kobe",
+) -> str:
+    """Build the PostgREST query string for reading public.agent_messages.
+
+    Defaults to the Kobe thread (recipient_key='agent:kobe'). The Ace in-app
+    agent writes to the *same* owner-scoped table with recipient_key='agent:ace';
+    without this scope the Kobe unread poll would consume Ace's turns. Pass
+    recipient_key in {None, "all", "*", ""} to inspect across recipients (e.g. to
+    review the whole Kobe-thread history regardless of status).
+
+    Pure and network-free so the scoping contract is unit-testable.
+    """
+    q = "select=*&deleted_at=is.null&order=created_at.asc"
+    if recipient_key not in _ALL_RECIPIENTS:
+        q += "&recipient_key=eq." + urllib.parse.quote(recipient_key, safe="")
+    if status:
+        q += "&status=eq." + urllib.parse.quote(status, safe="")
+    if since_iso:
+        q += "&created_at=gt." + urllib.parse.quote(since_iso, safe="")
+    return q
+
+
 def _active_writable_grants(limit: int = 2) -> list[dict[str, Any]]:
     """Return active writable grants across legacy and live schema variants.
 

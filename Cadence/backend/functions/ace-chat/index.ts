@@ -407,15 +407,25 @@ serve(async (req) => {
     // and return WITHOUT running the model or any write tool. This makes retries
     // idempotent: a re-sent turn can never duplicate the chat turn or re-run
     // create_task / update_task / create_note.
-    const { error: userInsertError } = await supabase.from("agent_messages").insert({
-      owner_id: user.id,
-      sender_type: "user",
-      recipient_type: "agent",
-      recipient_key: "agent:ace",
-      body: message,
-      status: "unread",
-      metadata: { request_id: requestId },
-    });
+    // status is "processing", never "unread": Ace turns share the owner-scoped
+    // public.agent_messages table with the Kobe/Work MCP, whose unread poll does
+    // not recipient-filter. Keeping Ace turns out of the 'unread' lifecycle means
+    // no Kobe/Financial/Fitness poller can consume an Ace turn (defense in depth
+    // alongside the MCP's recipient_key scoping). It is flipped to
+    // 'processed'/'failed' once the outcome is persisted.
+    const { data: acceptedRow, error: userInsertError } = await supabase
+      .from("agent_messages")
+      .insert({
+        owner_id: user.id,
+        sender_type: "user",
+        recipient_type: "agent",
+        recipient_key: "agent:ace",
+        body: message,
+        status: "processing",
+        metadata: { request_id: requestId },
+      })
+      .select("id")
+      .single();
     if (userInsertError) {
       if (isUniqueViolation(userInsertError)) {
         console.log("ace-chat duplicate request_id, not re-running:", requestId);
@@ -425,6 +435,17 @@ serve(async (req) => {
       console.error("ace-chat user message insert error:", userInsertError.message);
       return json({ error: "Could not save your message. Please try again." }, 500);
     }
+
+    // Move the accepted user turn to its terminal lifecycle status once the
+    // outcome is recorded. Best-effort: if it fails the row stays "processing",
+    // which still keeps it out of every unread poll — the safety property holds.
+    const finalizeTurnStatus = async (status: "processed" | "failed") => {
+      const { error } = await supabase
+        .from("agent_messages")
+        .update({ status, processed_at: new Date().toISOString() })
+        .eq("id", acceptedRow!.id);
+      if (error) console.error("ace-chat could not finalize turn status:", error.message);
+    };
 
     // ── Process the accepted turn ────────────────────────────────────────────
     // From here the turn is accepted. Any failure must be recorded in the thread
@@ -502,6 +523,7 @@ serve(async (req) => {
         throw new Error("reply insert failed");
       }
 
+      await finalizeTurnStatus(outcome.status === "ok" ? "processed" : "failed");
       return json({ ok: true, status: outcome.status });
     } catch (procErr) {
       // The turn was accepted but processing failed. Record a clear failure in
@@ -520,6 +542,7 @@ serve(async (req) => {
         // Ambiguous crash: we couldn't even record the failure. Fail closed and
         // tell the user to inspect before issuing a new distinct instruction.
         console.error("ace-chat failure-notice insert error:", noticeError.message);
+        await finalizeTurnStatus("failed");
         return json(
           {
             error:
@@ -529,6 +552,7 @@ serve(async (req) => {
           500,
         );
       }
+      await finalizeTurnStatus("failed");
       return json({ ok: true, status: "failed" });
     }
   } catch (err) {

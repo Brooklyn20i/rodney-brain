@@ -106,6 +106,28 @@ describe('Ace screen', () => {
     expect(second).toBe(first); // idempotent retry — same id
   });
 
+  it('mints a NEW request_id when the restored draft is edited before retrying', async () => {
+    // First send rejected; the restored draft is then edited to a different
+    // instruction. A changed instruction must not ride the previous turn's id.
+    h.invoke.mockResolvedValue({ error: { message: 'boom' } });
+    setStore();
+    render(<Ace onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('Ask Ace…');
+    fireEvent.change(input, { target: { value: 'Chase pricing' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(1));
+    // Edit the restored draft, then send.
+    fireEvent.change(screen.getByPlaceholderText('Ask Ace…'), { target: { value: 'Chase renewal instead' } });
+    fireEvent.keyDown(screen.getByPlaceholderText('Ask Ace…'), { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(2));
+    const first = h.invoke.mock.calls[0][1];
+    const second = h.invoke.mock.calls[1][1];
+    expect(first.body.message).toBe('Chase pricing');
+    expect(second.body.message).toBe('Chase renewal instead');
+    expect(second.body.request_id).not.toBe(first.body.request_id); // fresh id
+    expect(second.body.request_id).toMatch(UUID_RE);
+  });
+
   it('mints a fresh request_id for a new turn after one was accepted', async () => {
     h.invoke.mockResolvedValue({ error: null }); // accepted
     setStore();

@@ -38,6 +38,7 @@ export function PrepBriefPanel({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [aceSent, setAceSent] = useState(false);
   const [aceBusy, setAceBusy] = useState(false);
+  const [aceError, setAceError] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
 
   const alreadyInAgenda = useMemo(
@@ -93,12 +94,27 @@ export function PrepBriefPanel({
   const sendToAce = async () => {
     if (aceBusy) return;
     setAceBusy(true);
+    setAceError(null);
     const prompt = `Summarise what I should cover in my 1:1 with ${person.name} today. Include key open actions, any blockers, and suggested agenda items based on our recent history.`;
-    // request_id makes this send idempotent server-side (a fresh id per click,
-    // since this is a one-shot brief with no retry loop).
-    await supabase.functions.invoke('ace-chat', { body: { message: prompt, request_id: crypto.randomUUID() } });
-    setAceBusy(false);
-    setAceSent(true);
+    try {
+      // request_id makes this send idempotent server-side (a fresh id per click,
+      // since this is a one-shot brief with no retry loop).
+      const { error } = await supabase.functions.invoke('ace-chat', {
+        body: { message: prompt, request_id: crypto.randomUUID() },
+      });
+      if (error) {
+        // Don't claim "sent" on failure — surface it and keep the button usable.
+        console.error('Prep brief → Ace failed:', error);
+        setAceError("Couldn't reach Ace — try again.");
+      } else {
+        setAceSent(true);
+      }
+    } catch (e) {
+      console.error('Prep brief → Ace failed:', e);
+      setAceError("Couldn't reach Ace — try again.");
+    } finally {
+      setAceBusy(false);
+    }
   };
 
   const hasFromLast = deferredAgenda.length > 0 || carryForward.length > 0;
@@ -226,9 +242,12 @@ export function PrepBriefPanel({
         <div className="prep-ace-footer">
           {aceSent
             ? <div className="prep-ace-sent">✓ Brief sent — check the Ace screen</div>
-            : <button className="prep-ace-btn" onClick={sendToAce} disabled={aceBusy}>
-                {aceBusy ? 'Asking Ace…' : '✨ Ask Ace for summary'}
-              </button>
+            : <>
+                <button className="prep-ace-btn" onClick={sendToAce} disabled={aceBusy}>
+                  {aceBusy ? 'Asking Ace…' : '✨ Ask Ace for summary'}
+                </button>
+                {aceError && <div className="prep-ace-error" role="alert">{aceError}</div>}
+              </>
           }
         </div>
       </div>

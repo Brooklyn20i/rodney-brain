@@ -53,3 +53,44 @@ def test_work_items_still_receives_workspace_id(monkeypatch):
 
     assert out["owner_id"] == "owner-123"
     assert out["workspace_id"] == "workspace-456"
+
+
+# ── agent_messages_query — Kobe/Ace cross-agent isolation ────────────────────
+
+
+def test_agent_messages_query_defaults_to_kobe_thread():
+    """The unread poll must scope to Kobe's own thread so it can never consume
+    an Ace turn (recipient_key='agent:ace') from the shared agent_messages table.
+    The colon must be URL-encoded (%3A) for PostgREST, like source=for%3Akobe."""
+    q = cadence_bridge.agent_messages_query()
+
+    assert "recipient_key=eq.agent%3Akobe" in q
+    assert "agent:ace" not in q
+    assert "deleted_at=is.null" in q
+
+
+def test_agent_messages_query_scopes_unread_poll_to_kobe():
+    """A status='unread' poll stays recipient-scoped to Kobe."""
+    q = cadence_bridge.agent_messages_query(status="unread")
+
+    assert "recipient_key=eq.agent%3Akobe" in q
+    assert "status=eq.unread" in q
+
+
+def test_agent_messages_query_all_recipients_opt_out():
+    """Passing an opt-out sentinel inspects across recipients (no recipient
+    filter), preserving the ability to review the whole thread history."""
+    for sentinel in (None, "all", "*", ""):
+        q = cadence_bridge.agent_messages_query(status=None, recipient_key=sentinel)
+        assert "recipient_key=" not in q
+
+
+def test_agent_messages_query_encodes_since_and_custom_recipient():
+    """since_iso timestamps (with ':' and '+') and any explicit recipient_key
+    are URL-encoded so the PostgREST filter is well-formed."""
+    q = cadence_bridge.agent_messages_query(
+        since_iso="2026-07-10T04:00:00+00:00", recipient_key="agent:ace"
+    )
+
+    assert "recipient_key=eq.agent%3Aace" in q
+    assert "created_at=gt.2026-07-10T04%3A00%3A00%2B00%3A00" in q
