@@ -10,26 +10,44 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 
+type WriteResult = { data: unknown; error: unknown };
 const h = vi.hoisted(() => ({
-  writeResults: [] as Array<{ data: unknown; error: unknown }>,
+  writeResults: [] as Array<WriteResult>,
   lastWritePayload: null as Record<string, unknown> | null,
   session: null as unknown,
+  // Ordered log of every insert/update/upsert the store issued — proves writes
+  // are serialized in issue order.
+  calls: [] as Array<{ method: string; payload: unknown }>,
+  // When true, `.single()` returns a promise the test resolves manually, so we
+  // can drive deferred / out-of-order server responses deterministically.
+  deferSingle: false,
+  singlePending: [] as Array<{ resolve: (v: WriteResult) => void; payload: unknown }>,
+  // Result for the `.select()`-terminated path (insertMany). null → default.
+  thenResult: null as WriteResult | null,
 }));
 
 vi.mock('../../../lib/supabase', () => {
   const makeBuilder = () => {
     const b: Record<string, unknown> = {};
+    let payload: unknown = null;
     // capture the payload passed to insert/update/upsert for assertions
     for (const m of ['insert', 'update', 'upsert']) {
-      b[m] = (payload: Record<string, unknown>) => {
-        h.lastWritePayload = payload;
+      b[m] = (p: Record<string, unknown>) => {
+        h.lastWritePayload = p as Record<string, unknown>;
+        payload = p;
+        h.calls.push({ method: m, payload: p });
         return b;
       };
     }
     for (const m of ['from', 'select', 'eq', 'is', 'order', 'delete']) b[m] = () => b;
-    b.single = () => Promise.resolve(h.writeResults.shift() ?? { data: null, error: null });
-    b.then = (onF: (v: { data: unknown[]; error: null }) => unknown) =>
-      Promise.resolve({ data: [], error: null }).then(onF);
+    b.single = () => {
+      if (h.deferSingle) {
+        return new Promise<WriteResult>((resolve) => h.singlePending.push({ resolve, payload }));
+      }
+      return Promise.resolve(h.writeResults.shift() ?? { data: null, error: null });
+    };
+    b.then = (onF: (v: WriteResult) => unknown, onR?: (e: unknown) => unknown) =>
+      Promise.resolve(h.thenResult ?? { data: [], error: null }).then(onF, onR);
     return b;
   };
   const channel = { on: () => channel, subscribe: () => channel };
@@ -56,7 +74,13 @@ beforeEach(() => {
   h.writeResults = [];
   h.lastWritePayload = null;
   h.session = null;
+  h.calls = [];
+  h.deferSingle = false;
+  h.singlePending = [];
+  h.thenResult = null;
 });
+
+const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
 describe('CadenceFitnessProvider write path', () => {
   it('insert is optimistic then reconciles to the server row', async () => {
@@ -111,5 +135,125 @@ describe('CadenceFitnessProvider write path', () => {
     const { result } = renderHook(() => useCadenceFitness(), { wrapper });
     expect(result.current.demo).toBe(false);
     expect(typeof result.current.saving).toBe('boolean');
+  });
+});
+
+describe('per-row write serialization (rapid-tap safety)', () => {
+  async function seedRow(result: { current: ReturnType<typeof useCadenceFitness> }, row: Record<string, unknown>) {
+    h.writeResults.push({ data: row, error: null });
+    await act(async () => {
+      await result.current.insert('workout_sets', row as never);
+    });
+  }
+
+  it('serializes writes to one row and lets the NEWEST value win, ignoring a stale earlier response', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await seedRow(result, { id: 'w1', weight_kg: 100 });
+
+    h.deferSingle = true;
+    h.calls = [];
+    h.singlePending = [];
+
+    let p1: Promise<unknown>, p2: Promise<unknown>, p3: Promise<unknown>;
+    await act(async () => {
+      p1 = result.current.update('workout_sets', 'w1', { weight_kg: 107.5 } as never);
+      p2 = result.current.update('workout_sets', 'w1', { weight_kg: 110 } as never);
+      p3 = result.current.update('workout_sets', 'w1', { weight_kg: 112.5 } as never);
+    });
+    await flush();
+
+    // Serialized: only the FIRST write has reached the network so far.
+    expect(h.singlePending).toHaveLength(1);
+    expect(h.calls.filter((c) => c.method === 'update')).toHaveLength(1);
+    // Optimistic UI already shows the newest intent.
+    expect((result.current.data.workout_sets as Array<{ weight_kg: number }>)[0].weight_kg).toBe(112.5);
+
+    // Resolve the OLDEST response first — it must NOT regress the UI, and the
+    // next queued write only now hits the network.
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w1', weight_kg: 107.5 }, error: null });
+    });
+    await flush();
+    expect((result.current.data.workout_sets as Array<{ weight_kg: number }>)[0].weight_kg).toBe(112.5);
+    expect(h.singlePending).toHaveLength(1); // op2 now in flight
+
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w1', weight_kg: 110 }, error: null });
+    });
+    await flush();
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w1', weight_kg: 112.5 }, error: null });
+    });
+    await act(async () => {
+      await Promise.all([p1, p2, p3]);
+    });
+
+    // Writes were issued to the DB in order (last write wins there too) and the
+    // final reconciled value is the newest.
+    const order = h.calls.filter((c) => c.method === 'update').map((c) => (c.payload as { weight_kg: number }).weight_kg);
+    expect(order).toEqual([107.5, 110, 112.5]);
+    expect((result.current.data.workout_sets as Array<{ weight_kg: number }>)[0].weight_kg).toBe(112.5);
+  });
+
+  it('a failed write does not deadlock later writes to the same row', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await seedRow(result, { id: 'w1', reps: 5 });
+
+    h.deferSingle = true;
+    h.calls = [];
+    h.singlePending = [];
+
+    let pA: Promise<unknown>, pB: Promise<unknown>;
+    await act(async () => {
+      pA = result.current.update('workout_sets', 'w1', { reps: 6 } as never);
+      pB = result.current.update('workout_sets', 'w1', { reps: 8 } as never);
+    });
+    await flush();
+    expect(h.singlePending).toHaveLength(1);
+
+    // Fail the first write — the queue must keep flowing.
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: null, error: { code: '42501', message: 'no' } });
+    });
+    await flush();
+    expect(h.singlePending).toHaveLength(1); // second write still ran
+
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w1', reps: 8 }, error: null });
+    });
+    await act(async () => {
+      await Promise.all([pA, pB]);
+    });
+    expect((result.current.data.workout_sets as Array<{ reps: number }>)[0].reps).toBe(8);
+  });
+});
+
+describe('insertMany (atomic multi-row create)', () => {
+  it('adds every row optimistically in one batch', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    h.thenResult = { data: null, error: null }; // no reconcile rows → keep optimistic
+    await act(async () => {
+      await result.current.insertMany('workout_sets', [
+        { set_number: 1 },
+        { set_number: 2 },
+        { set_number: 3 },
+      ] as never);
+    });
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(3);
+    // One server round-trip for the whole batch, not three.
+    expect(h.calls.filter((c) => c.method === 'insert')).toHaveLength(1);
+    expect(Array.isArray(h.calls[0].payload)).toBe(true);
+  });
+
+  it('rolls the WHOLE batch back and surfaces a syncError on failure', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    h.thenResult = { data: null, error: { code: '42501', message: 'denied' } };
+    await act(async () => {
+      await expect(
+        result.current.insertMany('workout_sets', [{ set_number: 1 }, { set_number: 2 }] as never)
+      ).rejects.toBeTruthy();
+    });
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(0);
+    expect(result.current.syncError).toBeTruthy();
   });
 });

@@ -23,18 +23,24 @@ export function summariseFinish(rows: FinishSetInput[]): FinishSummary {
   return { total, completed, remaining: total - completed };
 }
 
-/** True when the user is finishing with unfinished (or zero) sets. */
+/**
+ * True when the user is finishing with unfinished sets OR an entirely empty
+ * session (no rows at all) — both should be confirmed, never silently ended.
+ */
 export function finishNeedsConfirm(summary: FinishSummary): boolean {
-  return summary.total > 0 && summary.completed < summary.total;
+  return summary.total === 0 || summary.completed < summary.total;
 }
 
 /**
  * The confirmation message, or null when nothing needs confirming (everything
- * done, or an empty session with no rows at all).
+ * done). An empty session and a fully-incomplete session are both flagged.
  */
 export function finishConfirmMessage(summary: FinishSummary): string | null {
   if (!finishNeedsConfirm(summary)) return null;
   const { total, completed, remaining } = summary;
+  if (total === 0) {
+    return "This session is empty — you haven't logged any sets. Finish and close it anyway?";
+  }
   if (completed === 0) {
     return `You haven't completed any of ${total} sets. Finish anyway? Nothing will be logged for this session.`;
   }

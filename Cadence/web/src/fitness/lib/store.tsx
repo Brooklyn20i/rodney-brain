@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { writeWithColumnDrift } from '../../lib/supabaseWrite';
 import { useSupabaseOwnerId, fetchSchemaTables } from '../../lib/domainStore';
@@ -53,6 +53,10 @@ export interface Ctx {
   demo: boolean;
   data: CadenceFitnessData;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
+  // Insert several rows in ONE server round-trip so a multi-row create (e.g. a
+  // program day's set list) lands atomically — no half-populated session if a
+  // single row fails midway. Optimistic; rolls the whole batch back on error.
+  insertMany: <K extends Table>(table: K, rows: Partial<Row<K>>[]) => Promise<Row<K>[]>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
   // Insert-or-update keyed by a unique constraint (e.g. 'owner_id,date'). Robust
   // against a stale in-memory `rows` racing realtime: the DB resolves the
@@ -82,8 +86,11 @@ function newId(): string {
 // text ("PGRST204 …") means nothing to someone mid-set.
 function friendlyError(error: any): string {
   const status = Number(error?.status ?? 0);
-  if (status === 401 || status === 403) return 'Not signed in — your last change may not have saved.';
-  return "Couldn't reach the server — your last change may not have saved. It'll retry automatically.";
+  if (status === 401 || status === 403) return 'Not signed in — your last change may not have saved. Sign in again to save it.';
+  // Honest: we retry a few times, but there is NO durable offline queue. Once
+  // those retries are exhausted the change is only held in memory, so tell the
+  // user to check their connection rather than promising an automatic save.
+  return "Couldn't reach the server — your last change may not have saved. Check your connection and re-enter it to be sure.";
 }
 
 export function CadenceFitnessProvider({ children }: { children: React.ReactNode }) {
@@ -98,6 +105,32 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     } finally {
       setInflight((n) => Math.max(0, n - 1));
     }
+  };
+
+  // ── Per-row write serialization ───────────────────────────────────────────
+  // Rapid edits to ONE row (e.g. tapping weight +2.5 three times) must land at
+  // the DB in issue order so the final stored value is the newest intent. We
+  // chain writes per (table,id): each waits for the previous op on that key, so
+  // Postgres applies them in order (last write wins). A monotonic sequence per
+  // key also means only the LATEST mutation's response may reconcile local
+  // state — a slow older response can never overwrite a newer value in the UI.
+  const writeChains = useRef(new Map<string, Promise<unknown>>());
+  const writeSeq = useRef(new Map<string, number>());
+  const seqCounter = useRef(0);
+  const enqueueWrite = <T,>(key: string, op: () => Promise<T>): Promise<T> => {
+    const prev = writeChains.current.get(key) ?? Promise.resolve();
+    // Run `op` after the previous op SETTLES (resolve OR reject) so one failed
+    // write can't deadlock the queue for that row.
+    const run = prev.then(op, op) as Promise<T>;
+    // The stored tail never rejects, so the chain keeps flowing.
+    writeChains.current.set(
+      key,
+      run.then(
+        () => undefined,
+        () => undefined
+      )
+    );
+    return run;
   };
 
   const reload = useCallback(async (table?: Table) => {
@@ -217,6 +250,38 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     return (d ?? ownedRow) as Row<K>;
   };
 
+  const insertMany = async <K extends Table>(table: K, rows: Partial<Row<K>>[]): Promise<Row<K>[]> => {
+    if (rows.length === 0) return [];
+    const now = new Date().toISOString();
+    const stamped: any[] = rows.map((row) => ({ id: newId(), created_at: now, updated_at: now, deleted_at: null, ...row }));
+
+    if (OFFLINE) {
+      const withOwner = stamped.map((r) => ({ owner_id: 'demo-owner', ...r }));
+      setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ...withOwner] }));
+      return withOwner as Row<K>[];
+    }
+
+    const owned = stamped.map((r) => (ownerId ? { owner_id: ownerId, ...r } : r));
+    const ids = new Set(owned.map((r) => r.id));
+    // Optimistic: show every row immediately so the UI never stalls; reconcile
+    // (or roll the WHOLE batch back) once the single insert lands.
+    setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ...owned] }));
+    const { data: d, error } = await trackWrite(() =>
+      runWithRetry(() => supabase.schema('fitness').from(table as string).insert(owned).select())
+    );
+    if (error) {
+      setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => !ids.has(r.id)) }));
+      setSyncError(friendlyError(error));
+      throw error;
+    }
+    if (Array.isArray(d) && d.length) {
+      const byId = new Map((d as any[]).map((row) => [row.id, row]));
+      setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => byId.get(r.id) ?? r) }));
+      return d as Row<K>[];
+    }
+    return owned as Row<K>[];
+  };
+
   const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>): Promise<Row<K>> => {
     setData((prev) => ({
       ...prev,
@@ -229,10 +294,17 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     }
 
     const optimistic = { ...(data as any)[table].find((r: any) => r.id === id), ...patch };
-    const { data: d, error } = await trackWrite(() =>
-      writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
-        runWithRetry(() =>
-          supabase.schema('fitness').from(table as string).update(p).eq('id', id).select().single()
+    // Claim the newest sequence for this row BEFORE the (serialized) write runs,
+    // so a later reconcile check knows whether this response is still current.
+    const key = `${table as string}:${id}`;
+    const seq = (seqCounter.current += 1);
+    writeSeq.current.set(key, seq);
+    const { data: d, error } = await enqueueWrite(key, () =>
+      trackWrite(() =>
+        writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
+          runWithRetry(() =>
+            supabase.schema('fitness').from(table as string).update(p).eq('id', id).select().single()
+          )
         )
       )
     );
@@ -244,7 +316,11 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       setSyncError(friendlyError(error));
       return optimistic as Row<K>;
     }
-    if (d) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+    // Only reconcile from the response if no newer write for this row has been
+    // issued — otherwise a slow older response would clobber the newer value.
+    if (d && writeSeq.current.get(key) === seq) {
+      setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+    }
     return (d ?? optimistic) as Row<K>;
   };
 
@@ -334,6 +410,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         demo: OFFLINE,
         data,
         insert,
+        insertMany,
         update,
         upsert,
         remove,

@@ -108,6 +108,12 @@ jobs:
       - name: E2E tests
         run: npm run test:e2e
 
+      # Gym Focus (Health → Workout) runs under its own config/port in the
+      # seeded demo build so it exercises a real program. Wired here so it can't
+      # silently rot when the workout screen's routes or labels change.
+      - name: Gym Focus E2E tests
+        run: npm run test:e2e:gym
+
       # Preserve Playwright traces/reports for post-mortem when E2E fails.
       # if-no-files-found: ignore keeps the step green when no artifacts exist.
       - name: Upload Playwright artifacts

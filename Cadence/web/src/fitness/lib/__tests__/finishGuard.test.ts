@@ -12,11 +12,17 @@ describe('finish guard', () => {
     expect(s).toEqual({ total: 4, completed: 3, remaining: 1 });
   });
 
-  it('requires confirmation only when some sets are unfinished', () => {
+  it('requires confirmation for unfinished OR empty sessions, not a complete one', () => {
     expect(finishNeedsConfirm(summariseFinish([{ done: true, value: 8 }]))).toBe(false);
     expect(finishNeedsConfirm(summariseFinish([{ done: false, value: 0 }]))).toBe(true);
-    // Empty session (no rows) — nothing to confirm.
-    expect(finishNeedsConfirm(summariseFinish([]))).toBe(false);
+    // Empty ad-hoc session (no rows) must still be confirmed, not silently ended.
+    expect(finishNeedsConfirm(summariseFinish([]))).toBe(true);
+  });
+
+  it('warns clearly on an empty session', () => {
+    const msg = finishConfirmMessage(summariseFinish([]));
+    expect(msg).toContain('empty');
+    expect(msg).toContain('Finish');
   });
 
   it('warns loudly about a fully-empty finish (the 0/16 case)', () => {

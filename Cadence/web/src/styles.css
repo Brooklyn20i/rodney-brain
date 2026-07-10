@@ -1813,10 +1813,16 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 /* ── Gym / focus mode (default on phones during a Fitness session) ── */
 .screen-content.gym-mode { padding-top: 14px; }
 .gym-head { margin-bottom: 14px; }
-.gym-seg { display: flex; gap: 4px; }
-.gym-seg-item { flex: 1; height: 7px; border-radius: 4px; border: none; padding: 0; background: var(--border); cursor: pointer; transition: background 0.2s; }
-.gym-seg-item.complete { background: var(--green); }
-.gym-seg-item.active { background: var(--accent); box-shadow: 0 0 0 2px rgba(27,94,158,0.2); }
+.gym-seg { display: flex; gap: 4px; align-items: flex-end; }
+/* The button is a 44px tap target; the visible segment is a thin inner bar so
+   the navigator stays slim while remaining reachable one-handed. */
+.gym-seg-item { flex: 1; min-height: 44px; border: none; padding: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
+.gym-seg-bar { width: 100%; height: 7px; border-radius: 4px; background: var(--border); transition: background 0.2s; }
+.gym-seg-glyph { font-size: 11px; line-height: 1; height: 12px; font-weight: 800; color: var(--text3); }
+.gym-seg-item.complete .gym-seg-bar { background: var(--green); }
+.gym-seg-item.complete .gym-seg-glyph { color: var(--green); }
+.gym-seg-item.active .gym-seg-bar { background: var(--accent); box-shadow: 0 0 0 2px rgba(27,94,158,0.2); }
+.gym-seg-item.active .gym-seg-glyph { color: var(--accent); }
 .gym-head-label { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text2); }
 .gym-head-label strong { color: var(--text); font-weight: 800; }
 .gym-head-done { color: var(--green); font-weight: 700; }
@@ -1844,7 +1850,23 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 6px 0; }
 .gym-add .gym-add-body { margin-top: 8px; }
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  body.gym-focus-orientation-active .app-shell { min-height: 100dvh; }
+  body.gym-focus-orientation-active #app { min-height: 100dvh; }
+  /* Reclaim the full viewport for training in short landscape: the desktop
+     sidebar (204px) goes off-canvas behind the menu button, and #main spans the
+     whole width. Fixes the dead `.app-shell` selector this used to target. */
+  body.gym-focus-orientation-active #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s;
+    z-index: 20;
+    border-radius: 0;
+  }
+  body.gym-focus-orientation-active #sidebar.open { transform: translateX(0); }
+  body.gym-focus-orientation-active #main { width: 100%; border-radius: 0; }
+  body.gym-focus-orientation-active .menu-btn { display: block; }
   body.gym-focus-orientation-active .screen-content.gym-mode {
     padding: 8px 14px calc(8px + var(--safe-bottom));
     max-width: none;

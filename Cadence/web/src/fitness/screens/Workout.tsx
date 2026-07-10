@@ -28,13 +28,14 @@ import {
 } from '../lib/tracking';
 import { setGymFocusOrientationActive } from '../lib/orientation';
 import { createRestTimerCue } from '../lib/restTimerCue';
-import { shouldFireRestCompleteCue } from '../lib/restTimerState';
+import { planRestOnComplete, shouldFireRestCompleteCue } from '../lib/restTimerState';
 import { applyStep, shouldCarryWeight } from '../lib/setStepper';
 import { elapsedMsSince, formatElapsed } from '../lib/elapsedClock';
 import { clearRestTimer, loadRestTimer, saveRestTimer } from '../lib/restTimerPersistence';
 import { finishConfirmMessage, summariseFinish } from '../lib/finishGuard';
 import { clearDrafts, loadDrafts, saveDrafts } from '../lib/draftPersistence';
 import { createWakeLock } from '../lib/wakeLock';
+import { saveStatusLabel } from '../lib/saveStatus';
 import type { CardioKind, CardioSession, ProgramDay, WorkoutSet } from '../lib/types';
 
 const localStore = (): Storage | undefined => (typeof localStorage === 'undefined' ? undefined : localStorage);
@@ -49,7 +50,7 @@ const REST_PRESETS = [60, 90, 120, 180, 300];
 const fmtRest = (s: number) => (s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
 
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
-  const { data, insert, update, remove, saving } = useCadenceFitness();
+  const { data, insert, insertMany, update, remove, saving, syncError } = useCadenceFitness();
   const today = todayISO();
 
   const active = data.workouts.find((w) => w.status === 'in_progress');
@@ -161,6 +162,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
   const startRest = (seconds: number) => {
+    if (seconds <= 0) return; // zero/disabled rest → no countdown, no cue
     const endsAt = Date.now() + seconds * 1000;
     restEndsAt.current = endsAt;
     chimedRef.current = false;
@@ -223,14 +225,44 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setPendingAction(kind);
     try {
       await fn();
+    } catch {
+      // The store already surfaces write failures via `syncError`; swallow here
+      // so an un-awaited onClick handler can't raise an unhandled rejection.
     } finally {
       actionLock.current = false;
       setPendingAction(null);
     }
   };
 
+  // Per-row/per-action dedupe for the frequent mutations (add set, tick a set,
+  // log cardio, record planned cardio, add exercise). The ref blocks re-entry
+  // SYNCHRONOUSLY so a same-tick double-tap can never insert a duplicate row;
+  // the state drives disabled buttons. Keyed so independent rows still run in
+  // parallel.
+  const rowLocks = useRef<Set<string>>(new Set());
+  const [busyKeys, setBusyKeys] = useState<string[]>([]);
+  const runLocked = async (key: string, fn: () => Promise<void>) => {
+    if (rowLocks.current.has(key)) return;
+    rowLocks.current.add(key);
+    setBusyKeys((b) => (b.includes(key) ? b : [...b, key]));
+    try {
+      await fn();
+    } catch {
+      // Write failures already show as `syncError`; swallow so a same-tick
+      // onClick can't raise an unhandled rejection.
+    } finally {
+      rowLocks.current.delete(key);
+      setBusyKeys((b) => b.filter((k) => k !== key));
+    }
+  };
+  const isBusy = (key: string) => busyKeys.includes(key);
+
   // ── Start a session ─────────────────────────────────────────────────────
   const startSession = (day: ProgramDay | null) => runGuarded('start', () => beginSession(day));
+  // `startingId` gates the active UI while a session is being seeded, so a
+  // half-populated set list never becomes interactive. Cleared when the session
+  // is fully created (or rolled back on failure).
+  const [startingId, setStartingId] = useState<string | null>(null);
   const beginSession = async (day: ProgramDay | null) => {
     const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
     const workout = await insert('workouts', {
@@ -244,35 +276,50 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       completed_at: null,
       notes: '',
     });
-    if (day) {
-      const slots = data.program_exercises
-        .filter((s) => s.program_day_id === day.id)
-        .sort((a, b) => a.ex_order - b.ex_order);
-      for (const slot of slots) {
-        const exercise = data.exercises.find((e) => e.id === slot.exercise_id);
-        if (slotDestination(slot, exercise) === 'cardio_sessions') {
-          // Cardio programme slots are planned work, not completed outcomes.
-          // Do not create a cardio_sessions row until Rodney records the run/ride.
-          continue;
+    setStartingId(workout.id);
+    try {
+      if (day) {
+        const slots = data.program_exercises
+          .filter((s) => s.program_day_id === day.id)
+          .sort((a, b) => a.ex_order - b.ex_order);
+        // Build every set row up front, then insert them in ONE atomic batch —
+        // no interactive half-loaded session, and a failure leaves nothing
+        // partial (we roll the empty workout back).
+        const rows: Partial<WorkoutSet>[] = [];
+        for (const slot of slots) {
+          const exercise = data.exercises.find((e) => e.id === slot.exercise_id);
+          if (slotDestination(slot, exercise) === 'cardio_sessions') {
+            // Cardio programme slots are planned work, not completed outcomes.
+            // Do not create a cardio_sessions row until Rodney records the run/ride.
+            continue;
+          }
+          const last = lastSetsForExercise(data.workout_sets, data.workouts, slot.exercise_id, workout.id);
+          for (let n = 1; n <= slot.target_sets; n++) {
+            const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
+            rows.push({
+              workout_id: workout.id,
+              exercise_id: slot.exercise_id,
+              set_number: n,
+              weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
+              reps: 0,
+              duration_seconds: lastSet ? setDuration(lastSet) : 0,
+              rpe: null,
+              is_warmup: false,
+              done: false,
+            } as Partial<WorkoutSet>);
+          }
         }
-        const last = lastSetsForExercise(data.workout_sets, data.workouts, slot.exercise_id, workout.id);
-        for (let n = 1; n <= slot.target_sets; n++) {
-          const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
-          await insert('workout_sets', {
-            workout_id: workout.id,
-            exercise_id: slot.exercise_id,
-            set_number: n,
-            weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
-            reps: 0,
-            duration_seconds: lastSet ? setDuration(lastSet) : 0,
-            rpe: null,
-            is_warmup: false,
-            done: false,
-          });
-        }
+        if (rows.length) await insertMany('workout_sets', rows);
       }
+      setFocusIndex(0);
+    } catch (err) {
+      // Seeding failed → don't strand an empty in_progress workout. Best-effort
+      // rollback so the user lands back on the clean start screen.
+      await remove('workouts', workout.id);
+      throw err;
+    } finally {
+      setStartingId(null);
     }
-    setFocusIndex(0);
   };
 
   // ── Session actions ─────────────────────────────────────────────────────
@@ -345,45 +392,47 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     [daySlots, data.exercises]
   );
 
-  const logSessionCardio = async () => {
-    if (!active) return;
-    const minutes = Math.round(Number(cardioMin)) || 0;
-    if (!minutes) return;
-    await insert('cardio_sessions', {
-      date: active.date,
-      workout_id: active.id,
-      kind: cardioKind,
-      duration_min: minutes,
-      distance_km: Number(cardioKm) || 0,
-      avg_hr: Math.round(Number(cardioHr)) || 0,
-      calories: Math.round(Number(cardioCals)) || 0,
-      notes: cardioNotes,
+  const logSessionCardio = () =>
+    runLocked('cardio:adhoc', async () => {
+      if (!active) return;
+      const minutes = Math.round(Number(cardioMin)) || 0;
+      if (!minutes) return;
+      await insert('cardio_sessions', {
+        date: active.date,
+        workout_id: active.id,
+        kind: cardioKind,
+        duration_min: minutes,
+        distance_km: Number(cardioKm) || 0,
+        avg_hr: Math.round(Number(cardioHr)) || 0,
+        calories: Math.round(Number(cardioCals)) || 0,
+        notes: cardioNotes,
+      });
+      setCardioMin('');
+      setCardioKm('');
+      setCardioCals('');
+      setCardioHr('');
+      setCardioNotes('');
+      setCardioOpen(false);
     });
-    setCardioMin('');
-    setCardioKm('');
-    setCardioCals('');
-    setCardioHr('');
-    setCardioNotes('');
-    setCardioOpen(false);
-  };
 
-  const logPlannedCardio = async (slot: (typeof plannedCardioSlots)[number]) => {
-    if (!active) return;
-    const exercise = data.exercises.find((e) => e.id === slot.exercise_id);
-    const targetSummary = cardioTargetSummary(slot);
-    await insert('cardio_sessions', {
-      date: active.date,
-      workout_id: active.id,
-      kind: slot.cardio_kind || cardioKindForName(exercise?.name || ''),
-      duration_min: Number(slot.target_duration_min) || 0,
-      distance_km: Number(slot.target_distance_km) || 0,
-      avg_hr: Number(slot.target_avg_hr) || 0,
-      calories: Number(slot.target_calories) || 0,
-      notes: [targetSummary ? `Target: ${targetSummary}` : '', slot.interval_notes || '', slot.notes || '']
-        .filter(Boolean)
-        .join('\n'),
+  const logPlannedCardio = (slot: (typeof plannedCardioSlots)[number]) =>
+    runLocked(`pcardio:${slot.id}`, async () => {
+      if (!active) return;
+      const exercise = data.exercises.find((e) => e.id === slot.exercise_id);
+      const targetSummary = cardioTargetSummary(slot);
+      await insert('cardio_sessions', {
+        date: active.date,
+        workout_id: active.id,
+        kind: slot.cardio_kind || cardioKindForName(exercise?.name || ''),
+        duration_min: Number(slot.target_duration_min) || 0,
+        distance_km: Number(slot.target_distance_km) || 0,
+        avg_hr: Number(slot.target_avg_hr) || 0,
+        calories: Number(slot.target_calories) || 0,
+        notes: [targetSummary ? `Target: ${targetSummary}` : '', slot.interval_notes || '', slot.notes || '']
+          .filter(Boolean)
+          .join('\n'),
+      });
     });
-  };
 
   const updateCardio = async (c: CardioSession, patch: Partial<CardioSession>) => {
     await update('cardio_sessions', c.id, patch);
@@ -460,42 +509,54 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     await update('workout_sets', set.id, { duration_seconds: next });
   };
 
-  const toggleSet = async (set: WorkoutSet) => {
-    const done = !set.done;
-    // This runs inside a tap (user gesture) — the one place we're allowed to
-    // unlock audio for the later, timer-driven chime.
-    primeAudio();
-    await commitSet(set, { done });
-    if (done) {
-      const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
-      startRest(slot?.rest_seconds ?? restDefault);
-      // In focus mode, glide to the next exercise once this one's sets are all done.
-      const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
-      if (gymMode && others.length > 0 && others.every((x) => x.done)) {
-        const idx = exerciseIds.indexOf(set.exercise_id);
-        if (idx >= 0 && idx < exerciseIds.length - 1) setFocusIndex(idx + 1);
+  const toggleSet = (set: WorkoutSet) =>
+    runLocked(`toggle:${set.id}`, async () => {
+      const done = !set.done;
+      // This runs inside a tap (user gesture) — the one place we're allowed to
+      // unlock audio for the later, timer-driven chime.
+      primeAudio();
+      // Anchor the rest timer to the TAP, before any awaited network write, so a
+      // slow save/carry-forward doesn't delay the countdown. Zero/disabled rest
+      // starts nothing (no bar, no GO, no chime/vibrate).
+      if (done) {
+        const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
+        const plan = planRestOnComplete(slot?.rest_seconds, restDefault);
+        if (plan.start) startRest(plan.seconds);
+        else stopRest();
+      } else {
+        // Un-ticked by mistake → the rest you started for it no longer applies.
+        stopRest();
       }
-    } else {
-      // Un-ticked by mistake → the rest you started for it no longer applies.
-      stopRest();
-    }
-  };
-
-  const addSet = async (exerciseId: string) => {
-    const existing = sessionSets.filter((s) => s.exercise_id === exerciseId);
-    const lastRow = existing.sort((a, b) => a.set_number - b.set_number)[existing.length - 1];
-    await insert('workout_sets', {
-      workout_id: active!.id,
-      exercise_id: exerciseId,
-      set_number: (lastRow?.set_number ?? 0) + 1,
-      weight_kg: lastRow ? Number(lastRow.weight_kg) : 0,
-      reps: 0,
-      duration_seconds: lastRow ? setDuration(lastRow) : 0,
-      rpe: null,
-      is_warmup: false,
-      done: false,
+      await commitSet(set, { done });
+      if (done) {
+        // In focus mode, glide to the next exercise once this one's sets are all done.
+        const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
+        if (gymMode && others.length > 0 && others.every((x) => x.done)) {
+          const idx = exerciseIds.indexOf(set.exercise_id);
+          if (idx >= 0 && idx < exerciseIds.length - 1) setFocusIndex(idx + 1);
+        }
+      }
     });
-  };
+
+  const addSet = (exerciseId: string) =>
+    runLocked(`addset:${exerciseId}`, async () => {
+      // Read the freshest sibling list at execution time (the lock guarantees no
+      // two adds interleave), so the next set_number is never duplicated.
+      const existing = sessionSets.filter((s) => s.exercise_id === exerciseId);
+      const nextNumber = existing.reduce((max, s) => Math.max(max, s.set_number), 0) + 1;
+      const lastRow = existing.sort((a, b) => a.set_number - b.set_number)[existing.length - 1];
+      await insert('workout_sets', {
+        workout_id: active!.id,
+        exercise_id: exerciseId,
+        set_number: nextNumber,
+        weight_kg: lastRow ? Number(lastRow.weight_kg) : 0,
+        reps: 0,
+        duration_seconds: lastRow ? setDuration(lastRow) : 0,
+        rpe: null,
+        is_warmup: false,
+        done: false,
+      });
+    });
 
   const [addExId, setAddExId] = useState('');
   const [exSearch, setExSearch] = useState('');
@@ -509,29 +570,34 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       setExSearch('');
       return;
     }
-    // Already in the session -> just tack on another set. New to the session ->
-    // seed it from the last time this movement was trained, so the weights (and
-    // set count) carry forward, exactly like program-day sessions prefill.
-    if (sessionSets.some((s) => s.exercise_id === addExId)) {
-      await addSet(addExId);
-    } else {
-      const last = lastSetsForExercise(data.workout_sets, data.workouts, addExId, active.id);
-      const count = last?.sets.length || 1;
-      for (let n = 1; n <= count; n++) {
-        const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
-        await insert('workout_sets', {
-          workout_id: active.id,
-          exercise_id: addExId,
-          set_number: n,
-          weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
-          reps: 0,
-          duration_seconds: lastSet ? setDuration(lastSet) : 0,
-          rpe: null,
-          is_warmup: false,
-          done: false,
+    const exId = addExId;
+    // Deduped so a double-tap can't seed the movement twice. Already in the
+    // session -> tack on one set. New -> seed from the last time it was trained
+    // (weights + set count carry forward) in ONE atomic batch.
+    await runLocked(`addex:${exId}`, async () => {
+      if (sessionSets.some((s) => s.exercise_id === exId)) {
+        await addSet(exId);
+      } else {
+        const last = lastSetsForExercise(data.workout_sets, data.workouts, exId, active.id);
+        const count = last?.sets.length || 1;
+        const rows = Array.from({ length: count }, (_, i) => {
+          const n = i + 1;
+          const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
+          return {
+            workout_id: active.id,
+            exercise_id: exId,
+            set_number: n,
+            weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
+            reps: 0,
+            duration_seconds: lastSet ? setDuration(lastSet) : 0,
+            rpe: null,
+            is_warmup: false,
+            done: false,
+          };
         });
+        await insertMany('workout_sets', rows as never);
       }
-    }
+    });
     setAddExId('');
     setExSearch('');
   };
@@ -676,6 +742,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     );
   }
 
+  // While a session is still being seeded, show a non-interactive setup state
+  // rather than a half-populated set list with live add/cardio controls.
+  if (startingId === active.id) {
+    return (
+      <>
+        <ScreenHeader title={stripDayPrefix(active.name || 'Session')} subtitle="Setting up your session…" onMenu={onMenu} />
+        <div className="screen-content">
+          <div className="cf-callout" role="status" aria-live="polite">
+            Setting up your session…
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // ── Render helpers for an active session ────────────────────────────────
   const renderExercise = (exerciseId: string, big: boolean) => {
     const rows = sessionSets
@@ -761,11 +842,15 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         </div>
         {rows.map((s) => {
           const d = drafts[s.id] || {};
+          // Contextual accessible names so a screen reader / test can tell the
+          // repeated set controls apart (e.g. "Barbell Bench Press, set 1, …").
+          const ctx = `${exName(exerciseId)}, set ${s.set_number}`;
           const weightField = (
             <input
               type="number"
               inputMode="decimal"
               step="0.5"
+              aria-label={`${ctx}, weight in kilograms`}
               value={d.weight ?? (Number(s.weight_kg) || '')}
               placeholder="0"
               onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], weight: e.target.value } }))}
@@ -777,6 +862,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             <input
               type="number"
               inputMode="numeric"
+              aria-label={`${ctx}, reps`}
               value={d.reps ?? (s.reps || '')}
               placeholder={slot && !isTimedTracking(tracking) ? `${slot.rep_min}–${slot.rep_max}` : '—'}
               onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], reps: e.target.value } }))}
@@ -788,6 +874,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             <input
               type="text"
               inputMode="numeric"
+              aria-label={`${ctx}, hold time (minutes and seconds)`}
               value={d.dur ?? (setDuration(s) ? fmtDuration(setDuration(s)) : '')}
               placeholder={slot ? `${slot.rep_min}–${slot.rep_max}s` : 'm:ss'}
               onChange={(e) => setDrafts((p) => ({ ...p, [s.id]: { ...p[s.id], dur: e.target.value } }))}
@@ -801,11 +888,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               big ? (
                 <div className="wo-step-group">
                   <span className="wo-step-label" aria-hidden="true">Hold</span>
-                  <button className="wo-step" aria-label="15 seconds fewer" onClick={() => stepDuration(s, -15)}>
+                  <button className="wo-step" aria-label={`${ctx}, 15 seconds fewer`} onClick={() => stepDuration(s, -15)}>
                     −
                   </button>
                   {durField}
-                  <button className="wo-step" aria-label="15 seconds more" onClick={() => stepDuration(s, 15)}>
+                  <button className="wo-step" aria-label={`${ctx}, 15 seconds more`} onClick={() => stepDuration(s, 15)}>
                     +
                   </button>
                 </div>
@@ -816,11 +903,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               big ? (
                 <div className="wo-step-group">
                   <span className="wo-step-label" aria-hidden="true">Reps</span>
-                  <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
+                  <button className="wo-step" aria-label={`${ctx}, one rep fewer`} onClick={() => stepReps(s, -1)}>
                     −
                   </button>
                   {repsField}
-                  <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
+                  <button className="wo-step" aria-label={`${ctx}, one rep more`} onClick={() => stepReps(s, 1)}>
                     +
                   </button>
                 </div>
@@ -831,21 +918,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               <>
                 <div className="wo-step-group">
                   <span className="wo-step-label" aria-hidden="true">Kg</span>
-                  <button className="wo-step" aria-label="Weight down 2.5kg" onClick={() => stepWeight(s, -2.5)}>
+                  <button className="wo-step" aria-label={`${ctx}, weight down 2.5 kilograms`} onClick={() => stepWeight(s, -2.5)}>
                     −
                   </button>
                   {weightField}
-                  <button className="wo-step" aria-label="Weight up 2.5kg" onClick={() => stepWeight(s, 2.5)}>
+                  <button className="wo-step" aria-label={`${ctx}, weight up 2.5 kilograms`} onClick={() => stepWeight(s, 2.5)}>
                     +
                   </button>
                 </div>
                 <div className="wo-step-group">
                   <span className="wo-step-label" aria-hidden="true">Reps</span>
-                  <button className="wo-step" aria-label="One rep fewer" onClick={() => stepReps(s, -1)}>
+                  <button className="wo-step" aria-label={`${ctx}, one rep fewer`} onClick={() => stepReps(s, -1)}>
                     −
                   </button>
                   {repsField}
-                  <button className="wo-step" aria-label="One rep more" onClick={() => stepReps(s, 1)}>
+                  <button className="wo-step" aria-label={`${ctx}, one rep more`} onClick={() => stepReps(s, 1)}>
                     +
                   </button>
                 </div>
@@ -859,7 +946,8 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           const checkButton = (
             <button
               className={`wo-set-check ${s.done ? 'checked' : ''}`}
-              aria-label={s.done ? 'Mark set not done' : 'Mark set done'}
+              aria-label={`${ctx}, ${s.done ? 'mark not done' : 'mark done'}`}
+              aria-pressed={s.done}
               onClick={() => toggleSet(s)}
             >
               ✓
@@ -885,7 +973,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </div>
           );
         })}
-        <button className="btn btn-ghost btn-sm wo-add-set" onClick={() => addSet(exerciseId)}>
+        <button
+          className="btn btn-ghost btn-sm wo-add-set"
+          onClick={() => addSet(exerciseId)}
+          disabled={isBusy(`addset:${exerciseId}`)}
+        >
           + Add set
         </button>
       </div>
@@ -940,7 +1032,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           </button>
         ))}
         {addExId && (
-          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addExercise}>
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={addExercise} disabled={isBusy(`addex:${addExId}`)}>
             Add to session
           </button>
         )}
@@ -982,7 +1074,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                   <div className="pick-title">{exercise?.name || 'Cardio'}</div>
                   <div className="pick-sub">{summary}</div>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => logPlannedCardio(slot)}>
+                <button className="btn btn-primary btn-sm" onClick={() => logPlannedCardio(slot)} disabled={isBusy(`pcardio:${slot.id}`)}>
                   Record outcome
                 </button>
               </div>
@@ -1079,7 +1171,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             <button className="btn btn-ghost btn-sm" onClick={() => setCardioOpen(false)}>
               Cancel
             </button>
-            <button className="btn btn-primary" disabled={!Number(cardioMin)} onClick={logSessionCardio}>
+            <button className="btn btn-primary" disabled={!Number(cardioMin) || isBusy('cardio:adhoc')} onClick={logSessionCardio}>
               {Number(cardioMin)
                 ? `Log ${CARDIO_KIND_LABEL[cardioKind]} · ${Math.round(Number(cardioMin))} min`
                 : 'Enter time'}
@@ -1144,7 +1236,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <>
       <ScreenHeader
         title={stripDayPrefix(active.name || 'Session')}
-        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saving ? 'saving…' : 'saved ✓'}`}
+        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saveStatusLabel(saving, Boolean(syncError))}`}
         onMenu={onMenu}
       >
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
@@ -1168,15 +1260,30 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           ) : (
             <>
               <div className="gym-head">
-                <div className="gym-seg">
-                  {exerciseIds.map((id, i) => (
-                    <button
-                      key={id}
-                      className={`gym-seg-item ${i === idx ? 'active' : ''} ${allSetsDone(id) ? 'complete' : ''}`}
-                      aria-label={`Go to ${exName(id)}`}
-                      onClick={() => setFocusIndex(i)}
-                    />
-                  ))}
+                <div className="gym-seg" role="tablist" aria-label="Exercises">
+                  {exerciseIds.map((id, i) => {
+                    const complete = allSetsDone(id);
+                    const state = complete ? 'done' : i === idx ? 'current' : 'not started';
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="tab"
+                        className={`gym-seg-item ${i === idx ? 'active' : ''} ${complete ? 'complete' : ''}`}
+                        aria-label={`${exName(id)} — ${state}`}
+                        aria-current={i === idx ? 'step' : undefined}
+                        aria-selected={i === idx}
+                        onClick={() => setFocusIndex(i)}
+                      >
+                        {/* 44px tap target; the thin visual bar + a non-colour
+                            state glyph live in inner elements. */}
+                        <span className="gym-seg-bar" aria-hidden="true" />
+                        <span className="gym-seg-glyph" aria-hidden="true">
+                          {complete ? '✓' : i === idx ? '●' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="gym-head-label">
                   <span>
