@@ -4,7 +4,7 @@
 // idempotent-retry semantics everywhere.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from './supabase';
+import { supabase, isConfigured } from './supabase';
 import { useCadence } from './store';
 import type { AgentMessage } from './types';
 
@@ -18,10 +18,11 @@ export type AceSendResult =
 // (backed by migration 0041's partial unique index) treats a duplicate id as
 // "already accepted", so retrying an ambiguous failure with the SAME id can
 // never double-send.
-export async function sendAceTurn({ message, requestId, workspaceId }: {
+export async function sendAceTurn({ message, requestId, workspaceId, kind }: {
   message: string;
   requestId: string;
   workspaceId?: string | null;
+  kind?: string; // optional turn class (e.g. 'briefing') persisted in metadata
 }): Promise<AceSendResult> {
   try {
     const { error } = await supabase.functions.invoke('ace-chat', {
@@ -29,6 +30,7 @@ export async function sendAceTurn({ message, requestId, workspaceId }: {
         message,
         request_id: requestId,
         ...(workspaceId ? { workspace_id: workspaceId } : {}),
+        ...(kind ? { kind } : {}),
       },
     });
     if (error) {
@@ -70,10 +72,17 @@ export function useAceThread() {
   const { data } = useCadence();
   const [directMessages, setDirectMessages] = useState<AgentMessage[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
+  // True once the first direct read has completed (either way) — callers that
+  // auto-act on "no message found" must wait for this to avoid acting on an
+  // empty not-yet-loaded thread.
+  const [loaded, setLoaded] = useState(false);
   const mountedRef = useRef(true);
   const directMessagesRef = useRef<AgentMessage[]>([]);
 
   const refresh = useCallback(async () => {
+    // Unconfigured/E2E builds have no backend to read — stay inert (the
+    // global store's agent_messages still feed the merged thread below).
+    if (!isConfigured) { setLoaded(true); return; }
     const { data: rows, error } = await supabase
       .from('agent_messages')
       .select('*')
@@ -84,6 +93,7 @@ export function useAceThread() {
       .limit(200);
 
     if (!mountedRef.current) return;
+    setLoaded(true);
     if (error) {
       console.error('Ace thread load error:', error);
       setThreadError((prev) => prev || "Couldn't load the Ace thread. Refresh and try again.");
@@ -102,6 +112,7 @@ export function useAceThread() {
   useEffect(() => {
     mountedRef.current = true;
     void refresh();
+    if (!isConfigured) return () => { mountedRef.current = false; };
     const channel = supabase
       .channel(`ace-thread-rt-${++channelSeq}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_messages' }, () => {
@@ -126,5 +137,5 @@ export function useAceThread() {
     return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
   }, [data.agent_messages, directMessages]);
 
-  return { messages, refresh, threadError };
+  return { messages, refresh, threadError, loaded };
 }

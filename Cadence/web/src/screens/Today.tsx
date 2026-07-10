@@ -8,6 +8,9 @@ import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isLinkedToPerson } from '../lib/tasks';
 import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary, getDecideItems } from '../lib/selectors';
+import { AceBriefingCard } from '../components/AceBriefingCard';
+import { useAceUi } from '../lib/aceUi';
+import { meetingPrepPrompt } from '../lib/acePrompts';
 
 const initials = (name: string) =>
   (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -71,6 +74,7 @@ function LoadStrip({ load }: { load: ReturnType<typeof getLoadSummary> }) {
 export function Today({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
+  const { openAce } = useAceUi();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -114,6 +118,9 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       <div className="screen-content">
 
         <LoadStrip load={view.load} />
+
+        {/* Ace's daily briefing — collapsed echo; the full card lives on Dashboard */}
+        <AceBriefingCard compact />
 
         {/* Do now — the one ranked list, by when it's due */}
         <Section label="Needs Rodney / Do now" count={view.todoCount} accent="var(--accent)"
@@ -166,6 +173,10 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
                       )}
                     </div>
                   </div>
+                  <button className="btn btn-ghost btn-sm ace-action-btn" title={`Ask Ace to prep the 1:1 with ${person.name}`}
+                    onClick={() => openAce({ prompt: meetingPrepPrompt(person), contextLabel: person.name })}>
+                    ◆ Prep
+                  </button>
                 </div>
               ))}
             </div>

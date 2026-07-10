@@ -5,8 +5,10 @@ import { isFiledTask, isLinkedToPerson, isLinkedToProject } from '../lib/tasks';
 import { isOverdue, autoColor, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import {
   getHotThisWeek, getProjectTopActions, inferHealthReason, groupProjectsByPortfolio,
+  getStaleTasks, getStaleProjects, STALE_DAYS,
 } from '../lib/selectors';
 import { ScreenHeader } from '../components/bits';
+import { AceBriefingCard } from '../components/AceBriefingCard';
 import { HEALTH_LABEL } from '../lib/health';
 
 const initials = (name: string) =>
@@ -147,6 +149,34 @@ function ProjectCard({ project, openCount, overdueCount, topActions, healthReaso
   );
 }
 
+// ── Needs attention: deterministic stale-work flags (no LLM) ─────────────────
+function NeedsAttention({ onNavigate }: { onNavigate: (screen: string, entityId?: string) => void }) {
+  const { data } = useCadence();
+  const staleTasks = useMemo(() => getStaleTasks(data.work_items), [data.work_items]);
+  const staleProjects = useMemo(() => getStaleProjects(data.projects, data.project_updates), [data.projects, data.project_updates]);
+  if (!staleTasks.length && !staleProjects.length) return null;
+
+  return (
+    <div className="needs-attention">
+      <div className="needs-attention-hdr">⚑ Needs attention <span className="needs-attention-sub">untouched for {STALE_DAYS}+ days</span></div>
+      <div className="needs-attention-body">
+        {staleTasks.length > 0 && (
+          <button className="needs-attention-row" onClick={() => onNavigate('tasks')}>
+            <span className="needs-attention-count">{staleTasks.length}</span>
+            stale task{staleTasks.length === 1 ? '' : 's'} — oldest: “{staleTasks[0].title.slice(0, 60)}”
+          </button>
+        )}
+        {staleProjects.slice(0, 3).map((p) => (
+          <button key={p.id} className="needs-attention-row" onClick={() => onNavigate('projects', p.id)}>
+            <span className="needs-attention-count">▤</span>
+            {p.name} — no movement since {fmtWeekDM(p.updated_at.slice(0, 10))}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard screen ─────────────────────────────────────────────────────
 export function Dashboard({ onMenu, onNavigate }: {
   onMenu?: () => void;
@@ -194,6 +224,8 @@ export function Dashboard({ onMenu, onNavigate }: {
     <>
       <ScreenHeader title="Dashboard" onMenu={onMenu} />
       <div className="screen-content" style={{ paddingTop: 0 }}>
+        <AceBriefingCard />
+        <NeedsAttention onNavigate={onNavigate} />
         <div className="dash-tabs">
           <button className={`dash-tab${tab === 'people' ? ' active' : ''}`} onClick={() => setTab('people')}>
             ✦ People{personCards.length > 0 ? ` (${personCards.length})` : ''}

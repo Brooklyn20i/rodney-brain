@@ -1655,6 +1655,29 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .dash-action-item { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; line-height: 1.5; }
 
+/* ── Ace daily briefing + needs-attention cards ───────────────────────────── */
+.ace-briefing { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin: 12px 0; overflow: hidden; }
+.ace-briefing-hdr { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: var(--accent-lt); border: none; padding: 10px 14px; cursor: pointer; font-family: inherit; }
+.ace-briefing-title { font-size: 13px; font-weight: 800; color: var(--accent); }
+.ace-briefing-toggle { color: var(--text3); font-size: 12px; }
+.ace-briefing-body { padding: 12px 14px; font-size: 14px; line-height: 1.55; }
+.ace-briefing-body .kobe-bubble-html h1, .ace-briefing-body .kobe-bubble-html h2,
+.ace-briefing-body .kobe-bubble-html h3 { font-size: 13px; margin: 10px 0 4px; }
+.ace-briefing-body .kobe-bubble-html ul { padding-left: 18px; margin: 4px 0; }
+.ace-briefing-muted { color: var(--text3); font-size: 13px; display: flex; align-items: center; gap: 4px; }
+.ace-briefing.compact { margin: 10px 0; }
+.needs-attention { background: var(--orange-bg); border: 1px solid var(--orange); border-radius: var(--radius);
+  margin: 0 0 12px; padding: 10px 14px; }
+.needs-attention-hdr { font-size: 12px; font-weight: 800; color: var(--orange); margin-bottom: 6px; }
+.needs-attention-sub { font-weight: 600; color: var(--text3); margin-left: 6px; text-transform: none; }
+.needs-attention-body { display: flex; flex-direction: column; gap: 4px; }
+.needs-attention-row { display: flex; align-items: center; gap: 8px; text-align: left; background: none;
+  border: none; padding: 4px 0; cursor: pointer; font-family: inherit; font-size: 13px; color: var(--text); }
+.needs-attention-row:hover { color: var(--accent); }
+.needs-attention-count { font-weight: 800; color: var(--orange); flex-shrink: 0; }
+
 /* ── Ace slide-over panel (Ask Ace from anywhere) ─────────────────────────── */
 .ace-panel-backdrop { position: fixed; inset: 0; z-index: 255; background: rgba(0,0,0,0.12); }
 .ace-panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(440px, 100vw);

@@ -399,6 +399,43 @@ export function getHealthEvidence(
   };
 }
 
+// ── Staleness flags (proactive, no LLM) ───────────────────────────────────────
+// Deterministic "this is going stale" detection: open work untouched for
+// STALE_DAYS, and active projects with neither a status update nor any record
+// change in that window. Instant, free, offline-capable — the first tier of
+// proactive Ace. (getDataHygieneIssues remains the deeper review queue.)
+export const STALE_DAYS = 14;
+
+export function getStaleTasks(items: WorkItem[], days = STALE_DAYS): WorkItem[] {
+  const threshold = addDaysStr(-days);
+  return items
+    .filter((w) => isFiledTask(w) && !!w.updated_at && w.updated_at.slice(0, 10) <= threshold)
+    .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''));
+}
+
+export function getStaleProjects(
+  projects: Project[],
+  updates: ProjectUpdate[],
+  days = STALE_DAYS,
+): Project[] {
+  const threshold = addDaysStr(-days);
+  const lastUpdateByProject = new Map<string, string>();
+  for (const u of updates) {
+    if (u.deleted_at) continue;
+    const prev = lastUpdateByProject.get(u.project_id);
+    if (!prev || u.created_at > prev) lastUpdateByProject.set(u.project_id, u.created_at);
+  }
+  return projects
+    .filter((p) => {
+      if (p.status !== 'active' || p.deleted_at) return false;
+      const touched = p.updated_at?.slice(0, 10) || '';
+      const lastUpdate = (lastUpdateByProject.get(p.id) || '').slice(0, 10);
+      const freshest = touched > lastUpdate ? touched : lastUpdate;
+      return !!freshest && freshest <= threshold;
+    })
+    .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''));
+}
+
 // ── Data hygiene review queue ─────────────────────────────────────────────────
 // Read-only detection for confusing Work records. This deliberately returns
 // review prompts, not repair instructions: the UI must route Rodney/Kobe to the

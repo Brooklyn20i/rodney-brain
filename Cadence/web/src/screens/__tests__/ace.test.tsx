@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
 vi.mock('../../lib/supabase', () => ({
+  isConfigured: true,
   supabase: {
     from: (table: string) => {
       h.from(table);
