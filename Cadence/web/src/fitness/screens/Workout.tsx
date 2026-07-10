@@ -264,20 +264,26 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   // is fully created (or rolled back on failure).
   const [startingId, setStartingId] = useState<string | null>(null);
   const beginSession = async (day: ProgramDay | null) => {
-    const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
-    const workout = await insert('workouts', {
-      date: today,
-      program_id: day ? day.program_id : null,
-      program_day_id: day ? day.id : null,
-      week_number: pos?.week ?? null,
-      name: day ? stripDayPrefix(day.name) : 'Ad-hoc session',
-      status: 'in_progress',
-      started_at: new Date().toISOString(),
-      completed_at: null,
-      notes: '',
-    });
-    setStartingId(workout.id);
+    // Pre-generate the workout id and raise the initialization gate BEFORE the
+    // optimistic insert. The store adds the in_progress row synchronously inside
+    // insert(), so without this the active screen would flash its interactive
+    // add/cardio/finish controls in the gap before startingId was set.
+    const newWorkoutId = crypto.randomUUID();
+    setStartingId(newWorkoutId);
     try {
+      const pos = activeProgram ? programPosition(activeProgram, data.program_days, data.workouts) : null;
+      await insert('workouts', {
+        id: newWorkoutId,
+        date: today,
+        program_id: day ? day.program_id : null,
+        program_day_id: day ? day.id : null,
+        week_number: pos?.week ?? null,
+        name: day ? stripDayPrefix(day.name) : 'Ad-hoc session',
+        status: 'in_progress',
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        notes: '',
+      } as never);
       if (day) {
         const slots = data.program_exercises
           .filter((s) => s.program_day_id === day.id)
@@ -293,11 +299,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             // Do not create a cardio_sessions row until Rodney records the run/ride.
             continue;
           }
-          const last = lastSetsForExercise(data.workout_sets, data.workouts, slot.exercise_id, workout.id);
+          const last = lastSetsForExercise(data.workout_sets, data.workouts, slot.exercise_id, newWorkoutId);
           for (let n = 1; n <= slot.target_sets; n++) {
             const lastSet = last?.sets[Math.min(n - 1, (last?.sets.length ?? 1) - 1)];
             rows.push({
-              workout_id: workout.id,
+              workout_id: newWorkoutId,
               exercise_id: slot.exercise_id,
               set_number: n,
               weight_kg: lastSet ? Number(lastSet.weight_kg) : 0,
@@ -315,7 +321,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     } catch (err) {
       // Seeding failed → don't strand an empty in_progress workout. Best-effort
       // rollback so the user lands back on the clean start screen.
-      await remove('workouts', workout.id);
+      await remove('workouts', newWorkoutId);
       throw err;
     } finally {
       setStartingId(null);
@@ -743,8 +749,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   }
 
   // While a session is still being seeded, show a non-interactive setup state
-  // rather than a half-populated set list with live add/cardio controls.
-  if (startingId === active.id) {
+  // rather than a half-populated set list with live add/cardio controls. Gated
+  // on BOTH the pre-generated startingId and the lifecycle 'start' action, so
+  // no interactive control can render between the workout row appearing and its
+  // set batch settling.
+  if (startingId === active.id || pendingAction === 'start') {
     return (
       <>
         <ScreenHeader title={stripDayPrefix(active.name || 'Session')} subtitle="Setting up your session…" onMenu={onMenu} />
