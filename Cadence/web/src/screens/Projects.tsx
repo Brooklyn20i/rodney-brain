@@ -12,6 +12,7 @@ import {
 } from '../lib/strategy';
 import type { StrategyContent, WinState } from '../lib/strategy';
 import { groupProjectsByPortfolio, getProjectTopActions, inferHealthReason, getHealthEvidence } from '../lib/selectors';
+import { HEALTH_COLOR, HEALTH_BG, HEALTH_LABEL, HEALTH_PILL_CLASS, HEALTH_OPTIONS, STATUS_LABEL, STATUS_ORDER } from '../lib/health';
 import { isLinkedToProject } from '../lib/tasks';
 import { ProjectGantt, PortfolioTimeline } from '../components/Gantt';
 
@@ -198,10 +199,6 @@ function ScoreboardView({ strategy, winState, saveWinState }: { strategy: Strate
 }
 
 // ── Project control card ────────────────────────────────────────────────────
-const HEALTH_COLOR: Record<Health, string> = { green: 'var(--green)', amber: 'var(--orange)', red: 'var(--red)' };
-const HEALTH_BG: Record<Health, string> = { green: 'var(--green-bg)', amber: 'var(--orange-bg)', red: 'var(--red-bg)' };
-const HEALTH_LABEL: Record<Health, string> = { green: 'On track', amber: 'At risk', red: 'Off track' };
-
 function ProjectCard({ project, onClick, strategy }: { project: Project; onClick: () => void; strategy: StrategyContent }) {
   const { data } = useCadence();
   const topActions = useMemo(() => getProjectTopActions(project.id, data.work_items), [data.work_items, project.id]);
@@ -265,10 +262,6 @@ function ProjectCard({ project, onClick, strategy }: { project: Project; onClick
 }
 
 // ── Project sheet tabs ─────────────────────────────────────────────────────
-const HEALTHS: { v: Health; label: string }[] = [
-  { v: 'green', label: '🟢 On track' }, { v: 'amber', label: '🟠 At risk' }, { v: 'red', label: '🔴 Off track' },
-];
-
 function UpdateTab({ project }: { project: Project }) {
   const { data, insert, update, logActivity } = useCadence();
   const updates = useMemo(() => data.project_updates.filter((u) => u.project_id === project.id)
@@ -297,7 +290,7 @@ function UpdateTab({ project }: { project: Project }) {
         <div className="proj-update-controls">
           <select value={health} onChange={(e) => setHealth(e.target.value as Health | '')} style={{ flex: 1 }}>
             <option value="">— health unchanged —</option>
-            {HEALTHS.map((h) => <option key={h.v} value={h.v}>{h.label}</option>)}
+            {HEALTH_OPTIONS.map((h) => <option key={h.v} value={h.v}>{h.label}</option>)}
           </select>
           <button className="btn btn-primary" onClick={post} disabled={busy || !text.trim()}>
             {busy ? 'Posting…' : 'Post Update'}
@@ -380,7 +373,8 @@ function ProjectControlSheet({ project }: { project: Project }) {
   const blockers = useMemo(() => raid.filter((r) => r.kind === 'issue' || r.kind === 'dependency' || r.severity === 'high'), [raid]);
   const latestUpdate = useMemo(() => data.project_updates.filter((u) => u.project_id === project.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0], [data.project_updates, project.id]);
-  const [pill, pillLabel] = HEALTH_PILL[project.health];
+  const pill = HEALTH_PILL_CLASS[project.health];
+  const pillLabel = HEALTH_LABEL[project.health];
 
   return (
     <div className="proj-control-sheet">
@@ -738,10 +732,6 @@ function AdvancedTab({ project, onEdit }: { project: Project; onEdit: () => void
 }
 
 // ── Full-screen project detail (push navigation) ──────────────────────────
-const HEALTH_PILL: Record<Health, [string, string]> = {
-  green: ['health-green', 'On track'], amber: ['health-amber', 'At risk'], red: ['health-red', 'Off track'],
-};
-
 // Analytical #9 — "prove it": the raw numbers behind a project's health,
 // revealed on demand so a status is never taken on trust.
 function HealthEvidence({ project }: { project: Project }) {
@@ -813,7 +803,6 @@ function ProjectDetail({ project, strategy, onBack, onEdit, onMenu }: {
 
 // ── Project create / edit modal ────────────────────────────────────────────
 const COLORS = ['#1B5E9E', '#6B3FA0', '#1A7F37', '#E07D00', '#D93025', '#0E7490'];
-const STATUSES: ProjectStatus[] = ['active', 'onHold', 'completed'];
 
 function ProjectModal({ existing, strategy, onClose }: { existing?: Project; strategy: StrategyContent; onClose: () => void }) {
   const { insert, update, logActivity } = useCadence();
@@ -864,7 +853,7 @@ function ProjectModal({ existing, strategy, onClose }: { existing?: Project; str
           </select></div>
         <div className="form-group"><label>Health</label>
           <select value={health} onChange={(e) => setHealth(e.target.value as Health)}>
-            {HEALTHS.map((h) => <option key={h.v} value={h.v}>{h.label}</option>)}
+            {HEALTH_OPTIONS.map((h) => <option key={h.v} value={h.v}>{h.label}</option>)}
           </select></div>
       </div>
       <div className="form-row">
@@ -912,8 +901,6 @@ function HealthRoll({ items }: { items: Project[] }) {
 }
 
 // ── Main screen ────────────────────────────────────────────────────────────
-const STATUS_LABEL: Record<ProjectStatus, string> = { active: 'Active', onHold: 'On Hold', completed: 'Completed' };
-
 export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; initialSelectedId?: string | null }) {
   const { data } = useCadence();
   const { strategy, save } = useStrategy();
@@ -953,7 +940,7 @@ export function Projects({ onMenu, initialSelectedId }: { onMenu?: () => void; i
       if (unassigned.length) out.push({ key: '__none__', label: 'No priority', items: unassigned });
       return out.filter((g) => g.items.length);
     }
-    return STATUSES.map((s) => ({
+    return STATUS_ORDER.map((s) => ({
       key: s, label: STATUS_LABEL[s], items: [...data.projects].filter((p) => p.status === s).sort(byName),
     })).filter((g) => g.items.length);
   }, [data.projects, groupBy, priorities]);

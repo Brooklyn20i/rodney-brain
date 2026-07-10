@@ -3,6 +3,7 @@
 
 import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
+import { bucketForDue } from './dateBuckets';
 import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
@@ -25,14 +26,14 @@ export interface TodoGroup {
 }
 
 export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
-  const today = todayStr();
-  const weekEnd = addDaysStr(7);
   const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor' && w.type !== 'decision');
   const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
   for (const w of mine) {
-    if (w.due_date && w.due_date < today) overdue.push(w);
-    else if (w.due_date === today) dueToday.push(w);
-    else if (w.due_date && w.due_date <= weekEnd) week.push(w);
+    // No-date items ride in "later" — the cockpit has no separate no-date lane.
+    const bucket = bucketForDue(w.due_date).key;
+    if (bucket === 'overdue') overdue.push(w);
+    else if (bucket === 'today') dueToday.push(w);
+    else if (bucket === 'week') week.push(w);
     else later.push(w);
   }
   overdue.sort(byDueThenPri); dueToday.sort(byPriThenDue); week.sort(byDueThenPri); later.sort(byPriThenDue);

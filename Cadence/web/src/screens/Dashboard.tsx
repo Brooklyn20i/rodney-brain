@@ -7,6 +7,7 @@ import {
   getHotThisWeek, getProjectTopActions, inferHealthReason, groupProjectsByPortfolio,
 } from '../lib/selectors';
 import { ScreenHeader } from '../components/bits';
+import { HEALTH_LABEL } from '../lib/health';
 
 const initials = (name: string) =>
   (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
@@ -15,10 +16,6 @@ const fmtNext = (iso: string) => {
   if (iso === todayStr()) return 'Today';
   if (iso === addDaysStr(1)) return 'Tomorrow';
   return fmtWeekDM(iso);
-};
-
-const HEALTH_LABEL: Record<string, string> = {
-  red: 'Off track', amber: 'At risk', green: 'On track',
 };
 
 // ── Person card ───────────────────────────────────────────────────────────────

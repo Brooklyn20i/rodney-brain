@@ -5,6 +5,7 @@ import { TaskRow, ScreenHeader, EmptyState } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../lib/util';
+import { bucketForDue } from '../lib/dateBuckets';
 import { parseMeeting, serializeMeeting } from '../lib/meetingData';
 import { collectOpenMeetingActions, buildTaskFromAction, isFiledTask } from '../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../lib/tasks';
@@ -25,15 +26,6 @@ const FILTER_OPTS: { v: DateFilter; label: string }[] = [
 ];
 
 interface Group { key: string; label: string; color: string; items: WorkItem[]; }
-
-function dueBucket(due: string | null): { key: string; label: string; color: string; rank: number } {
-  if (!due) return { key: 'none', label: 'No date', color: 'var(--text3)', rank: 4 };
-  const today = todayStr();
-  if (due < today) return { key: 'overdue', label: 'Overdue', color: 'var(--red)', rank: 0 };
-  if (due === today) return { key: 'today', label: 'Today', color: 'var(--orange)', rank: 1 };
-  if (due <= addDaysStr(7)) return { key: 'week', label: 'This week', color: 'var(--accent)', rank: 2 };
-  return { key: 'later', label: 'Later', color: 'var(--purple)', rank: 3 };
-}
 
 const PRI_META: Record<string, { label: string; color: string; rank: number }> = {
   high: { label: 'High priority', color: 'var(--red)', rank: 0 },
@@ -79,7 +71,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
 
     for (const w of filtered) {
       if (groupBy === 'due') {
-        const b = dueBucket(w.due_date); add(b.key, b.label, b.color, b.rank, w);
+        const b = bucketForDue(w.due_date); add(b.key, b.label, b.color, b.rank, w);
       } else if (groupBy === 'priority') {
         const m = PRI_META[w.priority] || PRI_META.low; add(w.priority, m.label, m.color, m.rank, w);
       } else if (groupBy === 'type') {
