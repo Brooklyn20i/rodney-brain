@@ -7,6 +7,8 @@ import { MeetingNoteModal } from '../components/MeetingNoteModal';
 import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isAgentTask } from '../lib/tasks';
+import { AceActionButton } from '../components/AceActionButton';
+import { meetingPrepPrompt } from '../lib/acePrompts';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -375,6 +377,10 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <AceActionButton
+            contextLabel={person.name}
+            actions={[{ label: 'Prep my 1:1', prompt: meetingPrepPrompt(person) }]}
+          />
           <button className="btn btn-secondary btn-sm" onClick={onEditPerson}>Edit</button>
         </div>
       </div>

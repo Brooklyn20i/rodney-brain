@@ -1655,6 +1655,26 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .dash-action-item { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; line-height: 1.5; }
 
+/* ── Ace slide-over panel (Ask Ace from anywhere) ─────────────────────────── */
+.ace-panel-backdrop { position: fixed; inset: 0; z-index: 255; background: rgba(0,0,0,0.12); }
+.ace-panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(440px, 100vw);
+  background: var(--surface); border-left: 1px solid var(--border);
+  box-shadow: -8px 0 40px rgba(0,0,0,0.18); z-index: 260;
+  display: flex; flex-direction: column; overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px); }
+.ace-panel-hdr { display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface2); flex-shrink: 0; }
+.ace-panel-title { font-size: 14px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ace-panel-context { color: var(--text3); font-weight: 600; }
+.ace-panel-messages { flex: 1; overflow-y: auto; }
+.ace-action-btn { white-space: nowrap; color: var(--accent); font-weight: 700; }
+.ace-action-picker { right: 0; left: auto; }
+@media (max-width: 620px) {
+  .ace-panel { width: 100vw; }
+}
+
 /* ── Meeting Prep Brief panel ─────────────────────────────────────────────── */
 .btn-active { border-color: var(--accent) !important; color: var(--accent) !important; background: var(--blue-bg) !important; }
 

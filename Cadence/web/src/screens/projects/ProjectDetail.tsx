@@ -7,6 +7,8 @@ import { portfolioOf } from '../../lib/selectors';
 import { OverviewTab } from './tabs/OverviewTab';
 import { PlanTab } from './tabs/PlanTab';
 import { GovernanceTab } from './tabs/GovernanceTab';
+import { AceActionButton } from '../../components/AceActionButton';
+import { projectSummaryPrompt, projectUpdateDraftPrompt, projectRiskPrompt } from '../../lib/acePrompts';
 
 type Tab = 'overview' | 'plan' | 'governance';
 const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', plan: 'Plan', governance: 'Governance' };
@@ -33,6 +35,14 @@ export function ProjectDetail({ project, strategy, onEdit, onClose }: {
           </div>
         </div>
         <div className="proj-detail-head-actions">
+          <AceActionButton
+            contextLabel={project.name}
+            actions={[
+              { label: 'Summarise this project', prompt: projectSummaryPrompt(project) },
+              { label: 'Draft a status update', prompt: projectUpdateDraftPrompt(project) },
+              { label: "What's at risk?", prompt: projectRiskPrompt(project) },
+            ]}
+          />
           <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit</button>
           <button className="btn btn-ghost btn-sm" onClick={onClose} title="Close">✕</button>
         </div>

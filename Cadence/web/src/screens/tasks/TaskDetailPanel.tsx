@@ -3,6 +3,8 @@ import { useCadence } from '../../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../../lib/types';
 import { EntityLinkPicker } from '../../components/EntityLinkPicker';
 import { TypeTag, PriTag } from '../../components/bits';
+import { AceActionButton } from '../../components/AceActionButton';
+import { taskBreakdownPrompt, taskFollowUpPrompt } from '../../lib/acePrompts';
 import { todayStr, addDaysStr, fmtDMY, TYPE_LABEL } from '../../lib/util';
 
 const TYPES: { v: ItemType; label: string }[] = [
@@ -76,6 +78,13 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <span>{task.done ? 'Done' : 'Mark done'}</span>
         </label>
         <div className="task-detail-head-actions">
+          <AceActionButton
+            contextLabel={task.title.slice(0, 40)}
+            actions={[
+              { label: 'Break this down', prompt: taskBreakdownPrompt(task) },
+              { label: 'Draft a follow-up', prompt: taskFollowUpPrompt(task) },
+            ]}
+          />
           <button className="btn btn-ghost btn-sm" onClick={del} title="Delete task">🗑</button>
           <button className="btn btn-ghost btn-sm task-detail-close" onClick={onClose} title="Close">✕</button>
         </div>

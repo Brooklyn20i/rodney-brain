@@ -6,6 +6,7 @@ import { isUserTask } from './lib/tasks';
 import { getLoadSummary, getWaitingOnOthers } from './lib/selectors';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
+import { AceUiProvider } from './lib/aceUi';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { Today } from './screens/Today'; // eager — the default landing screen
 
@@ -273,6 +274,7 @@ export function App() {
   };
 
   return (
+    <AceUiProvider>
     <div id="app">
       {isOffline && (
         <div className="offline-banner">
@@ -307,5 +309,6 @@ export function App() {
         </Suspense>
       </div>
     </div>
+    </AceUiProvider>
   );
 }
