@@ -1,17 +1,21 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useCadence } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { ScreenHeader } from '../components/bits';
 import { fmtDM } from '../lib/util';
 import { sanitizeHtml } from '../lib/sanitize';
+import type { AgentMessage } from '../lib/types';
 
 export function Ace({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [directMessages, setDirectMessages] = useState<AgentMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mountedRef = useRef(true);
+  const directMessagesRef = useRef<AgentMessage[]>([]);
   // Idempotency key for the in-flight turn, bound to the exact text it was minted
   // for. Reused only when retrying that *same* instruction after a not-accepted
   // send; cleared once the function accepts the turn. If Rodney edits the restored
@@ -19,13 +23,61 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
   // instruction is never sent under the previous turn's id.
   const pendingTurn = useRef<{ id: string; text: string } | null>(null);
 
-  const aceMessages = useMemo(
-    () =>
-      (data.agent_messages || [])
-        .filter((m) => !m.deleted_at && m.recipient_key === 'agent:ace')
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [data.agent_messages],
-  );
+  const refreshAceThread = useCallback(async () => {
+    const { data: rows, error: threadError } = await supabase
+      .from('agent_messages')
+      .select('*')
+      .eq('recipient_key', 'agent:ace')
+      .is('deleted_at', null)
+      // Fetch latest 200, then render chronologically. The Work store also loads
+      // agent_messages, but Ace owns this fallback path so the screen still works
+      // if the global all-table reload or Realtime merge misses this personal,
+      // owner-scoped chat table.
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (!mountedRef.current) return;
+    if (threadError) {
+      console.error('Ace thread load error:', threadError);
+      setError((prev) => prev || "Couldn't load the Ace thread. Refresh and try again.");
+      return;
+    }
+    const nextRows = [...(rows || [])].reverse() as AgentMessage[];
+    const prevRows = directMessagesRef.current;
+    const unchanged = prevRows.length === nextRows.length
+      && prevRows.every((m, i) => m.id === nextRows[i]?.id && m.updated_at === nextRows[i]?.updated_at);
+    if (!unchanged) {
+      directMessagesRef.current = nextRows;
+      setDirectMessages(nextRows);
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void refreshAceThread();
+    const channel = supabase
+      .channel('ace-thread-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_messages' }, () => {
+        void refreshAceThread();
+      })
+      .subscribe();
+
+    return () => {
+      mountedRef.current = false;
+      supabase.removeChannel(channel);
+    };
+  }, [refreshAceThread]);
+
+  const aceMessages = useMemo(() => {
+    const byId = new Map<string, AgentMessage>();
+    for (const m of directMessages) {
+      if (!m.deleted_at && m.recipient_key === 'agent:ace') byId.set(m.id, m);
+    }
+    for (const m of data.agent_messages || []) {
+      if (!m.deleted_at && m.recipient_key === 'agent:ace') byId.set(m.id, m as AgentMessage);
+    }
+    return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [data.agent_messages, directMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,9 +104,11 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
         setError("Ace couldn't respond. Make sure the ace-chat function is deployed, then try again.");
         setMessage(text);
       } else {
-        // Accepted. The reply — or an explicit failure notice — arrives in the
-        // thread via Realtime; never resubmit this turn.
+        // Accepted. The reply — or an explicit failure notice — is now persisted;
+        // refresh directly as well as relying on Realtime/global store so the UI
+        // cannot stay empty if the shared Work reload path misses agent_messages.
         pendingTurn.current = null;
+        await refreshAceThread();
       }
     } catch (e) {
       // Transport error: the turn may not have been accepted. Keep the id+text
