@@ -6,16 +6,17 @@ export interface NavItem { id: string; label: string; icon: string; }
 
 export const WORK_NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Control', items: [
-    { id: 'today', label: 'Rodney To Do', icon: '☀' },
-    { id: 'inbox', label: 'Quick Capture', icon: '↓' },
+    { id: 'today', label: 'Today', icon: '☀' },
+    { id: 'dashboard', label: 'Dashboard', icon: '◧' },
+    { id: 'inbox', label: 'Inbox', icon: '↓' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'tasks', label: 'Filed Work', icon: '◎' },
-    { id: 'notes', label: 'Notes', icon: '✎' },
   ]},
   { section: 'Work', items: [
+    { id: 'projects', label: 'Projects', icon: '▤' },
+    { id: 'tasks', label: 'Tasks', icon: '◎' },
     { id: 'people', label: 'People', icon: '✦' },
     { id: 'meetings', label: 'Meetings', icon: '🗓' },
-    { id: 'projects', label: 'Projects', icon: '▤' },
+    { id: 'notes', label: 'Notes', icon: '✎' },
     { id: 'board', label: 'Board', icon: '▦' },
   ]},
   { section: 'Agents', items: [

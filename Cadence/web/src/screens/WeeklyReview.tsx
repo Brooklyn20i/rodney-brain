@@ -28,14 +28,14 @@ export function WeeklyReview() {
       <div className="screen-content">
         <div className="metric-grid">
           <Metric label="Needs Rodney / Do now" value={stats.doNow} />
-          <Metric label="Quick Capture / untriaged" value={stats.quickCapture} />
+          <Metric label="Inbox / untriaged" value={stats.quickCapture} />
           <Metric label="Overdue" value={stats.overdue} tone={stats.overdue ? 'bad' : 'good'} />
           <Metric label="Waiting / owed by others" value={stats.waiting} />
           <Metric label="Decide" value={stats.decisions} />
           <Metric label="With Kobe" value={stats.withKobe} />
           <Metric label="Active projects" value={stats.projects} />
         </div>
-        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear Quick Capture / untriaged to zero or explicitly defer.</li><li>Confirm top three Needs Rodney / Do now priorities for Monday.</li><li>Close or defer stale Decide items.</li><li>Review Waiting / owed by others and choose follow-ups.</li><li>Confirm With Kobe contains only source=for:kobe delegated items.</li><li>Confirm every active project has a next action.</li></ol></div>
+        <div className="card"><div className="card-title">Review checklist</div><ol className="checklist"><li>Clear the Inbox / untriaged to zero or explicitly defer.</li><li>Confirm top three Needs Rodney / Do now priorities for Monday.</li><li>Close or defer stale Decide items.</li><li>Review Waiting / owed by others and choose follow-ups.</li><li>Confirm With Kobe contains only source=for:kobe delegated items.</li><li>Confirm every active project has a next action.</li></ol></div>
       </div>
     </>
   );

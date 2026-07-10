@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import { autoColor, fmtHeaderDate, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { autoColor, initials, fmtHeaderDate, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import type { WorkItem } from '../lib/types';
 import { TaskRow, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
@@ -8,9 +8,9 @@ import { QuickAdd } from '../components/QuickAdd';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isLinkedToPerson } from '../lib/tasks';
 import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary, getDecideItems } from '../lib/selectors';
-
-const initials = (name: string) =>
-  (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
+import { AceBriefingCard } from '../components/AceBriefingCard';
+import { useAceUi } from '../lib/aceUi';
+import { meetingPrepPrompt } from '../lib/acePrompts';
 
 const fmtMtgDay = (iso: string) => {
   if (iso === todayStr()) return 'Today';
@@ -71,6 +71,7 @@ function LoadStrip({ load }: { load: ReturnType<typeof getLoadSummary> }) {
 export function Today({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
+  const { openAce } = useAceUi();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -107,13 +108,16 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Rodney To Do / Control" subtitle={`${fmtHeaderDate(todayStr())} · Needs Rodney / Do now, Decide, Waiting, With Kobe`} onMenu={onMenu}>
+      <ScreenHeader title="Today" subtitle={`${fmtHeaderDate(todayStr())} · Do now · Decide · Waiting · With Kobe`} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </ScreenHeader>
 
       <div className="screen-content">
 
         <LoadStrip load={view.load} />
+
+        {/* Ace's daily briefing — collapsed echo; the full card lives on Dashboard */}
+        <AceBriefingCard compact />
 
         {/* Do now — the one ranked list, by when it's due */}
         <Section label="Needs Rodney / Do now" count={view.todoCount} accent="var(--accent)"
@@ -147,7 +151,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
             <div className="cockpit-1on1s">
               {view.oneOnOnes.map(({ person, meeting, openTopics, isToday }) => (
                 <div key={person.id} className="cockpit-1on1-card">
-                  <span className="avatar" style={{ background: autoColor(person.id || person.name), width: 32, height: 32, fontSize: 12, flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>
+                  <span className="avatar avatar-md" style={{ background: autoColor(person.id || person.name) }}>
                     {initials(person.name)}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -166,6 +170,10 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
                       )}
                     </div>
                   </div>
+                  <button className="btn btn-ghost btn-sm ace-action-btn" title={`Ask Ace to prep the 1:1 with ${person.name}`}
+                    onClick={() => openAce({ prompt: meetingPrepPrompt(person), contextLabel: person.name })}>
+                    ◆ Prep
+                  </button>
                 </div>
               ))}
             </div>

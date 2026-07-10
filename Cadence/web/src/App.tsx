@@ -6,6 +6,7 @@ import { isUserTask } from './lib/tasks';
 import { getLoadSummary, getWaitingOnOthers } from './lib/selectors';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
+import { AceUiProvider } from './lib/aceUi';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { Today } from './screens/Today'; // eager — the default landing screen
 
@@ -185,9 +186,8 @@ export function App() {
   }, [session, inviteToken]);
 
   const badges = useMemo(() => ({
-    // Rodney To Do badge = overdue in Rodney's own lane. Quick Capture badge =
-    // unprocessed captures waiting to be filed. People badge = Waiting / owed
-    // by others. Keep these aligned with Control vocabulary.
+    // Tasks badge = overdue in Rodney's own lane. Inbox badge = unprocessed
+    // captures waiting to be triaged. People badge = Waiting / owed by others.
     tasks: { count: getLoadSummary(data.work_items).overdue, cls: 'red' },
     inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed).length, cls: '' },
     people: { count: getWaitingOnOthers(data.work_items).length, cls: 'blue' },
@@ -274,6 +274,7 @@ export function App() {
   };
 
   return (
+    <AceUiProvider>
     <div id="app">
       {isOffline && (
         <div className="offline-banner">
@@ -308,5 +309,6 @@ export function App() {
         </Suspense>
       </div>
     </div>
+    </AceUiProvider>
   );
 }

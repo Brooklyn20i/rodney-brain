@@ -422,7 +422,7 @@ serve(async (req) => {
   }
 
   try {
-    let payload: { message?: unknown; request_id?: unknown; workspace_id?: unknown };
+    let payload: { message?: unknown; request_id?: unknown; workspace_id?: unknown; kind?: unknown };
     try {
       payload = await req.json();
     } catch {
@@ -439,6 +439,12 @@ serve(async (req) => {
       return json({ error: "A valid request_id (UUID) is required." }, 400);
     }
     const requestId = payload.request_id.trim();
+    // Optional turn kind (e.g. "briefing") so distinct message classes are
+    // queryable/stylable. Constrained to a short slug — it's metadata, not
+    // content.
+    const kind = typeof payload.kind === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(payload.kind.trim())
+      ? payload.kind.trim()
+      : null;
     const requestedWorkspaceId = typeof payload.workspace_id === "string" && payload.workspace_id.trim()
       ? payload.workspace_id.trim()
       : null;
@@ -498,7 +504,7 @@ serve(async (req) => {
         recipient_key: "agent:ace",
         body: message,
         status: "processing",
-        metadata: { request_id: requestId },
+        metadata: { request_id: requestId, ...(kind ? { kind } : {}) },
       })
       .select("id")
       .single();
@@ -591,7 +597,7 @@ serve(async (req) => {
         recipient_key: "agent:ace",
         body: replyHtml,
         status: outcome.status === "ok" ? "processed" : "failed",
-        metadata: { request_id: requestId, outcome: outcome.status },
+        metadata: { request_id: requestId, outcome: outcome.status, ...(kind ? { kind } : {}) },
       });
       if (replyInsertError) {
         // Couldn't persist the outcome — funnel into the recorded-failure path.

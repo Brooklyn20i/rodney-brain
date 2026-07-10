@@ -32,6 +32,7 @@ export interface Project {
   name: string; goal: string; status: ProjectStatus; health: Health;
   owner: string; target_date: string | null; next_action: string; color: string;
   pillar_id?: string; kpi_ids?: string[]; // strategy linkage (migration 0006)
+  portfolio?: string | null; // free-text grouping label (migration 0043); null = legacy name heuristics
   created_at: string; updated_at: string; deleted_at: string | null;
 }
 export interface Milestone {

@@ -5,6 +5,7 @@ import {
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
   getCalendarEvents, groupEventsByDate, getDataHygieneIssues,
+  getStaleTasks, getStaleProjects,
 } from '../selectors';
 import { todayStr, addDaysStr } from '../util';
 import type { WorkItem, Project, Milestone, ProjectUpdate, Decision } from '../types';
@@ -244,6 +245,65 @@ describe('groupProjectsByPortfolio', () => {
     ];
     const labels = groupProjectsByPortfolio(projects).map((g) => g.label);
     expect(labels).toEqual(['RAPID Portfolio', 'Strategic', 'Active', 'On Hold', 'Completed']);
+  });
+
+  it('prefers the explicit portfolio column over the legacy name heuristics', () => {
+    const projects = [
+      // Name matches the RAPID regex, but the column says otherwise — column wins.
+      proj({ id: '1', name: 'RAPID ITPPM', portfolio: 'Ops Excellence', status: 'active' }),
+      proj({ id: '2', name: 'Plain untagged project', status: 'active' }),
+    ];
+    const groups = groupProjectsByPortfolio(projects);
+    expect(groups.map((g) => g.label)).toEqual(['Ops Excellence', 'Active']);
+    expect(groups[0].projects[0].id).toBe('1');
+  });
+
+  it('falls back to name heuristics while portfolio is null (pre-migration rows)', () => {
+    const projects = [
+      proj({ id: '1', name: 'Tendering revamp', portfolio: null, status: 'active' }),
+      proj({ id: '2', name: 'ProMaCe Reset', portfolio: '', status: 'active' }),
+    ];
+    const labels = groupProjectsByPortfolio(projects).map((g) => g.label);
+    expect(labels).toEqual(['RAPID Portfolio', 'Strategic']);
+  });
+
+  it('keeps historical portfolios first and sorts new labels alphabetically', () => {
+    const projects = [
+      proj({ id: '1', name: 'Z', portfolio: 'Zeta Works', status: 'active' }),
+      proj({ id: '2', name: 'A', portfolio: 'Alpha Bets', status: 'active' }),
+      proj({ id: '3', name: 'S', portfolio: 'Strategic', status: 'active' }),
+      proj({ id: '4', name: 'R', portfolio: 'RAPID Portfolio', status: 'active' }),
+    ];
+    const labels = groupProjectsByPortfolio(projects).map((g) => g.label);
+    expect(labels).toEqual(['RAPID Portfolio', 'Strategic', 'Alpha Bets', 'Zeta Works']);
+  });
+});
+
+// ── staleness flags ────────────────────────────────────────────────────────────
+describe('getStaleTasks / getStaleProjects', () => {
+  it('flags open filed tasks untouched for 14+ days, oldest first', () => {
+    const items = [
+      wi({ id: 'fresh', updated_at: addDaysStr(-2) }),
+      wi({ id: 'stale2', updated_at: addDaysStr(-20) }),
+      wi({ id: 'stale1', updated_at: addDaysStr(-40) }),
+      wi({ id: 'doneStale', updated_at: addDaysStr(-40), done: true }),
+      wi({ id: 'inboxedStale', updated_at: addDaysStr(-40), inboxed: true }),
+    ];
+    expect(getStaleTasks(items).map((w) => w.id)).toEqual(['stale1', 'stale2']);
+  });
+
+  it('flags active projects with no update or record change in the window', () => {
+    const projects = [
+      proj({ id: 'stale', name: 'Stale', updated_at: addDaysStr(-30) }),
+      proj({ id: 'touched', name: 'Touched', updated_at: addDaysStr(-2) }),
+      proj({ id: 'updated', name: 'Updated', updated_at: addDaysStr(-30) }),
+      proj({ id: 'held', name: 'Held', status: 'onHold', updated_at: addDaysStr(-90) }),
+    ];
+    const updates = [
+      upd({ project_id: 'updated', created_at: addDaysStr(-3) }),
+      upd({ project_id: 'stale', created_at: addDaysStr(-40) }),
+    ];
+    expect(getStaleProjects(projects, updates).map((p) => p.id)).toEqual(['stale']);
   });
 });
 

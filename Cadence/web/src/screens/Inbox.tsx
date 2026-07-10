@@ -4,26 +4,12 @@ import type { WorkItem } from '../lib/types';
 import { TaskRow, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
-import { todayStr, addDaysStr, priorityScore } from '../lib/util';
+import { priorityScore } from '../lib/util';
 import { isUserTask } from '../lib/tasks';
+import { bucketForDue, DUE_BUCKETS, DUE_BUCKET_ORDER } from '../lib/dateBuckets';
+import type { DueBucketKey } from '../lib/dateBuckets';
 
-type BucketKey = 'overdue' | 'today' | 'week' | 'later' | 'none';
-const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
-  { key: 'overdue', label: 'Overdue', color: 'var(--red)' },
-  { key: 'today', label: 'Today', color: 'var(--orange)' },
-  { key: 'week', label: 'This Week', color: 'var(--accent)' },
-  { key: 'later', label: 'Later', color: 'var(--purple)' },
-  { key: 'none', label: 'No Date', color: 'var(--text3)' },
-];
-
-function bucketOf(due: string | null): BucketKey {
-  if (!due) return 'none';
-  const today = todayStr();
-  if (due < today) return 'overdue';
-  if (due === today) return 'today';
-  if (due <= addDaysStr(7)) return 'week';
-  return 'later';
-}
+const BUCKETS = DUE_BUCKET_ORDER.map((k) => DUE_BUCKETS[k]);
 
 export function Inbox({ onMenu }: { onMenu?: () => void }) {
   const { data, update } = useCadence();
@@ -37,9 +23,9 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
   // (the "Done triaging" button) clears `inboxed` and reveals it in its folders.
   const grouped = useMemo(() => {
     const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed);
-    const grouped: Record<BucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
-    open.forEach((w) => grouped[bucketOf(w.due_date)].push(w));
-    (['overdue', 'today', 'week', 'later'] as BucketKey[]).forEach((k) =>
+    const grouped: Record<DueBucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
+    open.forEach((w) => grouped[bucketForDue(w.due_date).key].push(w));
+    (['overdue', 'today', 'week', 'later'] as DueBucketKey[]).forEach((k) =>
       grouped[k].sort((a, b) => (a.due_date || '').localeCompare(b.due_date || '')));
     grouped.none.sort((a, b) => priorityScore(b) - priorityScore(a));
     return grouped;
@@ -50,12 +36,12 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Quick Capture" subtitle="Unprocessed captures — file each into Control or Filed Work" onMenu={onMenu}>
+      <ScreenHeader title="Inbox" subtitle="Unprocessed captures — triage each into its home" onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
       <div className="screen-content">
         {totalOpen === 0 ? (
-          <EmptyState icon="✓" title="Quick Capture is clear" sub="Nothing to triage. New quick captures land here." />
+          <EmptyState icon="✓" title="Inbox is clear" sub="Nothing to triage. New quick captures land here." />
         ) : BUCKETS.map(({ key, label, color }) => {
           const items = grouped[key];
           if (!items.length) return null;
@@ -65,7 +51,7 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
               {items.map((w) => (
                 <div key={w.id} className="inbox-triage-row">
                   <div style={{ flex: 1, minWidth: 0 }}><TaskRow w={w} onEdit={setEditing} /></div>
-                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Quick Capture"
+                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Inbox"
                     onClick={() => file(w)}>Done triaging</button>
                 </div>
               ))}

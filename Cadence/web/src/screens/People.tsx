@@ -4,9 +4,11 @@ import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
-import { autoColor, AVATAR_COLORS, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { autoColor, AVATAR_COLORS, initials, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isAgentTask } from '../lib/tasks';
+import { AceActionButton } from '../components/AceActionButton';
+import { meetingPrepPrompt } from '../lib/acePrompts';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -15,7 +17,6 @@ const isPersonLinked = (w: WorkItem, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
 
 const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const initials = (name: string) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
@@ -375,6 +376,10 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <AceActionButton
+            contextLabel={person.name}
+            actions={[{ label: 'Prep my 1:1', prompt: meetingPrepPrompt(person) }]}
+          />
           <button className="btn btn-secondary btn-sm" onClick={onEditPerson}>Edit</button>
         </div>
       </div>

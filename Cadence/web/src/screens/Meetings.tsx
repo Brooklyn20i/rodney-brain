@@ -5,12 +5,11 @@ import { ScreenHeader, Modal } from '../components/bits';
 import { MeetingNoteModal, parseMeeting } from '../components/MeetingNoteModal';
 import { serializeMeeting } from '../lib/meetingData';
 import type { ActionItem } from '../components/MeetingNoteModal';
-import { autoColor, AVATAR_COLORS, fmtDM, fmtDMY, todayStr } from '../lib/util';
+import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 
-const initials = (name: string) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('');
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
 

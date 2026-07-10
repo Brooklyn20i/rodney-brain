@@ -3,6 +3,7 @@
 
 import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
+import { bucketForDue } from './dateBuckets';
 import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject } from './tasks';
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
@@ -25,14 +26,14 @@ export interface TodoGroup {
 }
 
 export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
-  const today = todayStr();
-  const weekEnd = addDaysStr(7);
   const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor' && w.type !== 'decision');
   const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
   for (const w of mine) {
-    if (w.due_date && w.due_date < today) overdue.push(w);
-    else if (w.due_date === today) dueToday.push(w);
-    else if (w.due_date && w.due_date <= weekEnd) week.push(w);
+    // No-date items ride in "later" — the cockpit has no separate no-date lane.
+    const bucket = bucketForDue(w.due_date).key;
+    if (bucket === 'overdue') overdue.push(w);
+    else if (bucket === 'today') dueToday.push(w);
+    else if (bucket === 'week') week.push(w);
     else later.push(w);
   }
   overdue.sort(byDueThenPri); dueToday.sort(byPriThenDue); week.sort(byDueThenPri); later.sort(byPriThenDue);
@@ -259,11 +260,33 @@ export interface ProjectGroup {
   projects: Project[];
 }
 
+// Legacy name heuristics — used only while a project's `portfolio` column is
+// null (pre-migration-0043 rows). The explicit column always wins; these exist
+// so nothing re-buckets until each project is tagged.
 const isRapid = (p: Project) =>
   /\brapid\b|itppm|tendering|leadtime|substitution|approvals/i.test(p.name);
 
 const isStrategic = (p: Project) =>
   /promace|commercial tech|strategy|transformation|reset/i.test(p.name);
+
+const legacyPortfolio = (p: Project): string | null =>
+  isRapid(p) ? 'RAPID Portfolio' : isStrategic(p) ? 'Strategic' : null;
+
+// The portfolio a project displays under: explicit column first, then legacy
+// name heuristics, else null ("Active" bucket).
+export const portfolioOf = (p: Project): string | null =>
+  p.portfolio?.trim() || legacyPortfolio(p);
+
+// Every portfolio label in use — suggestions for the project portfolio picker.
+export function knownPortfolios(projects: Project[]): string[] {
+  const set = new Set<string>();
+  for (const p of projects) {
+    if (p.deleted_at) continue;
+    const label = portfolioOf(p);
+    if (label) set.add(label);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
 
 export function groupProjectsByPortfolio(projects: Project[]): ProjectGroup[] {
   const notDeleted = projects.filter((p) => !p.deleted_at);
@@ -271,13 +294,29 @@ export function groupProjectsByPortfolio(projects: Project[]): ProjectGroup[] {
   const onHold = notDeleted.filter((p) => p.status === 'onHold');
   const completed = notDeleted.filter((p) => p.status === 'completed');
 
-  const rapid = active.filter(isRapid);
-  const strategic = active.filter((p) => !isRapid(p) && isStrategic(p));
-  const other = active.filter((p) => !isRapid(p) && !isStrategic(p));
+  // Named portfolios in stable first-seen order, then untagged actives.
+  const byLabel = new Map<string, Project[]>();
+  const other: Project[] = [];
+  for (const p of active) {
+    const label = portfolioOf(p);
+    if (label) {
+      const list = byLabel.get(label);
+      if (list) list.push(p);
+      else byLabel.set(label, [p]);
+    } else other.push(p);
+  }
+
+  // Deterministic order: the historical portfolios keep their prominence,
+  // any new labels follow alphabetically.
+  const LEGACY_ORDER = ['RAPID Portfolio', 'Strategic'];
+  const labels = [...byLabel.keys()].sort((a, b) => {
+    const ia = LEGACY_ORDER.indexOf(a), ib = LEGACY_ORDER.indexOf(b);
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    return a.localeCompare(b);
+  });
 
   const groups: ProjectGroup[] = [];
-  if (rapid.length) groups.push({ label: 'RAPID Portfolio', projects: rapid });
-  if (strategic.length) groups.push({ label: 'Strategic', projects: strategic });
+  for (const label of labels) groups.push({ label, projects: byLabel.get(label)! });
   if (other.length) groups.push({ label: 'Active', projects: other });
   if (onHold.length) groups.push({ label: 'On Hold', projects: onHold });
   if (completed.length) groups.push({ label: 'Completed', projects: completed });
@@ -360,6 +399,43 @@ export function getHealthEvidence(
   };
 }
 
+// ── Staleness flags (proactive, no LLM) ───────────────────────────────────────
+// Deterministic "this is going stale" detection: open work untouched for
+// STALE_DAYS, and active projects with neither a status update nor any record
+// change in that window. Instant, free, offline-capable — the first tier of
+// proactive Ace. (getDataHygieneIssues remains the deeper review queue.)
+export const STALE_DAYS = 14;
+
+export function getStaleTasks(items: WorkItem[], days = STALE_DAYS): WorkItem[] {
+  const threshold = addDaysStr(-days);
+  return items
+    .filter((w) => isFiledTask(w) && !!w.updated_at && w.updated_at.slice(0, 10) <= threshold)
+    .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''));
+}
+
+export function getStaleProjects(
+  projects: Project[],
+  updates: ProjectUpdate[],
+  days = STALE_DAYS,
+): Project[] {
+  const threshold = addDaysStr(-days);
+  const lastUpdateByProject = new Map<string, string>();
+  for (const u of updates) {
+    if (u.deleted_at) continue;
+    const prev = lastUpdateByProject.get(u.project_id);
+    if (!prev || u.created_at > prev) lastUpdateByProject.set(u.project_id, u.created_at);
+  }
+  return projects
+    .filter((p) => {
+      if (p.status !== 'active' || p.deleted_at) return false;
+      const touched = p.updated_at?.slice(0, 10) || '';
+      const lastUpdate = (lastUpdateByProject.get(p.id) || '').slice(0, 10);
+      const freshest = touched > lastUpdate ? touched : lastUpdate;
+      return !!freshest && freshest <= threshold;
+    })
+    .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''));
+}
+
 // ── Data hygiene review queue ─────────────────────────────────────────────────
 // Read-only detection for confusing Work records. This deliberately returns
 // review prompts, not repair instructions: the UI must route Rodney/Kobe to the
@@ -407,7 +483,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         id: `stale-quick-capture:${w.id}`,
         kind: 'stale-quick-capture',
         title: w.title,
-        detail: 'Quick Capture older than 7 days — review before filing or dismissing.',
+        detail: 'Inbox capture older than 7 days — review before filing or dismissing.',
         gate: 'routine',
         route: 'inbox',
         refId: w.id,
@@ -419,7 +495,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         id: `filed-without-home:${w.id}`,
         kind: 'filed-without-home',
         title: w.title,
-        detail: 'Filed Work has no person or project home — choose where it belongs before tidying.',
+        detail: 'Filed task has no person or project home — choose where it belongs before tidying.',
         gate: 'routine',
         route: 'tasks',
         refId: w.id,

@@ -6,7 +6,8 @@ import { uid } from '../lib/meetingData';
 import { inferHealthReason } from '../lib/selectors';
 import { sanitizeHtml } from '../lib/sanitize';
 import { isOverdue, fmtDM } from '../lib/util';
-import { supabase } from '../lib/supabase';
+import { sendAceTurn, createTurnKeeper } from '../lib/aceClient';
+import { meetingPrepPrompt } from '../lib/acePrompts';
 import { useCadence } from '../lib/store';
 
 const isPersonLinked = (w: { person_id: string | null; related_entities?: { type: string; id: string }[] }, id: string) =>
@@ -42,11 +43,10 @@ export function PrepBriefPanel({
   const [aceBusy, setAceBusy] = useState(false);
   const [aceError, setAceError] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
-  // Idempotency key for the in-flight brief, bound to the exact prompt it was
-  // minted for. Reused across retries of that same prompt (so an ambiguous
-  // accepted-but-response-lost send can't duplicate the brief); cleared once the
-  // function accepts the turn. A different prompt/person mints a fresh id.
-  const pendingBrief = useRef<{ id: string; prompt: string } | null>(null);
+  // Idempotency keeper: reuses the same request_id across retries of the same
+  // brief prompt (so an ambiguous accepted-but-response-lost send can't
+  // duplicate it); a different prompt/person mints a fresh id.
+  const briefKeeper = useRef(createTurnKeeper());
 
   const alreadyInAgenda = useMemo(
     () => new Set(agenda.map((a) => a.title.toLowerCase())),
@@ -102,38 +102,19 @@ export function PrepBriefPanel({
     if (aceBusy) return;
     setAceBusy(true);
     setAceError(null);
-    const prompt = `Summarise what I should cover in my 1:1 with ${person.name} today. Include key open actions, any blockers, and suggested agenda items based on our recent history.`;
-    // Reuse the prior id only when retrying the exact same prompt; mint a fresh
-    // one when the prompt (and thus the person) changed. This keeps an ambiguous
-    // accepted-but-response-lost retry from creating a second brief server-side.
-    const requestId = pendingBrief.current?.prompt === prompt ? pendingBrief.current.id : crypto.randomUUID();
-    pendingBrief.current = { id: requestId, prompt };
-    try {
-      const { error } = await supabase.functions.invoke('ace-chat', {
-        body: {
-          message: prompt,
-          request_id: requestId,
-          ...(workspace?.id ? { workspace_id: workspace.id } : {}),
-        },
-      });
-      if (error) {
-        // Not accepted — keep the id+prompt so an identical retry reuses it,
-        // surface the failure, and never claim "sent".
-        console.error('Prep brief → Ace failed:', error);
-        setAceError("Couldn't reach Ace — try again.");
-      } else {
-        // Accepted — this turn is done; a later brief mints a fresh id.
-        pendingBrief.current = null;
-        setAceSent(true);
-      }
-    } catch (e) {
-      // Transport error: the turn may not have been accepted. Keep the id+prompt
-      // for an idempotent retry of the same prompt.
-      console.error('Prep brief → Ace failed:', e);
+    const prompt = meetingPrepPrompt(person);
+    const requestId = briefKeeper.current.idFor(prompt);
+    const result = await sendAceTurn({ message: prompt, requestId, workspaceId: workspace?.id });
+    if (result.accepted) {
+      // Accepted — this turn is done; a later brief mints a fresh id.
+      briefKeeper.current.accepted();
+      setAceSent(true);
+    } else {
+      // Not accepted — the keeper retains the id so an identical retry reuses
+      // it; surface the failure and never claim "sent".
       setAceError("Couldn't reach Ace — try again.");
-    } finally {
-      setAceBusy(false);
     }
+    setAceBusy(false);
   };
 
   const hasFromLast = deferredAgenda.length > 0 || carryForward.length > 0;

@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const h = vi.hoisted(() => ({ invoke: vi.fn(), store: { workspace: { id: 'ws1' } } }));
 vi.mock('../../lib/supabase', () => ({
+  isConfigured: true,
   supabase: { functions: { invoke: (...args: unknown[]) => h.invoke(...args) } },
 }));
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
