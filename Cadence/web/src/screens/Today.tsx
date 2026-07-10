@@ -107,7 +107,7 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Rodney To Do / Control" subtitle={`${fmtHeaderDate(todayStr())} · Needs Rodney / Do now, Decide, Waiting, With Kobe`} onMenu={onMenu}>
+      <ScreenHeader title="Today" subtitle={`${fmtHeaderDate(todayStr())} · Do now · Decide · Waiting · With Kobe`} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Quick Add</button>
       </ScreenHeader>
 

@@ -17,15 +17,15 @@ async function navTo(page: Page, label: string) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 test('boots straight to Control (no login gate)', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Rodney To Do / Control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
   await expect(page.getByText(/To do · 1 overdue/)).toBeVisible();
   await expect(page.locator('#sidebar').getByRole('button', { name: /\bHorizon\b/ })).toHaveCount(0);
-  await expect(page.locator('#sidebar').getByRole('button', { name: /Rodney To Do/ })).toBeVisible();
-  await expect(page.locator('#sidebar').getByRole('button', { name: /\bDashboard\b/ })).toHaveCount(0);
+  await expect(page.locator('#sidebar').getByRole('button', { name: /\bToday\b/ })).toBeVisible();
+  await expect(page.locator('#sidebar').getByRole('button', { name: /\bDashboard\b/ })).toBeVisible();
 });
 
 // ── Navigation smoke: every screen renders a header in a real browser ───────────
-for (const label of ['Board', 'Filed Work', 'Quick Capture', 'Projects', 'People', 'Meetings', 'Notes', 'Review']) {
+for (const label of ['Board', 'Tasks', 'Inbox', 'Dashboard', 'Projects', 'People', 'Meetings', 'Notes', 'Review']) {
   test(`navigates to ${label} without crashing`, async ({ page }) => {
     await navTo(page, label);
     await expect(page.locator('.screen-header h1').first()).toBeVisible();
@@ -48,7 +48,7 @@ test('iPad review mode presents the compact Work review queue without clutter', 
   await expect(page.getByRole('heading', { name: 'Review Mode' })).toBeVisible();
   const queue = page.getByLabel('Compact work review queue');
   await expect(queue).toBeVisible();
-  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Quick Capture', 'Projects', 'Data hygiene']) {
+  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Inbox', 'Projects', 'Data hygiene']) {
     await expect(queue.getByText(label)).toBeVisible();
   }
   await expect(page.getByLabel('Data hygiene review queue')).toBeVisible();
@@ -78,15 +78,15 @@ test('board moves a task to another person and it leaves the old column', async 
   await expect(annaCol).not.toContainText('Overdue review');
 });
 
-// ── Quick Add is capture-first: an untagged note lands in Quick Capture to triage ─
-test('creates a capture via Quick Add and it lands in Quick Capture', async ({ page }) => {
-  await navTo(page, 'Filed Work');
+// ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ─
+test('creates a capture via Quick Add and it lands in the Inbox', async ({ page }) => {
+  await navTo(page, 'Tasks');
   await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
-  // Capture-first: it waits in Quick Capture for triage rather than joining the filed task list.
-  await navTo(page, 'Quick Capture');
+  // Capture-first: it waits in the Inbox for triage rather than joining the filed task list.
+  await navTo(page, 'Inbox');
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });
 

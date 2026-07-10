@@ -36,12 +36,12 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Quick Capture" subtitle="Unprocessed captures — file each into Control or Filed Work" onMenu={onMenu}>
+      <ScreenHeader title="Inbox" subtitle="Unprocessed captures — triage each into its home" onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
       <div className="screen-content">
         {totalOpen === 0 ? (
-          <EmptyState icon="✓" title="Quick Capture is clear" sub="Nothing to triage. New quick captures land here." />
+          <EmptyState icon="✓" title="Inbox is clear" sub="Nothing to triage. New quick captures land here." />
         ) : BUCKETS.map(({ key, label, color }) => {
           const items = grouped[key];
           if (!items.length) return null;
@@ -51,7 +51,7 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
               {items.map((w) => (
                 <div key={w.id} className="inbox-triage-row">
                   <div style={{ flex: 1, minWidth: 0 }}><TaskRow w={w} onEdit={setEditing} /></div>
-                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Quick Capture"
+                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Inbox"
                     onClick={() => file(w)}>Done triaging</button>
                 </div>
               ))}

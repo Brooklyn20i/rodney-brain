@@ -143,7 +143,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
     { id: 'decide', title: '⚖ Decide', items: [`${review.decide} decision(s) pending`] },
     { id: 'waiting', title: '✦ Waiting / owed by others', items: [`Follow up on ${review.waiting} outstanding item(s)`] },
     { id: 'with-kobe', title: '⚡ With Kobe / delegated to Kobe', items: [`Check ${review.withKobe} delegated item(s)`] },
-    { id: 'quick-capture', title: '📥 Quick Capture / untriaged', items: [`Clear ${review.quickCapture} untriaged capture(s)`] },
+    { id: 'quick-capture', title: '📥 Inbox / untriaged', items: [`Clear ${review.quickCapture} untriaged capture(s)`] },
     { id: 'projects-attention', title: '▤ Projects needing attention', items: [`Review ${review.projects.length} active project(s) with amber/red health, no next action, decisions or waiting items`] },
     { id: 'capture-clear', title: '📅 Capture / clear', items: ['Capture anything still in your head', 'Close or defer anything that is not for this week'] },
   ];
@@ -167,7 +167,7 @@ export function Review({ onMenu }: { onMenu?: () => void }) {
           <ReviewQueueCard title="Decide" count={review.decide} hint="pending decisions" tone="orange" />
           <ReviewQueueCard title="Waiting" count={review.waiting} hint="owed by others" tone="teal" />
           <ReviewQueueCard title="With Kobe" count={review.withKobe} hint="delegated to Kobe" tone="purple" />
-          <ReviewQueueCard title="Quick Capture" count={review.quickCapture} hint="untriaged" tone="muted" />
+          <ReviewQueueCard title="Inbox" count={review.quickCapture} hint="untriaged" tone="muted" />
           <ReviewQueueCard title="Projects" count={review.projects.length} hint="need attention" tone={review.projects.length ? 'orange' : 'muted'} />
           <ReviewQueueCard title="Data hygiene" count={review.hygiene.length} hint="needs review" tone={review.hygiene.length ? 'orange' : 'muted'} />
         </div>

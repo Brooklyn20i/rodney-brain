@@ -151,12 +151,17 @@ describe('Kobe Ask Kobe message loop', () => {
 
 // ── Work navigation ─────────────────────────────────────────────────────────────
 describe('Work navigation', () => {
-  it('puts Rodney To Do / Control first and keeps database-style task browsing secondary', () => {
+  it('puts the Control cockpit first with plain names, and Dashboard in the nav', () => {
     expect(WORK_NAV[0].section).toBe('Control');
     expect(WORK_NAV[0].items.map((i) => i.label)).toEqual([
-      'Rodney To Do', 'Quick Capture', 'Calendar', 'Filed Work', 'Notes',
+      'Today', 'Dashboard', 'Inbox', 'Calendar',
     ]);
-    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'dashboard')).toBeUndefined();
+    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'dashboard')).toBeDefined();
+    // Working surfaces live under Work with plain vocabulary.
+    const work = WORK_NAV.find((g) => g.section === 'Work');
+    expect(work!.items.map((i) => i.label)).toEqual([
+      'Projects', 'Tasks', 'People', 'Meetings', 'Notes', 'Board',
+    ]);
   });
 
   it('makes Ace the sole in-app Work agent — Kobe is no longer a Work nav surface', () => {
@@ -298,13 +303,13 @@ describe('Control workflow', () => {
 
 // ── Tasks ────────────────────────────────────────────────────────────────────────
 describe('Tasks workflow', () => {
-  it('reads as Filed Work, not the primary Control cockpit', () => {
+  it('reads as Tasks, not the primary Control cockpit', () => {
     setStore({ data: { work_items: [
       wi({ id: 't1', title: 'Overdue one', due_date: addDaysStr(-1) }),
       wi({ id: 't2', title: 'Later one', due_date: addDaysStr(20) }),
     ]}});
     render(<Tasks onMenu={() => {}} />);
-    expect(screen.getByRole('heading', { name: 'Filed Work' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
     expect(screen.getByText('Overdue one')).toBeInTheDocument();
     expect(screen.getByText('Later one')).toBeInTheDocument();
     expect(screen.getByText(/2 open · 1 overdue/)).toBeInTheDocument();
@@ -323,7 +328,7 @@ describe('Tasks workflow', () => {
     expect(screen.getByText('Hers')).toBeInTheDocument();
   });
 
-  it('files an unassigned meeting action directly into Filed Work', async () => {
+  it('files an unassigned meeting action directly into Tasks', async () => {
     const body = JSON.stringify({
       agenda: [],
       actions: [{ id: 'a1', title: 'Unassigned meeting action', owner: 'me', due: '', done: false, pushed: false }],
@@ -332,7 +337,7 @@ describe('Tasks workflow', () => {
     setStore({ data: { notes: [{ id: 'n1', title: 'Ops sync', folder: '__mtg__team', body }] } });
     render(<Tasks onMenu={() => {}} />);
     fireEvent.click(screen.getByText('File →'));
-    fireEvent.click(screen.getByText('↓ Send to Filed Work'));
+    fireEvent.click(screen.getByText('↓ Send to Tasks'));
     await Promise.resolve();
     await Promise.resolve();
     expect(h.store.insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
@@ -340,7 +345,7 @@ describe('Tasks workflow', () => {
       inboxed: false,
     }));
     expect(h.store.update).toHaveBeenCalledWith('notes', 'n1', expect.objectContaining({
-      body: expect.stringContaining('"pushed_to":"Filed Work"'),
+      body: expect.stringContaining('"pushed_to":"Tasks"'),
     }));
   });
 });
@@ -352,8 +357,8 @@ describe('Inbox workflow', () => {
       wi({ id: 'in1', title: 'Captured note', inboxed: true }),
     ]}});
     render(<Inbox onMenu={() => {}} />);
-    expect(screen.getByRole('heading', { name: 'Quick Capture' })).toBeInTheDocument();
-    expect(screen.getByText('Unprocessed captures — file each into Control or Filed Work')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
+    expect(screen.getByText('Unprocessed captures — triage each into its home')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
     expect(screen.getByText('Captured note')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Done triaging' }));
@@ -385,7 +390,7 @@ describe('Review workflow', () => {
     expect(within(queue).getByText('Decide')).toBeInTheDocument();
     expect(within(queue).getByText('Waiting')).toBeInTheDocument();
     expect(within(queue).getByText('With Kobe')).toBeInTheDocument();
-    expect(within(queue).getByText('Quick Capture')).toBeInTheDocument();
+    expect(within(queue).getByText('Inbox')).toBeInTheDocument();
     expect(within(queue).getByText('Projects')).toBeInTheDocument();
     expect(within(queue).getByText('Data hygiene')).toBeInTheDocument();
     expect(screen.getByLabelText('Data hygiene review queue')).toBeInTheDocument();

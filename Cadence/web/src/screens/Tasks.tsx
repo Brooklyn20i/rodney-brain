@@ -129,7 +129,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       const fresh = data.notes.find((n) => n.id === action.noteId);
       if (fresh) {
         const { data: parsed, raw } = parseMeeting(fresh.body);
-        const label = target ? target.name : 'Filed Work';
+        const label = target ? target.name : 'Tasks';
         const updated = parsed.actions.map((a) =>
           a.id === action.id ? { ...a, pushed: true, pushed_to: label } : a);
         await update('notes', action.noteId, { body: serializeMeeting({ ...parsed, actions: updated }, raw) } as Partial<Note>);
@@ -142,12 +142,12 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
   const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
   const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
 
-  const subtitle = `Filed work browser · ${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
+  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
     + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
 
   return (
     <>
-      <ScreenHeader title="Filed Work" subtitle={subtitle} onMenu={onMenu}>
+      <ScreenHeader title="Tasks" subtitle={subtitle} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
@@ -184,7 +184,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
         )}
 
         {groups.length === 0 && openActions.length === 0 && (
-          <EmptyState icon="✓" title="Filed Work is clear" sub="Capture a task when needed; quick captures still land in Quick Capture for triage." />
+          <EmptyState icon="✓" title="Tasks are clear" sub="Capture a task when needed; quick captures land in the Inbox for triage." />
         )}
 
         {groups.map((g) => (
@@ -251,7 +251,7 @@ function MeetingActionRow({ action, people, projects, onFile }: {
                 <div className="send-picker-section">Or</div>
                 <button className="send-picker-option"
                   onClick={() => { onFile(action, null); setOpen(false); }}>
-                  ↓ Send to Filed Work
+                  ↓ Send to Tasks
                 </button>
               </div>
             </>
