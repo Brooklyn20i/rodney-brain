@@ -36,7 +36,12 @@ export type ExerciseTracking =
   | 'cardio_duration'
   | 'cardio_interval';
 
-export type WorkoutStatus = 'in_progress' | 'completed' | 'skipped';
+// `initializing` is a transient staging status used only while a session is
+// being created (workout row inserted, set batch not yet written). No screen
+// surfaces it — every reader filters for `in_progress`/`completed` — so an
+// interrupted start can never present an empty active session. It is flipped to
+// `in_progress` (activation) once the set batch lands.
+export type WorkoutStatus = 'initializing' | 'in_progress' | 'completed' | 'skipped';
 
 export type CardioKind =
   | 'run'

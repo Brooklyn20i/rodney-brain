@@ -1,0 +1,13 @@
+-- Atomic-start staging status for workouts.
+--
+-- A guided session is created as a workout row plus its set rows. Those are two
+-- writes, so an interruption between them could strand an EMPTY `in_progress`
+-- workout that then surfaces as a broken active session. To make start
+-- user-atomic without a cross-table transaction on the client, the workout is
+-- first inserted as `initializing` (a status NO screen surfaces — every reader
+-- filters for `in_progress`/`completed`), its set batch is written, and only
+-- then is it flipped to `in_progress` (activation). An interrupted start leaves
+-- at most an invisible `initializing` row, never an active empty session.
+--
+-- Additive + idempotent: adds one enum value; safe to re-run.
+alter type fitness.workout_status add value if not exists 'initializing';

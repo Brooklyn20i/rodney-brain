@@ -176,6 +176,16 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setRestLeft(null);
     clearRestTimer(localStore());
   };
+  // Extending rest must PERSIST the new absolute deadline, or a remount would
+  // restore the pre-extension timer and drop the added seconds.
+  const extendRest = (seconds = 30) => {
+    const endsAt = (restEndsAt.current ?? Date.now()) + seconds * 1000;
+    restEndsAt.current = endsAt;
+    const total = restTotal + seconds;
+    setRestTotal(total);
+    setRestLeft((l) => (l ?? 0) + seconds);
+    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total });
+  };
 
   // Local input drafts so typing doesn't hit Supabase per keystroke.
   const [drafts, setDrafts] = useState<Record<string, { weight?: string; reps?: string; dur?: string }>>({});
@@ -264,10 +274,14 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   // is fully created (or rolled back on failure).
   const [startingId, setStartingId] = useState<string | null>(null);
   const beginSession = async (day: ProgramDay | null) => {
-    // Pre-generate the workout id and raise the initialization gate BEFORE the
-    // optimistic insert. The store adds the in_progress row synchronously inside
-    // insert(), so without this the active screen would flash its interactive
-    // add/cardio/finish controls in the gap before startingId was set.
+    // Production-atomic start. The workout row and its set rows are two writes,
+    // so we stage: insert the workout as `initializing` (a status NO screen
+    // surfaces — every reader filters for in_progress/completed), write the set
+    // batch, then flip to `in_progress` (activation). An interruption anywhere
+    // before activation leaves at most an invisible `initializing` row, never a
+    // stranded empty active session; a failure rolls it back best-effort, and
+    // even if that cleanup fails the row stays invisible. `pendingAction ===
+    // 'start'` gates the UI throughout so nothing interactive renders mid-seed.
     const newWorkoutId = crypto.randomUUID();
     setStartingId(newWorkoutId);
     try {
@@ -279,7 +293,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         program_day_id: day ? day.id : null,
         week_number: pos?.week ?? null,
         name: day ? stripDayPrefix(day.name) : 'Ad-hoc session',
-        status: 'in_progress',
+        status: 'initializing',
         started_at: new Date().toISOString(),
         completed_at: null,
         notes: '',
@@ -288,9 +302,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         const slots = data.program_exercises
           .filter((s) => s.program_day_id === day.id)
           .sort((a, b) => a.ex_order - b.ex_order);
-        // Build every set row up front, then insert them in ONE atomic batch —
-        // no interactive half-loaded session, and a failure leaves nothing
-        // partial (we roll the empty workout back).
+        // Build every set row up front, then insert them in ONE atomic batch.
         const rows: Partial<WorkoutSet>[] = [];
         for (const slot of slots) {
           const exercise = data.exercises.find((e) => e.id === slot.exercise_id);
@@ -317,10 +329,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         }
         if (rows.length) await insertMany('workout_sets', rows);
       }
+      // Activation: only now does the session become visible/active.
+      await update('workouts', newWorkoutId, { status: 'in_progress' } as never);
       setFocusIndex(0);
     } catch (err) {
-      // Seeding failed → don't strand an empty in_progress workout. Best-effort
-      // rollback so the user lands back on the clean start screen.
+      // Seeding failed → best-effort rollback. The workout is still
+      // `initializing` (never surfaced), so even a failed remove can't strand a
+      // visible empty session.
       await remove('workouts', newWorkoutId);
       throw err;
     } finally {
@@ -672,6 +687,25 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     setDrafts({});
   };
 
+  // Session initialization gate. While a session is being seeded the workout is
+  // still `initializing` (so `active` is undefined) — show a non-interactive
+  // setup state, never the start screen or a half-populated session, until the
+  // set batch has landed and the workout is activated. Gated on the lifecycle
+  // 'start' action and (once active) the pre-generated startingId, so no
+  // mutating control can render mid-seed.
+  if (pendingAction === 'start' || (active && startingId === active.id)) {
+    return (
+      <>
+        <ScreenHeader title="Workout" subtitle="Setting up your session…" onMenu={onMenu} />
+        <div className="screen-content">
+          <div className="cf-callout" role="status" aria-live="polite">
+            Setting up your session…
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // ── Render: no active session -> start view ─────────────────────────────
   if (!active) {
     const days = activeProgram
@@ -713,7 +747,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                     Up next: <strong>{stripDayPrefix(suggested.name)}</strong>
                     {suggested.focus ? ` — ${suggested.focus}` : ''}
                     <div style={{ marginTop: 10 }}>
-                      <button className="btn btn-primary" onClick={() => startSession(suggested)} disabled={pendingAction === 'start'}>
+                      <button className="btn btn-primary" onClick={() => startSession(suggested)}>
                         ▶ Start {stripDayPrefix(suggested.name)}
                       </button>
                     </div>
@@ -725,7 +759,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                       <div className="pick-title">{stripDayPrefix(d.name)}</div>
                       {d.focus && <div className="pick-sub">{d.focus}</div>}
                     </div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)} disabled={pendingAction === 'start'}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => startSession(d)}>
                       Start
                     </button>
                   </div>
@@ -739,28 +773,10 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </div>
           )}
           <Card title="Ad-hoc">
-            <button className="btn btn-secondary" onClick={() => startSession(null)} disabled={pendingAction === 'start'}>
+            <button className="btn btn-secondary" onClick={() => startSession(null)}>
               Start empty session
             </button>
           </Card>
-        </div>
-      </>
-    );
-  }
-
-  // While a session is still being seeded, show a non-interactive setup state
-  // rather than a half-populated set list with live add/cardio controls. Gated
-  // on BOTH the pre-generated startingId and the lifecycle 'start' action, so
-  // no interactive control can render between the workout row appearing and its
-  // set batch settling.
-  if (startingId === active.id || pendingAction === 'start') {
-    return (
-      <>
-        <ScreenHeader title={stripDayPrefix(active.name || 'Session')} subtitle="Setting up your session…" onMenu={onMenu} />
-        <div className="screen-content">
-          <div className="cf-callout" role="status" aria-live="polite">
-            Setting up your session…
-          </div>
         </div>
       </>
     );
@@ -1220,14 +1236,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
         </span>
         {restLeft > 0 && (
-          <button
-            className="rest-timer-skip"
-            onClick={() => {
-              restEndsAt.current = (restEndsAt.current ?? Date.now()) + 30_000;
-              setRestTotal((t) => t + 30);
-              setRestLeft((l) => (l ?? 0) + 30);
-            }}
-          >
+          <button className="rest-timer-skip" onClick={() => extendRest(30)}>
             +30s
           </button>
         )}
