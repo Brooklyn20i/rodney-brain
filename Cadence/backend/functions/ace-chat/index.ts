@@ -211,6 +211,38 @@ async function resolveWorkspaceId(
   return { workspaceId: null, error: "Could not resolve your Cadence workspace." };
 }
 
+async function validateWorkspaceLinks(
+  supabase: ReturnType<typeof createClient>,
+  workspaceId: string,
+  input: Record<string, unknown>,
+): Promise<string | null> {
+  if (input.project_id) {
+    if (typeof input.project_id !== "string") return "project_id must be a string.";
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", input.project_id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error) return error.message;
+    if (!data?.id) return "Project is not in the active workspace.";
+  }
+
+  if (input.person_id) {
+    if (typeof input.person_id !== "string") return "person_id must be a string.";
+    const { data, error } = await supabase
+      .from("people")
+      .select("id")
+      .eq("id", input.person_id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error) return error.message;
+    if (!data?.id) return "Person is not in the active workspace.";
+  }
+
+  return null;
+}
+
 async function executeTool(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -222,7 +254,7 @@ async function executeTool(
 
   switch (name) {
     case "list_tasks": {
-      let q = supabase.from("work_items").select("*").is("deleted_at", null);
+      let q = supabase.from("work_items").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
       if ("done" in input) q = q.eq("done", input.done);
       if (input.priority) q = q.eq("priority", input.priority);
       if (input.overdue) q = q.lt("due_date", today).eq("done", false);
@@ -239,7 +271,7 @@ async function executeTool(
     }
 
     case "list_projects": {
-      let q = supabase.from("projects").select("*").is("deleted_at", null);
+      let q = supabase.from("projects").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
       if (input.status) q = q.eq("status", input.status);
       if (input.health) q = q.eq("health", input.health);
       const { data, error } = await q.order("name");
@@ -251,6 +283,7 @@ async function executeTool(
       const { data, error } = await supabase
         .from("people")
         .select("*")
+        .eq("workspace_id", workspaceId)
         .is("deleted_at", null)
         .order("name");
       if (error) return { error: error.message };
@@ -258,7 +291,7 @@ async function executeTool(
     }
 
     case "get_decisions": {
-      let q = supabase.from("decisions").select("*").is("deleted_at", null);
+      let q = supabase.from("decisions").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
       if (input.status) q = q.eq("status", input.status);
       const { data, error } = await q
         .order("created_at", { ascending: false })
@@ -271,10 +304,10 @@ async function executeTool(
       const q = String(input.query || "").replace(/[%_]/g, "\\$&");
       const pattern = `%${q}%`;
       const [tasks, notes, projects, people] = await Promise.all([
-        supabase.from("work_items").select("id,title,type,priority,done,due_date,project_id,person_id").ilike("title", pattern).is("deleted_at", null).limit(5),
-        supabase.from("notes").select("id,title,folder,updated_at").ilike("title", pattern).is("deleted_at", null).limit(5),
-        supabase.from("projects").select("id,name,status,health,target_date").ilike("name", pattern).is("deleted_at", null).limit(5),
-        supabase.from("people").select("id,name,role,email").ilike("name", pattern).is("deleted_at", null).limit(5),
+        supabase.from("work_items").select("id,title,type,priority,done,due_date,project_id,person_id").eq("workspace_id", workspaceId).ilike("title", pattern).is("deleted_at", null).limit(5),
+        supabase.from("notes").select("id,title,folder,updated_at").eq("workspace_id", workspaceId).ilike("title", pattern).is("deleted_at", null).limit(5),
+        supabase.from("projects").select("id,name,status,health,target_date").eq("workspace_id", workspaceId).ilike("name", pattern).is("deleted_at", null).limit(5),
+        supabase.from("people").select("id,name,role,email").eq("workspace_id", workspaceId).ilike("name", pattern).is("deleted_at", null).limit(5),
       ]);
       const readError = tasks.error || notes.error || projects.error || people.error;
       if (readError) return { error: readError.message };
@@ -287,6 +320,8 @@ async function executeTool(
     }
 
     case "create_task": {
+      const linkError = await validateWorkspaceLinks(supabase, workspaceId, input);
+      if (linkError) return { error: linkError };
       const { data, error } = await supabase
         .from("work_items")
         .insert(buildWorkItemInsert(userId, workspaceId, input))
@@ -305,9 +340,12 @@ async function executeTool(
       if (input.title) patch.title = input.title;
       if ("project_id" in input) patch.project_id = input.project_id;
       if ("person_id" in input) patch.person_id = input.person_id;
+      const linkError = await validateWorkspaceLinks(supabase, workspaceId, patch);
+      if (linkError) return { error: linkError };
       const { data, error } = await supabase
         .from("work_items")
         .update(patch)
+        .eq("workspace_id", workspaceId)
         .eq("id", input.id as string)
         .select()
         .single();
@@ -372,7 +410,7 @@ serve(async (req) => {
   }
 
   try {
-    let payload: { message?: unknown; request_id?: unknown };
+    let payload: { message?: unknown; request_id?: unknown; workspace_id?: unknown };
     try {
       payload = await req.json();
     } catch {
