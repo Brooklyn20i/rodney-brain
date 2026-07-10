@@ -7,6 +7,7 @@ import { inferHealthReason } from '../lib/selectors';
 import { sanitizeHtml } from '../lib/sanitize';
 import { isOverdue, fmtDM } from '../lib/util';
 import { supabase } from '../lib/supabase';
+import { useCadence } from '../lib/store';
 
 const isPersonLinked = (w: { person_id: string | null; related_entities?: { type: string; id: string }[] }, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
@@ -35,6 +36,7 @@ export function PrepBriefPanel({
   person, agenda, carryForward, deferredAgenda,
   workItems, projects, projectUpdates, onAddToAgenda, onClose,
 }: PrepBriefPanelProps) {
+  const { workspace } = useCadence();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [aceSent, setAceSent] = useState(false);
   const [aceBusy, setAceBusy] = useState(false);
@@ -108,7 +110,11 @@ export function PrepBriefPanel({
     pendingBrief.current = { id: requestId, prompt };
     try {
       const { error } = await supabase.functions.invoke('ace-chat', {
-        body: { message: prompt, request_id: requestId },
+        body: {
+          message: prompt,
+          request_id: requestId,
+          ...(workspace?.id ? { workspace_id: workspace.id } : {}),
+        },
       });
       if (error) {
         // Not accepted — keep the id+prompt so an identical retry reuses it,

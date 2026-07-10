@@ -5,10 +5,11 @@
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const h = vi.hoisted(() => ({ invoke: vi.fn() }));
+const h = vi.hoisted(() => ({ invoke: vi.fn(), store: { workspace: { id: 'ws1' } } }));
 vi.mock('../../lib/supabase', () => ({
   supabase: { functions: { invoke: (...args: unknown[]) => h.invoke(...args) } },
 }));
+vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
 
 import { PrepBriefPanel } from '../PrepBriefPanel';
 
@@ -44,6 +45,7 @@ describe('PrepBriefPanel → ace-chat', () => {
     expect(fn).toBe('ace-chat');
     expect(opts.body.message).toContain('Milad Zand');
     expect(opts.body.request_id).toMatch(UUID_RE);
+    expect(opts.body.workspace_id).toBe('ws1');
     await waitFor(() => expect(screen.getByText(/Brief sent/i)).toBeInTheDocument());
   });
 

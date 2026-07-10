@@ -1,5 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildNoteInsert, buildWorkItemInsert } from '../../../../backend/functions/ace-chat/workspace';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const aceChatSource = () => readFileSync(resolve(here, '../../../../backend/functions/ace-chat/index.ts'), 'utf8');
 
 describe('Ace workspace-scoped tool payloads', () => {
   it('includes workspace_id when creating Work items', () => {
@@ -35,5 +41,16 @@ describe('Ace workspace-scoped tool payloads', () => {
       body: 'Summary',
       folder: null,
     });
+  });
+
+  it('keeps every Ace read/update tool scoped to the resolved workspace', () => {
+    const source = aceChatSource();
+    expect(source).toContain('from("work_items").select("*").eq("workspace_id", workspaceId)');
+    expect(source).toContain('from("projects").select("*").eq("workspace_id", workspaceId)');
+    expect(source).toContain('.from("people")\n        .select("*")\n        .eq("workspace_id", workspaceId)');
+    expect(source).toContain('from("decisions").select("*").eq("workspace_id", workspaceId)');
+    expect(source).toContain('from("work_items").select("id,title,type,priority,done,due_date,project_id,person_id").eq("workspace_id", workspaceId)');
+    expect(source).toContain('from("notes").select("id,title,folder,updated_at").eq("workspace_id", workspaceId)');
+    expect(source).toContain('.update(patch)\n        .eq("workspace_id", workspaceId)\n        .eq("id", input.id as string)');
   });
 });
