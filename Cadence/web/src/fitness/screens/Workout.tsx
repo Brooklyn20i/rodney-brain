@@ -329,8 +329,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         }
         if (rows.length) await insertMany('workout_sets', rows);
       }
-      // Activation: only now does the session become visible/active.
-      await update('workouts', newWorkoutId, { status: 'in_progress' } as never);
+      // Activation: only now does the session become visible/active. STRICT so
+      // the flip to `in_progress` is applied locally ONLY after the server
+      // acknowledges — otherwise a swallowed activation failure would present a
+      // false active session while the server row stays `initializing`.
+      await update('workouts', newWorkoutId, { status: 'in_progress' } as never, { strict: true });
       setFocusIndex(0);
     } catch (err) {
       // Seeding failed → best-effort rollback. The workout is still

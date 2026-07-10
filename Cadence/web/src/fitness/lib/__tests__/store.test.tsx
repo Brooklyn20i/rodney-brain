@@ -228,6 +228,59 @@ describe('per-row write serialization (rapid-tap safety)', () => {
   });
 });
 
+describe('strict (server-acknowledged) update — session activation safety', () => {
+  async function seedInitializing(result: { current: ReturnType<typeof useCadenceFitness> }) {
+    h.writeResults.push({ data: { id: 'wk', status: 'initializing' }, error: null });
+    await act(async () => {
+      await result.current.insert('workouts', { id: 'wk', status: 'initializing' } as never);
+    });
+  }
+  const status = (result: { current: ReturnType<typeof useCadenceFitness> }) =>
+    (result.current.data.workouts as Array<{ status: string }>)[0].status;
+
+  it('THROWS on a failed activation and never leaves a false optimistic in_progress', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await seedInitializing(result);
+
+    h.writeResults.push({ data: null, error: { code: '42501', message: 'denied' } });
+    await act(async () => {
+      await expect(
+        result.current.update('workouts', 'wk', { status: 'in_progress' } as never, { strict: true })
+      ).rejects.toBeTruthy();
+    });
+
+    // The row must still read `initializing` locally — activation was NOT
+    // presented as successful, so no false active session can surface.
+    expect(status(result)).toBe('initializing');
+    expect(result.current.syncError).toBeTruthy();
+  });
+
+  it('applies the activation only after the server acknowledges it', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await seedInitializing(result);
+
+    h.writeResults.push({ data: { id: 'wk', status: 'in_progress' }, error: null });
+    await act(async () => {
+      await result.current.update('workouts', 'wk', { status: 'in_progress' } as never, { strict: true });
+    });
+    expect(status(result)).toBe('in_progress');
+  });
+
+  it('contrast: a NORMAL update still swallows the failure and keeps the optimistic value', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await seedInitializing(result);
+
+    h.writeResults.push({ data: null, error: { code: '42501', message: 'denied' } });
+    await act(async () => {
+      const ret = await result.current.update('workouts', 'wk', { status: 'in_progress' } as never);
+      expect(ret).toBeTruthy(); // resolved, not thrown
+    });
+    // Non-strict optimistic-first contract is preserved elsewhere.
+    expect(status(result)).toBe('in_progress');
+    expect(result.current.syncError).toBeTruthy();
+  });
+});
+
 describe('insertMany (atomic multi-row create)', () => {
   it('adds every row optimistically in one batch', async () => {
     const { result } = renderHook(() => useCadenceFitness(), { wrapper });

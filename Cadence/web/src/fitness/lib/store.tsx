@@ -57,7 +57,15 @@ export interface Ctx {
   // program day's set list) lands atomically — no half-populated session if a
   // single row fails midway. Optimistic; rolls the whole batch back on error.
   insertMany: <K extends Table>(table: K, rows: Partial<Row<K>>[]) => Promise<Row<K>[]>;
-  update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
+  // `strict` = server-acknowledged: don't apply optimistically, and THROW on
+  // failure (instead of the default swallow-and-keep-optimistic gym contract) so
+  // a false success can never be presented. Used for session activation.
+  update: <K extends Table>(
+    table: K,
+    id: string,
+    patch: Partial<Row<K>>,
+    opts?: { strict?: boolean }
+  ) => Promise<Row<K>>;
   // Insert-or-update keyed by a unique constraint (e.g. 'owner_id,date'). Robust
   // against a stale in-memory `rows` racing realtime: the DB resolves the
   // conflict instead of throwing a duplicate-key error on a re-saved day.
@@ -282,13 +290,34 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     return owned as Row<K>[];
   };
 
-  const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>): Promise<Row<K>> => {
-    setData((prev) => ({
-      ...prev,
-      [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
-    }));
+  const update = async <K extends Table>(
+    table: K,
+    id: string,
+    patch: Partial<Row<K>>,
+    opts?: { strict?: boolean }
+  ): Promise<Row<K>> => {
+    // STRICT mode: server-acknowledged write. The optimistic change is NOT
+    // applied locally until the server confirms, and a failure THROWS instead of
+    // being swallowed. Used where a false-success would be unsafe — e.g. flipping
+    // a session from `initializing` to `in_progress`: we must not present an
+    // active session locally while the server row is still staged. Normal
+    // (non-strict) updates keep the optimistic-first, never-throw gym contract.
+    const strict = opts?.strict === true;
+    if (!strict) {
+      setData((prev) => ({
+        ...prev,
+        [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
+      }));
+    }
 
     if (OFFLINE) {
+      // No server to acknowledge; apply in-memory (strict didn't optimistic-apply).
+      if (strict) {
+        setData((prev) => ({
+          ...prev,
+          [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
+        }));
+      }
       const found = (data as any)[table].find((r: any) => r.id === id);
       return { ...found, ...patch } as Row<K>;
     }
@@ -308,18 +337,26 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         )
       )
     );
-    // Local state already reflects the change (optimistic, above). If the write
-    // ultimately failed, note it quietly but DON'T throw — an un-awaited reject
-    // during a workout would fire the global "unhandled rejection" banner on
-    // every flaky tap. The change stays local and realtime reconciles later.
     if (error) {
       setSyncError(friendlyError(error));
+      // STRICT: propagate so the caller can preserve its invariant (roll back the
+      // staged row). Local state was never optimistically changed, so no false
+      // "success" is left behind.
+      if (strict) throw error;
+      // Non-strict: local state already reflects the change (optimistic, above).
+      // DON'T throw — an un-awaited reject during a workout would fire the global
+      // "unhandled rejection" banner on every flaky tap. The change stays local
+      // and realtime reconciles later.
       return optimistic as Row<K>;
     }
     // Only reconcile from the response if no newer write for this row has been
     // issued — otherwise a slow older response would clobber the newer value.
-    if (d && writeSeq.current.get(key) === seq) {
-      setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+    // (In strict mode this is also where the change is FIRST applied locally.)
+    if (writeSeq.current.get(key) === seq && (d || strict)) {
+      setData((prev) => ({
+        ...prev,
+        [table]: (prev as any)[table].map((r: any) => (r.id === id ? (d ?? { ...r, ...patch }) : r)),
+      }));
     }
     return (d ?? optimistic) as Row<K>;
   };

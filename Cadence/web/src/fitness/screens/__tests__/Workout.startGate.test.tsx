@@ -34,6 +34,7 @@ beforeEach(() => {
     deferInsertMany: false,
     resolveInsertMany: [],
     failInsertMany: false,
+    failActivation: false,
     failRemove: false,
     latest: null,
   });
@@ -46,6 +47,7 @@ const control = {
   deferInsertMany: false,
   resolveInsertMany: [] as Array<() => void>,
   failInsertMany: false,
+  failActivation: false,
   failRemove: false,
   latest: null as CadenceFitnessData | null,
 };
@@ -89,7 +91,16 @@ function Harness({ seed }: { seed: () => CadenceFitnessData }) {
     if (control.deferInsertMany) return new Promise((resolve) => control.resolveInsertMany.push(() => resolve(full)));
     return Promise.resolve(full);
   };
-  const update = async (table: keyof CadenceFitnessData, id: string, patch: Record<string, unknown>) => {
+  const update = async (
+    table: keyof CadenceFitnessData,
+    id: string,
+    patch: Record<string, unknown>,
+    opts?: { strict?: boolean }
+  ) => {
+    // Mirror the real store's STRICT semantics: a failed strict write throws and
+    // does NOT apply the optimistic change (so a rejected activation can't leave
+    // a false `in_progress` locally).
+    if (opts?.strict && control.failActivation) throw new Error('activation rejected');
     setData((prev) => ({ ...prev, [table]: (prev[table] as Array<{ id: string }>).map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
     return {} as never;
   };
@@ -167,6 +178,26 @@ describe('session start initialization gate', () => {
     expect(setupVisible()).toBeNull();
     expect(activeWorkouts()).toHaveLength(0);
     expect(anyWorkouts()).toHaveLength(0); // rolled back entirely
+  });
+
+  it('never surfaces a false active session when the server rejects activation', async () => {
+    // The set batch lands, but the strict activation write (initializing →
+    // in_progress) is rejected by the server. The store swallows normal writes,
+    // so activation MUST be strict/throwing — otherwise the gate would lift on a
+    // false success while the server row stays `initializing`.
+    control.failActivation = true;
+    render(<Harness seed={seedStart} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(startButton()).toBeTruthy());
+    expect(setupVisible()).toBeNull();
+    expect(activeWorkouts()).toHaveLength(0); // no false active session
+    // Rolled back after the failed activation (remove succeeds here).
+    expect(anyWorkouts()).toHaveLength(0);
   });
 
   it('leaves no active session even if cleanup also fails (stranded row stays invisible)', async () => {
