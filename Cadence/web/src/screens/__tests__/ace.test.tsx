@@ -17,6 +17,8 @@ vi.mock('../../lib/supabase', () => ({
 
 import { Ace } from '../Ace';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const msg = (o: any) => ({
   id: 'm', owner_id: 'me', sender_type: 'user', sender_id: null, recipient_type: 'agent',
   recipient_key: 'agent:ace', body: 'Message', status: 'unread', linked_work_item_id: null,
@@ -58,7 +60,7 @@ describe('Ace screen', () => {
     expect(screen.queryByText('Other agent')).not.toBeInTheDocument();
   });
 
-  it('invokes ace-chat with the trimmed message and clears the composer', async () => {
+  it('invokes ace-chat with the trimmed message and a UUID request_id, and clears the composer', async () => {
     h.invoke.mockResolvedValue({ error: null });
     setStore();
     render(<Ace onMenu={() => {}} />);
@@ -66,7 +68,9 @@ describe('Ace screen', () => {
     fireEvent.change(input, { target: { value: '  What is overdue?  ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
-      expect(h.invoke).toHaveBeenCalledWith('ace-chat', { body: { message: 'What is overdue?' } }),
+      expect(h.invoke).toHaveBeenCalledWith('ace-chat', {
+        body: { message: 'What is overdue?', request_id: expect.stringMatching(UUID_RE) },
+      }),
     );
     expect(input).toHaveValue('');
   });
@@ -82,6 +86,40 @@ describe('Ace screen', () => {
       expect(screen.getByText(/ace-chat function is deployed/i)).toBeInTheDocument(),
     );
     expect(input).toHaveValue('Summarise my week');
+  });
+
+  it('reuses the same request_id when a not-accepted send is retried', async () => {
+    // First send is rejected (not accepted); the restored draft is resent.
+    h.invoke.mockResolvedValue({ error: { message: 'boom' } });
+    setStore();
+    render(<Ace onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('Ask Ace…');
+    fireEvent.change(input, { target: { value: 'Chase pricing' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(1));
+    // Draft restored — retry it.
+    fireEvent.keyDown(screen.getByPlaceholderText('Ask Ace…'), { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(2));
+    const first = h.invoke.mock.calls[0][1].body.request_id;
+    const second = h.invoke.mock.calls[1][1].body.request_id;
+    expect(first).toMatch(UUID_RE);
+    expect(second).toBe(first); // idempotent retry — same id
+  });
+
+  it('mints a fresh request_id for a new turn after one was accepted', async () => {
+    h.invoke.mockResolvedValue({ error: null }); // accepted
+    setStore();
+    render(<Ace onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('Ask Ace…');
+    fireEvent.change(input, { target: { value: 'First' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByPlaceholderText('Ask Ace…'), { target: { value: 'Second' } });
+    fireEvent.keyDown(screen.getByPlaceholderText('Ask Ace…'), { key: 'Enter' });
+    await waitFor(() => expect(h.invoke).toHaveBeenCalledTimes(2));
+    const first = h.invoke.mock.calls[0][1].body.request_id;
+    const second = h.invoke.mock.calls[1][1].body.request_id;
+    expect(second).not.toBe(first); // distinct turn — fresh id
   });
 
   it('does not send empty or whitespace-only drafts', () => {

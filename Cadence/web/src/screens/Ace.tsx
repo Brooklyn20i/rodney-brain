@@ -12,6 +12,10 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Idempotency key for the in-flight turn. Reused across retries of a send that
+  // was NOT accepted, and cleared once the function accepts the turn — so a
+  // retry can never create a duplicate chat turn or re-run Ace's write tools.
+  const pendingRequestId = useRef<string | null>(null);
 
   const aceMessages = useMemo(
     () =>
@@ -31,16 +35,28 @@ export function Ace({ onMenu }: { onMenu?: () => void }) {
     setSending(true);
     setError(null);
     setMessage('');
+    // Reuse the id of a prior not-accepted attempt (idempotent retry); otherwise
+    // mint a fresh one for this distinct turn.
+    const requestId = pendingRequestId.current ?? crypto.randomUUID();
+    pendingRequestId.current = requestId;
     try {
       const { error } = await supabase.functions.invoke('ace-chat', {
-        body: { message: text },
+        body: { message: text, request_id: requestId },
       });
       if (error) {
+        // Not accepted (or an ambiguous failure). Keep the id so a retry reuses
+        // it and restore the draft so nothing is lost.
         console.error('Ace error:', error);
         setError("Ace couldn't respond. Make sure the ace-chat function is deployed, then try again.");
-        setMessage(text); // restore so the message isn't lost
+        setMessage(text);
+      } else {
+        // Accepted. The reply — or an explicit failure notice — arrives in the
+        // thread via Realtime; never resubmit this turn.
+        pendingRequestId.current = null;
       }
     } catch (e) {
+      // Transport error: the turn may not have been accepted. Keep the id for an
+      // idempotent retry and restore the draft.
       console.error('Ace error:', e);
       setError('Could not reach Ace — check your connection and try again.');
       setMessage(text);

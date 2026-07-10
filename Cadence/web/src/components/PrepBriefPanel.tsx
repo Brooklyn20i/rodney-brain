@@ -94,7 +94,9 @@ export function PrepBriefPanel({
     if (aceBusy) return;
     setAceBusy(true);
     const prompt = `Summarise what I should cover in my 1:1 with ${person.name} today. Include key open actions, any blockers, and suggested agenda items based on our recent history.`;
-    await supabase.functions.invoke('ace-chat', { body: { message: prompt } });
+    // request_id makes this send idempotent server-side (a fresh id per click,
+    // since this is a one-shot brief with no retry loop).
+    await supabase.functions.invoke('ace-chat', { body: { message: prompt, request_id: crypto.randomUUID() } });
     setAceBusy(false);
     setAceSent(true);
   };
