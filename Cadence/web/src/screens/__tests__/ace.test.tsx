@@ -8,11 +8,40 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emptyData } from '../../lib/types';
 
-const h = vi.hoisted(() => ({ store: {} as any, invoke: vi.fn() }));
+const h = vi.hoisted(() => ({
+  store: {} as any,
+  invoke: vi.fn(),
+  threadRows: [] as any[],
+  threadError: null as any,
+  from: vi.fn(),
+  channelOn: vi.fn(),
+  removeChannel: vi.fn(),
+}));
 
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
 vi.mock('../../lib/supabase', () => ({
-  supabase: { functions: { invoke: (...args: unknown[]) => h.invoke(...args) } },
+  supabase: {
+    from: (table: string) => {
+      h.from(table);
+      const q: any = {
+        select: vi.fn(() => q),
+        eq: vi.fn(() => q),
+        is: vi.fn(() => q),
+        order: vi.fn(() => q),
+        limit: vi.fn(async () => ({ data: h.threadRows, error: h.threadError })),
+      };
+      return q;
+    },
+    functions: { invoke: (...args: unknown[]) => h.invoke(...args) },
+    channel: () => {
+      const ch: any = {
+        on: (...args: unknown[]) => { h.channelOn(...args); return ch; },
+        subscribe: vi.fn(() => ch),
+      };
+      return ch;
+    },
+    removeChannel: (...args: unknown[]) => h.removeChannel(...args),
+  },
 }));
 
 import { Ace } from '../Ace';
@@ -34,6 +63,11 @@ function setStore(over: any = {}) {
 
 beforeEach(() => {
   h.invoke = vi.fn();
+  h.threadRows = [];
+  h.threadError = null;
+  h.from = vi.fn();
+  h.channelOn = vi.fn();
+  h.removeChannel = vi.fn();
   // jsdom doesn't implement scrollIntoView; the screen auto-scrolls on new messages.
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -58,6 +92,19 @@ describe('Ace screen', () => {
     expect(screen.getByText('Ace reply')).toBeInTheDocument();
     expect(screen.queryByText('Kobe reply')).not.toBeInTheDocument();
     expect(screen.queryByText('Other agent')).not.toBeInTheDocument();
+  });
+
+  it('renders Ace rows from the direct thread read when the global store missed them', async () => {
+    h.threadRows = [
+      msg({ id: 'u1', body: 'UI missed this user turn', sender_type: 'user', recipient_key: 'agent:ace', created_at: '2026-06-20T09:00:00.000Z' }),
+      msg({ id: 'a1', body: '<p>Direct Ace reply</p>', sender_type: 'agent', recipient_key: 'agent:ace', created_at: '2026-06-20T09:01:00.000Z' }),
+    ];
+    setStore({ data: { agent_messages: [] } });
+    render(<Ace onMenu={() => {}} />);
+
+    expect(await screen.findByText('UI missed this user turn')).toBeInTheDocument();
+    expect(screen.getByText('Direct Ace reply')).toBeInTheDocument();
+    expect(h.from).toHaveBeenCalledWith('agent_messages');
   });
 
   it('invokes ace-chat with the trimmed message and a UUID request_id, and clears the composer', async () => {
