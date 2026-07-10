@@ -957,9 +957,27 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .kobe-bubble-time { font-size: 10px; opacity: 0.55; margin-top: 4px; text-align: right; }
 .kobe-bubble--kobe .kobe-bubble-time { text-align: left; }
 .kobe-chat-input-wrap { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); align-items: flex-end; flex-shrink: 0; }
-.kobe-chat-input { flex: 1; border: 1px solid var(--border); border-radius: 20px; padding: 10px 16px; font-size: 14px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; resize: none; max-height: 80px; line-height: 1.4; }
+.kobe-chat-input { flex: 1; border: 1px solid var(--border); border-radius: 20px; padding: 10px 16px; font-size: 14px; font-family: inherit; background: var(--bg); color: var(--text); outline: none; resize: none; min-height: 40px; max-height: 80px; line-height: 1.4; }
 .kobe-chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--blue-bg); }
 .kobe-send-btn { border-radius: 50%; width: 38px; height: 38px; padding: 0; flex-shrink: 0; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+.ace-chat-wrap { background: var(--app-bg); }
+.ace-chat-messages { padding: 16px 20px; }
+.ace-chat-wrap .kobe-bubble { overflow-wrap: anywhere; }
+
+@media (max-width: 720px) {
+  .ace-chat-messages { padding: 10px 12px 12px; gap: 10px; }
+  .ace-bubble-row { gap: 0; }
+  .ace-chat-wrap .kobe-bubble-avatar { display: none; }
+  .ace-chat-wrap .kobe-bubble { max-width: calc(100% - 22px); padding: 11px 14px; border-radius: 18px; font-size: 15px; line-height: 1.45; }
+  .ace-chat-wrap .kobe-bubble--kobe { border-bottom-left-radius: 18px; }
+  .ace-chat-wrap .kobe-bubble--user { max-width: calc(100% - 34px); border-bottom-right-radius: 18px; }
+  .ace-chat-wrap .kobe-bubble-html ul,
+  .ace-chat-wrap .kobe-bubble-html ol { padding-left: 18px; margin: 6px 0; }
+  .ace-chat-wrap .kobe-bubble-html li { margin: 3px 0; }
+  .ace-chat-wrap .kobe-chat-input-wrap { padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); gap: 8px; align-items: center; }
+  .ace-chat-wrap .kobe-chat-input { min-height: 44px; height: 44px; max-height: 92px; padding: 11px 14px; border-radius: 18px; font-size: 16px; line-height: 1.35; }
+  .ace-chat-wrap .kobe-send-btn { width: 44px; height: 44px; font-size: 17px; }
+}
 
 /* ── Outbox ── */
 .email-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; }

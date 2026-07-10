@@ -32,6 +32,7 @@ import {
   type LoopResult,
   PROCESSING_FAILURE_MESSAGE,
 } from "./turn.ts";
+import { buildNoteInsert, buildWorkItemInsert } from "./workspace.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -178,9 +179,42 @@ const TOOLS: Anthropic.Tool[] = [
 
 // ── Tool execution ─────────────────────────────────────────────────────────
 
+async function resolveWorkspaceId(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  requestedWorkspaceId: string | null,
+): Promise<{ workspaceId: string | null; error?: string }> {
+  if (requestedWorkspaceId) {
+    const { data, error } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("user_id", userId)
+      .eq("workspace_id", requestedWorkspaceId)
+      .maybeSingle();
+    if (error) return { workspaceId: null, error: error.message };
+    if (data?.workspace_id) return { workspaceId: data.workspace_id as string };
+    return { workspaceId: null, error: "You do not have access to that workspace." };
+  }
+
+  // Fallback mirrors the Work app's deterministic workspace resolution: oldest
+  // membership first. The browser normally sends workspace_id, but older cached
+  // clients and tests may not.
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", userId)
+    .order("joined_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { workspaceId: null, error: error.message };
+  if (data?.workspace_id) return { workspaceId: data.workspace_id as string };
+  return { workspaceId: null, error: "Could not resolve your Cadence workspace." };
+}
+
 async function executeTool(
   supabase: ReturnType<typeof createClient>,
   userId: string,
+  workspaceId: string,
   name: string,
   input: Record<string, unknown>,
 ): Promise<unknown> {
@@ -255,19 +289,7 @@ async function executeTool(
     case "create_task": {
       const { data, error } = await supabase
         .from("work_items")
-        .insert({
-          owner_id: userId,
-          title: input.title,
-          type: (input.type as string) || "task",
-          priority: (input.priority as string) || "medium",
-          due_date: input.due_date || null,
-          project_id: input.project_id || null,
-          person_id: input.person_id || null,
-          notes: (input.notes as string) || "",
-          source: "agent:ace",
-          done: false,
-          inboxed: input.inboxed ?? false,
-        })
+        .insert(buildWorkItemInsert(userId, workspaceId, input))
         .select()
         .single();
       if (error) return { error: error.message };
@@ -296,12 +318,7 @@ async function executeTool(
     case "create_note": {
       const { data, error } = await supabase
         .from("notes")
-        .insert({
-          owner_id: userId,
-          title: input.title,
-          body: input.body,
-          folder: input.folder || null,
-        })
+        .insert(buildNoteInsert(userId, workspaceId, input))
         .select()
         .single();
       if (error) return { error: error.message };
@@ -372,6 +389,15 @@ serve(async (req) => {
       return json({ error: "A valid request_id (UUID) is required." }, 400);
     }
     const requestId = payload.request_id.trim();
+    const requestedWorkspaceId = typeof payload.workspace_id === "string" && payload.workspace_id.trim()
+      ? payload.workspace_id.trim()
+      : null;
+    const workspaceResolution = await resolveWorkspaceId(supabase, user.id, requestedWorkspaceId);
+    if (!workspaceResolution.workspaceId) {
+      console.error("ace-chat workspace resolution error:", workspaceResolution.error);
+      return json({ error: "Could not load your Cadence workspace. Please refresh and try again." }, 500);
+    }
+    const workspaceId = workspaceResolution.workspaceId;
 
     // Fetch conversation history (last 20 messages, oldest first). A read
     // failure means we can't build a correct conversation — fail closed rather
@@ -486,7 +512,7 @@ serve(async (req) => {
 
           for (const block of toolUseBlocks) {
             if (block.type !== "tool_use") continue;
-            const result = await executeTool(supabase, user.id, block.name, block.input as Record<string, unknown>);
+            const result = await executeTool(supabase, user.id, workspaceId, block.name, block.input as Record<string, unknown>);
             toolResults.push({
               type: "tool_result",
               tool_use_id: block.id,

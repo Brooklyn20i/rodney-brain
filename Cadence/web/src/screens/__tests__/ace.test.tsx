@@ -109,14 +109,14 @@ describe('Ace screen', () => {
 
   it('invokes ace-chat with the trimmed message and a UUID request_id, and clears the composer', async () => {
     h.invoke.mockResolvedValue({ error: null });
-    setStore();
+    setStore({ workspace: { id: 'ws1' } });
     render(<Ace onMenu={() => {}} />);
     const input = screen.getByPlaceholderText('Ask Ace…');
     fireEvent.change(input, { target: { value: '  What is overdue?  ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
       expect(h.invoke).toHaveBeenCalledWith('ace-chat', {
-        body: { message: 'What is overdue?', request_id: expect.stringMatching(UUID_RE) },
+        body: { message: 'What is overdue?', request_id: expect.stringMatching(UUID_RE), workspace_id: 'ws1' },
       }),
     );
     expect(input).toHaveValue('');
