@@ -260,11 +260,33 @@ export interface ProjectGroup {
   projects: Project[];
 }
 
+// Legacy name heuristics — used only while a project's `portfolio` column is
+// null (pre-migration-0043 rows). The explicit column always wins; these exist
+// so nothing re-buckets until each project is tagged.
 const isRapid = (p: Project) =>
   /\brapid\b|itppm|tendering|leadtime|substitution|approvals/i.test(p.name);
 
 const isStrategic = (p: Project) =>
   /promace|commercial tech|strategy|transformation|reset/i.test(p.name);
+
+const legacyPortfolio = (p: Project): string | null =>
+  isRapid(p) ? 'RAPID Portfolio' : isStrategic(p) ? 'Strategic' : null;
+
+// The portfolio a project displays under: explicit column first, then legacy
+// name heuristics, else null ("Active" bucket).
+export const portfolioOf = (p: Project): string | null =>
+  p.portfolio?.trim() || legacyPortfolio(p);
+
+// Every portfolio label in use — suggestions for the project portfolio picker.
+export function knownPortfolios(projects: Project[]): string[] {
+  const set = new Set<string>();
+  for (const p of projects) {
+    if (p.deleted_at) continue;
+    const label = portfolioOf(p);
+    if (label) set.add(label);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
 
 export function groupProjectsByPortfolio(projects: Project[]): ProjectGroup[] {
   const notDeleted = projects.filter((p) => !p.deleted_at);
@@ -272,13 +294,29 @@ export function groupProjectsByPortfolio(projects: Project[]): ProjectGroup[] {
   const onHold = notDeleted.filter((p) => p.status === 'onHold');
   const completed = notDeleted.filter((p) => p.status === 'completed');
 
-  const rapid = active.filter(isRapid);
-  const strategic = active.filter((p) => !isRapid(p) && isStrategic(p));
-  const other = active.filter((p) => !isRapid(p) && !isStrategic(p));
+  // Named portfolios in stable first-seen order, then untagged actives.
+  const byLabel = new Map<string, Project[]>();
+  const other: Project[] = [];
+  for (const p of active) {
+    const label = portfolioOf(p);
+    if (label) {
+      const list = byLabel.get(label);
+      if (list) list.push(p);
+      else byLabel.set(label, [p]);
+    } else other.push(p);
+  }
+
+  // Deterministic order: the historical portfolios keep their prominence,
+  // any new labels follow alphabetically.
+  const LEGACY_ORDER = ['RAPID Portfolio', 'Strategic'];
+  const labels = [...byLabel.keys()].sort((a, b) => {
+    const ia = LEGACY_ORDER.indexOf(a), ib = LEGACY_ORDER.indexOf(b);
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    return a.localeCompare(b);
+  });
 
   const groups: ProjectGroup[] = [];
-  if (rapid.length) groups.push({ label: 'RAPID Portfolio', projects: rapid });
-  if (strategic.length) groups.push({ label: 'Strategic', projects: strategic });
+  for (const label of labels) groups.push({ label, projects: byLabel.get(label)! });
   if (other.length) groups.push({ label: 'Active', projects: other });
   if (onHold.length) groups.push({ label: 'On Hold', projects: onHold });
   if (completed.length) groups.push({ label: 'Completed', projects: completed });

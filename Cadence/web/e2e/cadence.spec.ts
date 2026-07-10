@@ -94,7 +94,7 @@ test('creates a capture via Quick Add and it lands in the Inbox', async ({ page 
 test('project detail opens as a practical control sheet', async ({ page }) => {
   await navTo(page, 'Projects');
   await page.getByText('Apollo', { exact: true }).first().click();
-  await expect(page.getByRole('button', { name: 'Control sheet' })).toHaveClass(/active/);
+  await expect(page.getByRole('button', { name: 'Overview' })).toHaveClass(/active/);
   await expect(page.getByText('Outcome / goal')).toBeVisible();
   await expect(page.getByText('Ship v2')).toBeVisible();
   await expect(page.getByText(/Owner:/)).toBeVisible();
