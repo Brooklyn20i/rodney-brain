@@ -32,7 +32,15 @@ import {
   type LoopResult,
   PROCESSING_FAILURE_MESSAGE,
 } from "./turn.ts";
-import { buildNoteInsert, buildWorkItemInsert } from "./workspace.ts";
+import {
+  applyTaskFilters,
+  buildNoteInsert,
+  buildTaskCountQuery,
+  buildTaskCountResult,
+  buildWorkItemInsert,
+  sanitizeTaskFilters,
+  TASK_FILTER_SCHEMA_PROPERTIES,
+} from "./workspace.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -73,20 +81,22 @@ Style:
 const TOOLS: Anthropic.Tool[] = [
   {
     name: "list_tasks",
-    description: "List work items from Cadence. Use filters to narrow results. Always filter by done=false for open items unless the user asks about completed work.",
+    description: "List work items from Cadence. Use filters to narrow results. Always filter by done=false for open items unless the user asks about completed work. Use count_tasks instead for aggregate questions like task counts.",
     input_schema: {
       type: "object",
       properties: {
-        done: { type: "boolean", description: "true=completed, false=open. Omit for all." },
-        priority: { type: "string", enum: ["high", "medium", "low"] },
-        overdue: { type: "boolean", description: "Only items past their due date." },
-        due_today: { type: "boolean", description: "Only items due today." },
-        project_id: { type: "string", description: "Filter by project UUID." },
-        person_id: { type: "string", description: "Filter by person UUID." },
-        source: { type: "string", description: "Filter by source, e.g. 'agent:kobe', 'for:kobe'." },
-        inboxed: { type: "boolean", description: "Filter by inbox status." },
+        ...TASK_FILTER_SCHEMA_PROPERTIES,
         limit: { type: "number", description: "Max results, default 20." },
       },
+    },
+  },
+  {
+    name: "count_tasks",
+    description: "Count work items from Cadence. Use for aggregate questions like \"how many open tasks\" instead of listing rows. Always filter by done=false for open items unless the user asks about completed work.",
+    input_schema: {
+      type: "object",
+      properties: TASK_FILTER_SCHEMA_PROPERTIES,
+      additionalProperties: false,
     },
   },
   {
@@ -254,20 +264,22 @@ async function executeTool(
 
   switch (name) {
     case "list_tasks": {
-      let q = supabase.from("work_items").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
-      if ("done" in input) q = q.eq("done", input.done);
-      if (input.priority) q = q.eq("priority", input.priority);
-      if (input.overdue) q = q.lt("due_date", today).eq("done", false);
-      if (input.due_today) q = q.eq("due_date", today);
-      if (input.project_id) q = q.eq("project_id", input.project_id);
-      if (input.person_id) q = q.eq("person_id", input.person_id);
-      if (input.source) q = q.eq("source", input.source);
-      if ("inboxed" in input) q = q.eq("inboxed", input.inboxed);
+      const filters = sanitizeTaskFilters(input);
+      let q = supabase.from("work_items").select("id,title,type,priority,done,due_date,project_id,person_id,source,inboxed,created_at").eq("workspace_id", workspaceId).is("deleted_at", null);
+      q = applyTaskFilters(q, filters, today);
       const { data, error } = await q
         .order("created_at", { ascending: false })
         .limit((input.limit as number) || 20);
       if (error) return { error: error.message };
       return data || [];
+    }
+
+    case "count_tasks": {
+      const filters = sanitizeTaskFilters(input);
+      const q = buildTaskCountQuery(supabase, workspaceId, filters, today);
+      const { count, error } = await q;
+      if (error) return { error: error.message };
+      return buildTaskCountResult(count);
     }
 
     case "list_projects": {
