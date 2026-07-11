@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  cardioKindForName,
   fmtDuration,
   parseDuration,
   guessTracking,
@@ -54,6 +55,9 @@ describe('tracking helpers', () => {
     expect(guessTracking('Push-Up')).toBe('strength_bodyweight');
     expect(guessTracking('Barbell Bench Press')).toBe('strength_weighted');
     expect(guessTracking('Pendlay Row')).toBe('strength_weighted');
+    expect(guessTracking('Weekly High-HR MetCon')).toBe('cardio_interval');
+    expect(guessTracking('24-min EMOM conditioning')).toBe('cardio_interval');
+    expect(guessTracking('Chipper for time')).toBe('cardio_interval');
     expect(guessTracking('15-minute progressive run')).toBe('cardio_interval');
     expect(guessTracking('Treadmill Run')).toBe('cardio_distance');
     expect(guessTracking('Incline Walk')).toBe('cardio_duration');
@@ -70,6 +74,7 @@ describe('tracking helpers', () => {
   it('routes cardio programme slots to cardio_sessions instead of workout_sets', () => {
     const exercise = { tracking: 'strength_weighted' as const };
     expect(slotDestination({ exercise_id: 'run', tracking_type: 'cardio_interval' }, exercise)).toBe('cardio_sessions');
+    expect(slotDestination({ exercise_id: 'metcon', tracking_type: 'cardio_interval' }, exercise)).toBe('cardio_sessions');
     expect(slotDestination({ exercise_id: 'bench', tracking_type: 'strength_weighted' }, exercise)).toBe('workout_sets');
     expect(slotDestination({ exercise_id: 'plank', tracking_type: 'timed_hold' }, exercise)).toBe('workout_sets');
   });
@@ -81,11 +86,20 @@ describe('tracking helpers', () => {
     expect(looksLikeCardio('Rowing')).toBe(true);
     expect(looksLikeCardio('Cycling')).toBe(true);
     expect(looksLikeCardio('Swim')).toBe(true);
+    expect(looksLikeCardio('Weekly High-HR MetCon')).toBe(true);
+    expect(looksLikeCardio('24-min EMOM conditioning')).toBe(true);
     // Must NOT false-positive on lifts that merely contain "row"/"walk".
     expect(looksLikeCardio('Barbell Row')).toBe(false);
     expect(looksLikeCardio('Walking Lunge')).toBe(false);
     expect(looksLikeCardio('Bicycle Crunch')).toBe(false);
     expect(looksLikeCardio('Bench Press')).toBe(false);
     expect(looksLikeCardio('Plank')).toBe(false);
+  });
+
+  it('maps MetCon-style names to HIIT cardio kind', () => {
+    expect(cardioKindForName('Weekly High-HR MetCon')).toBe('hiit');
+    expect(cardioKindForName('24-min EMOM conditioning')).toBe('hiit');
+    expect(cardioKindForName('Chipper for time')).toBe('hiit');
+    expect(cardioKindForName('Row Erg')).toBe('row');
   });
 });

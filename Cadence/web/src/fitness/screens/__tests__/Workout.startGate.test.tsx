@@ -70,6 +70,36 @@ function seedActive(): CadenceFitnessData {
   return d;
 }
 
+function seedMetconStart(): CadenceFitnessData {
+  const d = emptyData();
+  d.programs.push({ id: 'prog', name: 'Test', description: '', weeks: 4, status: 'active', start_date: '2026-07-01', notes: '', ...STAMP } as never);
+  d.program_days.push({ id: 'day1', program_id: 'prog', day_order: 1, name: 'Sunday — Weekly High-HR MetCon', focus: 'conditioning', ...STAMP } as never);
+  d.exercises.push({ id: 'metcon', name: 'Weekly High-HR MetCon', muscle_group: 'full_body', secondary_muscles: '', equipment: 'ski,rower,dumbbell', tracking: 'cardio_interval', notes: '', ...STAMP } as never);
+  d.program_exercises.push({
+    id: 'slot-metcon',
+    program_day_id: 'day1',
+    exercise_id: 'metcon',
+    ex_order: 1,
+    target_sets: 1,
+    rep_min: 0,
+    rep_max: 0,
+    target_rpe: null,
+    rest_seconds: 0,
+    tracking_type: 'cardio_interval',
+    cardio_kind: 'hiit',
+    target_duration_min: 20,
+    target_distance_km: 0,
+    target_calories: null,
+    target_avg_hr: null,
+    target_pace: '',
+    target_incline: '',
+    interval_notes: 'MetCon score: enter rounds/reps or time cap result, plus peak HR if available.',
+    notes: '20-min AMRAP: 250m ski + 10 burpees + 250m row.',
+    ...STAMP,
+  } as never);
+  return d;
+}
+
 function Harness({ seed }: { seed: () => CadenceFitnessData }) {
   const [data, setData] = useState<CadenceFitnessData>(seed);
   // Expose the latest committed data to the test (in an effect, not during
@@ -218,6 +248,36 @@ describe('session start initialization gate', () => {
     const stranded = anyWorkouts();
     expect(stranded).toHaveLength(1);
     expect(stranded[0].status).toBe('initializing');
+  });
+});
+
+describe('MetCon programme logging', () => {
+  it('starts a MetCon day without fake strength set rows and records HIIT cardio outcome', async () => {
+    render(<Harness seed={seedMetconStart} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(activeWorkouts()).toHaveLength(1));
+    expect(setRows()).toHaveLength(0);
+    expect(screen.getByText('Programmed cardio')).toBeTruthy();
+    expect(screen.getAllByText('Weekly High-HR MetCon').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/MetCon score/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Record outcome/i }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(control.latest?.cardio_sessions).toHaveLength(1));
+    const logged = control.latest!.cardio_sessions[0];
+    expect(logged.workout_id).toBe(activeWorkouts()[0].id);
+    expect(logged.kind).toBe('hiit');
+    expect(Number(logged.duration_min)).toBe(20);
+    expect(logged.notes).toContain('MetCon score');
+    expect(screen.getByText(/Score \/ rounds \/ reps \/ peak HR \/ notes/i)).toBeTruthy();
   });
 });
 
