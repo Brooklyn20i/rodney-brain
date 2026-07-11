@@ -53,7 +53,11 @@ export function ItemModal({ existing, defaults, onClose }: {
         notes,
       } as Partial<WorkItem>;
       if (existing) {
-        await update('work_items', existing.id, { ...patch, ...(filed ? { inboxed: false } : {}) } as Partial<WorkItem>);
+        // Editing an inboxed Quick Capture should not silently file it just
+        // because Rodney adds a due date/person/project while clarifying it.
+        // Only explicit triage actions should clear `inboxed`.
+        const filingPatch = filed && !existing.inboxed ? { inboxed: false } : {};
+        await update('work_items', existing.id, { ...patch, ...filingPatch } as Partial<WorkItem>);
         logActivity('edit_item', title.trim());
       } else {
         await insert('work_items', { ...patch, inboxed: filed ? false : ((base as any).inboxed ?? true), source: (base as any).source || 'you' } as Partial<WorkItem>);

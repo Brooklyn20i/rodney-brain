@@ -8,6 +8,7 @@ import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { AceUiProvider } from './lib/aceUi';
 import { Sidebar, type Domain } from './components/Sidebar';
+import { GlobalCapture } from './components/GlobalCapture';
 import { Today } from './screens/Today'; // eager — the default landing screen
 
 // Lazy-load the remaining screens so the initial bundle ships only Today plus
@@ -16,9 +17,9 @@ import { Today } from './screens/Today'; // eager — the default landing screen
 const Dashboard = lazy(() => import('./screens/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Calendar = lazy(() => import('./screens/Calendar').then((m) => ({ default: m.Calendar })));
 const Board = lazy(() => import('./screens/Board').then((m) => ({ default: m.Board })));
-const Tasks = lazy(() => import('./screens/Tasks').then((m) => ({ default: m.Tasks })));
+const Tasks = lazy(() => import('./screens/taskScreens').then((m) => ({ default: m.Tasks })));
 const Inbox = lazy(() => import('./screens/Inbox').then((m) => ({ default: m.Inbox })));
-const Projects = lazy(() => import('./screens/Projects').then((m) => ({ default: m.Projects })));
+const Projects = lazy(() => import('./screens/projectScreens').then((m) => ({ default: m.Projects })));
 const People = lazy(() => import('./screens/People').then((m) => ({ default: m.People })));
 const Meetings = lazy(() => import('./screens/Meetings').then((m) => ({ default: m.Meetings })));
 const Notes = lazy(() => import('./screens/Notes').then((m) => ({ default: m.Notes })));
@@ -307,6 +308,8 @@ export function App() {
         <Suspense fallback={<div className="screen-content" style={{ padding: 24, color: 'var(--text3)' }}>Loading…</div>}>
           {render()}
         </Suspense>
+        {/* Global Capture — every Work screen gets the same one-tap capture */}
+        {domain === 'work' && <GlobalCapture />}
       </div>
     </div>
     </AceUiProvider>

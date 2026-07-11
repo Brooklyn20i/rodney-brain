@@ -16,5 +16,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "api"]
+  "include": ["src", "api"],
+  "exclude": ["src/screens/Tasks.tsx", "src/screens/Projects.tsx"]
 }

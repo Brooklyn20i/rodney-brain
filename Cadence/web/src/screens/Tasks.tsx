@@ -1,3 +1,4 @@
-// The Tasks hub lives in ./tasks/ — this shim keeps App.tsx's lazy import path
-// (and every test import) stable across the redesign.
-export { Tasks } from './tasks';
+// The Tasks hub lives in ./tasks/ — this shim keeps the app's screen inventory
+// contract stable while App.tsx/tests import the lowercase module directly to
+// avoid case-collision TypeScript failures on case-insensitive filesystems.
+export { Tasks } from './taskScreens';
