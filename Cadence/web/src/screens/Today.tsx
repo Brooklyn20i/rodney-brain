@@ -9,6 +9,7 @@ import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isFiledTask, isLinkedToPerson } from '../lib/tasks';
 import { getTodoGroups, getWaitingOnOthers, getKobeHandling, getLoadSummary, getDecideItems } from '../lib/selectors';
 import { AceBriefingCard } from '../components/AceBriefingCard';
+import { TriageTray } from '../components/TriageTray';
 import { useAceUi } from '../lib/aceUi';
 import { meetingPrepPrompt } from '../lib/acePrompts';
 
@@ -113,6 +114,9 @@ export function Today({ onMenu }: { onMenu?: () => void }) {
       </ScreenHeader>
 
       <div className="screen-content">
+
+        {/* Triage tray — everything just captured, waiting to be shaped */}
+        <TriageTray onEdit={setEditing} />
 
         <LoadStrip load={view.load} />
 

@@ -22,7 +22,7 @@ vi.mock('../../lib/meetings', async (orig) => ({
 import { Board } from '../Board';
 import { Dashboard } from '../Dashboard';
 import { Today } from '../Today';
-import { Tasks } from '../Tasks';
+import { Tasks } from '../taskScreens';
 import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
 import { Review } from '../Review';

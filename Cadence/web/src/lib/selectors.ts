@@ -4,7 +4,17 @@
 import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
 import { bucketForDue } from './dateBuckets';
-import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject } from './tasks';
+import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject, isUserTask } from './tasks';
+
+// ── Triage tray (Quick Capture / untriaged) ───────────────────────────────────
+// Every open capture awaiting triage, newest first — the same population the
+// Inbox shows, ordered for a "just thrown in" tray on Today rather than by due
+// date. Filing (clearing `inboxed`), completing or deleting removes it.
+export function getTriageQueue(items: WorkItem[]): WorkItem[] {
+  return items
+    .filter((w) => isUserTask(w) && w.inboxed && !w.deleted_at)
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+}
 
 // ── Rodney's to-do ────────────────────────────────────────────────────────────
 // The one clear list: Rodney's own open work, ranked by when it's due. Pure and

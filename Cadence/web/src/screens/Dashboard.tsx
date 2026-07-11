@@ -12,7 +12,7 @@ import { AceBriefingCard } from '../components/AceBriefingCard';
 import { StatTile } from '../components/StatTile';
 import { HEALTH_LABEL } from '../lib/health';
 import { readStrategy, kpiList } from '../lib/strategy';
-import { useWinState } from './projects/hooks';
+import { useWinState } from './projectScreens/hooks';
 
 const fmtNext = (iso: string) => {
   if (iso === todayStr()) return 'Today';
