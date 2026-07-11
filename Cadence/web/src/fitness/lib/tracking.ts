@@ -67,6 +67,7 @@ export function slotDestination(
 
 export function cardioKindForName(name: string): CardioKind {
   const n = name.toLowerCase();
+  if (/\b(hiit|intervals?|metcon|conditioning|amrap|emom|chipper)\b/.test(n)) return 'hiit';
   if (/\b(row|rowing|erg)\b/.test(n)) return 'row';
   if (/\b(bike|biking|cycle|cycling|ride|riding)\b/.test(n)) return 'bike';
   if (/\b(swim|swimming)\b/.test(n)) return 'swim';
@@ -101,8 +102,8 @@ export function parseDuration(input: string): number {
 
 const TIME_RE = /\b(plank|wall\s?sit|hollow\s?hold|hollow|l-?sit|dead\s?hang|hang\s?hold|isometric|superman\s?hold|hold)\b/i;
 const BODYWEIGHT_RE = /\b(push-?up|pull-?up|chin-?up|dip|sit-?up|nordic curl|hanging leg raise|russian twist)\b/i;
-const CARDIO_EXACT_RE = /\b(run|running|jog|jogging|sprint|treadmill|rowing|erg|bike|biking|cycle|cycling|ride|riding|elliptical|stairmaster|stairs?|swim|swimming|hike|hiking|walk|walking|hiit|intervals?|progressive)\b/i;
-const INTERVAL_RE = /\b(hiit|intervals?|fartlek|progressive|tempo|threshold)\b/i;
+const CARDIO_EXACT_RE = /\b(run|running|jog|jogging|sprint|treadmill|rowing|erg|bike|biking|cycle|cycling|ride|riding|elliptical|stairmaster|stairs?|swim|swimming|hike|hiking|walk|walking|hiit|intervals?|progressive|metcon|conditioning|amrap|emom|chipper)\b/i;
+const INTERVAL_RE = /\b(hiit|intervals?|fartlek|progressive|tempo|threshold|metcon|conditioning|amrap|emom|chipper)\b/i;
 
 // Guess a tracking mode from a fresh exercise/slot name. Unknown names stay
 // weighted strength. Never use this to override a user-set mode.

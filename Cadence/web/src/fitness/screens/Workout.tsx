@@ -1145,8 +1145,8 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 <input type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} onBlur={(e) => updateCardio(c, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
               </div>
               <div>
-                <label className="field">Pace / incline / intervals</label>
-                <input type="text" defaultValue={c.notes || ''} placeholder="e.g. progressive 15 min, 3% incline, 6:00/km" onBlur={(e) => updateCardio(c, { notes: e.target.value })} />
+                <label className="field">{c.kind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
+                <input type="text" defaultValue={c.notes || ''} placeholder={c.kind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline, 6:00/km'} onBlur={(e) => updateCardio(c, { notes: e.target.value })} />
               </div>
             </div>
           </div>
@@ -1191,8 +1191,8 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 onChange={(e) => setCardioHr(e.target.value)} />
             </div>
             <div>
-              <label className="field">Pace / incline / intervals</label>
-              <input type="text" value={cardioNotes} placeholder="e.g. progressive 15 min, 3% incline" onChange={(e) => setCardioNotes(e.target.value)} />
+              <label className="field">{cardioKind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
+              <input type="text" value={cardioNotes} placeholder={cardioKind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline'} onChange={(e) => setCardioNotes(e.target.value)} />
             </div>
           </div>
           <div className="wo-cardio-actions">
