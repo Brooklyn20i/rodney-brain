@@ -3,16 +3,25 @@ import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import { formatMoney, formatPercent } from '../lib/util';
+import type { BucketTaxTreatment } from '../lib/types';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
+
+const TREATMENT_LABEL: Record<BucketTaxTreatment, string> = {
+  offset: 'Offset',
+  taxable: 'Taxable',
+  tax_free: 'Tax-free',
+};
 
 export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
   const { data, insert, update } = useCadenceFinancial();
   const current = data.monthly_metrics.length ? latestMonth(data.monthly_metrics) : null;
 
-  // Per-row edit state: loan id -> { balance, offset }, bucket id -> { amount, min }
+  // Per-row edit state: loan id -> { balance, offset }, bucket id -> full row edit
   const [loanEdit, setLoanEdit] = useState<Record<string, { balance: string; offset: string }>>({});
-  const [bucketEdit, setBucketEdit] = useState<Record<string, { amount: string; min: string }>>({});
+  const [bucketEdit, setBucketEdit] = useState<
+    Record<string, { amount: string; min: string; rate: string; treatment: BucketTaxTreatment; entity: string }>
+  >({});
   const [propertyEdit, setPropertyEdit] = useState<Record<string, string>>({});
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [newLoan, setNewLoan] = useState({ property_id: '', balance: '', offset: '', rate: '', repayment: '' });
@@ -32,7 +41,13 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
   const saveBucket = async (id: string) => {
     const e = bucketEdit[id];
     if (!e) return;
-    await update('liquidity_buckets', id, { amount: num(e.amount), protected_minimum: num(e.min) });
+    await update('liquidity_buckets', id, {
+      amount: num(e.amount),
+      protected_minimum: num(e.min),
+      interest_rate: num(e.rate) / 100, // UI shows percent; store as decimal
+      tax_treatment: e.treatment,
+      entity_id: e.entity || null,
+    });
     setBucketEdit((p) => {
       const { [id]: _drop, ...rest } = p;
       return rest;
@@ -68,6 +83,19 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
     setNewLoan({ property_id: '', balance: '', offset: '', rate: '', repayment: '' });
     setShowLoanForm(false);
   };
+
+  const entityName = (id?: string | null) => (id ? data.entities.find((e) => e.id === id)?.name ?? '—' : '—');
+  const treatmentOf = (b: { tax_treatment?: BucketTaxTreatment }): BucketTaxTreatment => b.tax_treatment ?? 'offset';
+  const rateOf = (b: { interest_rate?: number }) => b.interest_rate ?? 0;
+
+  // Split the blended "cash" pool into what it's actually doing. Offset cash
+  // saves loan interest (tax-free, capped); the rest earns a taxable rate.
+  const buckets = data.liquidity_buckets;
+  const offsetTotal = buckets.filter((b) => treatmentOf(b) === 'offset').reduce((s, b) => s + b.amount, 0);
+  const earningBuckets = buckets.filter((b) => treatmentOf(b) !== 'offset');
+  const earningTotal = earningBuckets.reduce((s, b) => s + b.amount, 0);
+  const annualInterest = earningBuckets.reduce((s, b) => s + b.amount * rateOf(b), 0);
+  const blendedRate = earningTotal > 0 ? annualInterest / earningTotal : 0;
 
   return (
     <>
@@ -283,15 +311,28 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
 
         <Card title="Liquidity buckets">
           <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>
-            Not everything labeled "cash" is deployable -- protected liquidity is separated from
-            surplus available to deploy.
+            Not every "cash" dollar does the same job. Offset cash saves loan interest (tax-free,
+            capped at the loan). Taxable cash earns a headline rate you're taxed on — and, in a
+            trust, is owned by a different entity than you.
           </p>
+          <div className="cf-metric-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+            <Metric label="Working as offset" value={formatMoney(offsetTotal, true)} />
+            <Metric label="Earning interest" value={formatMoney(earningTotal, true)} />
+            <Metric
+              label={`Interest income / yr${blendedRate > 0 ? ` (${formatPercent(blendedRate, 2)})` : ''}`}
+              value={formatMoney(annualInterest, true)}
+            />
+          </div>
           <div className="cf-table-wrap">
             <table className="cf-table">
               <thead>
                 <tr>
                   <th>Bucket</th>
                   <th>Amount</th>
+                  <th>Treatment</th>
+                  <th>Rate</th>
+                  <th>Interest / yr</th>
+                  <th>Owner</th>
                   <th>Protected minimum</th>
                   <th>Available above minimum</th>
                   <th>Purpose</th>
@@ -301,6 +342,9 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
               <tbody>
                 {data.liquidity_buckets.map((b) => {
                   const editing = bucketEdit[b.id];
+                  const treatment = treatmentOf(b);
+                  const rate = rateOf(b);
+                  const interestYr = treatment === 'offset' ? 0 : b.amount * rate;
                   return (
                     <tr key={b.id}>
                       <td>{b.label}</td>
@@ -308,7 +352,7 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
                         {editing ? (
                           <input
                             type="text"
-                            style={{ width: 120 }}
+                            style={{ width: 110 }}
                             value={editing.amount}
                             onChange={(e) => setBucketEdit((p) => ({ ...p, [b.id]: { ...editing, amount: e.target.value } }))}
                           />
@@ -318,9 +362,60 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
                       </td>
                       <td>
                         {editing ? (
+                          <select
+                            style={{ width: 100 }}
+                            value={editing.treatment}
+                            onChange={(e) =>
+                              setBucketEdit((p) => ({ ...p, [b.id]: { ...editing, treatment: e.target.value as BucketTaxTreatment } }))
+                            }
+                          >
+                            <option value="offset">Offset</option>
+                            <option value="taxable">Taxable</option>
+                            <option value="tax_free">Tax-free</option>
+                          </select>
+                        ) : (
+                          TREATMENT_LABEL[treatment]
+                        )}
+                      </td>
+                      <td>
+                        {editing ? (
                           <input
                             type="text"
-                            style={{ width: 120 }}
+                            style={{ width: 64 }}
+                            placeholder="%"
+                            value={editing.rate}
+                            onChange={(e) => setBucketEdit((p) => ({ ...p, [b.id]: { ...editing, rate: e.target.value } }))}
+                          />
+                        ) : rate > 0 ? (
+                          formatPercent(rate, 2)
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>{interestYr > 0 ? formatMoney(interestYr) : '—'}</td>
+                      <td>
+                        {editing ? (
+                          <select
+                            style={{ width: 130 }}
+                            value={editing.entity}
+                            onChange={(e) => setBucketEdit((p) => ({ ...p, [b.id]: { ...editing, entity: e.target.value } }))}
+                          >
+                            <option value="">—</option>
+                            {data.entities.map((en) => (
+                              <option key={en.id} value={en.id}>
+                                {en.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--text2)' }}>{entityName(b.entity_id)}</span>
+                        )}
+                      </td>
+                      <td>
+                        {editing ? (
+                          <input
+                            type="text"
+                            style={{ width: 110 }}
                             value={editing.min}
                             onChange={(e) => setBucketEdit((p) => ({ ...p, [b.id]: { ...editing, min: e.target.value } }))}
                           />
@@ -341,7 +436,13 @@ export function DebtOffsetControl({ onMenu }: { onMenu: () => void }) {
                             onClick={() =>
                               setBucketEdit((p) => ({
                                 ...p,
-                                [b.id]: { amount: String(b.amount), min: String(b.protected_minimum) },
+                                [b.id]: {
+                                  amount: String(b.amount),
+                                  min: String(b.protected_minimum),
+                                  rate: rate > 0 ? String((rate * 100).toFixed(2)) : '',
+                                  treatment,
+                                  entity: b.entity_id ?? '',
+                                },
                               }))
                             }
                           >

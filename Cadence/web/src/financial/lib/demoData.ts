@@ -325,10 +325,10 @@ const decisions: Decision[] = [
 ];
 
 const liquidityBuckets: LiquidityBucket[] = [
-  { ...base, id: 'lb-protected', label: 'Protected offset-equivalent cash', amount: 624_250, protected_minimum: 580_000, purpose: 'Protected liquidity; economic hurdle is the anchor-property offset.', note: 'Still above the protected minimum.' },
-  { ...base, id: 'lb-vehicle-cash', label: 'Harbor Bay Holdings cash subset', amount: 42_000, protected_minimum: 0, purpose: 'Included in the protected cash pool; do not double-count.', note: 'Investment-vehicle cash subset.' },
-  { ...base, id: 'lb-monthly-surplus', label: 'Monthly disposable investable cashflow', amount: 8_000, protected_minimum: 0, purpose: 'Ongoing monthly surplus available for deployment once the protected-liquidity rule is met.', note: 'Planning range only, not a spend budget.' },
-  { ...base, id: 'lb-deployable-today', label: 'Deployable opportunity capital today', amount: 0, protected_minimum: 0, purpose: 'One-off deployable cash above the protected minimum.', note: 'Keep at zero until total cash exceeds the protected minimum.' },
+  { ...base, id: 'lb-protected', label: 'Protected offset-equivalent cash', amount: 624_250, protected_minimum: 580_000, interest_rate: 0, tax_treatment: 'offset', entity_id: 'e-joint', purpose: 'Protected liquidity; economic hurdle is the anchor-property offset.', note: 'Still above the protected minimum.' },
+  { ...base, id: 'lb-vehicle-cash', label: 'Harbor Bay Holdings high-interest cash', amount: 42_000, protected_minimum: 0, interest_rate: 0.0465, tax_treatment: 'taxable', entity_id: 'e-harbor', purpose: 'Investment-vehicle savings account; taxable interest, owned by the vehicle not the individual.', note: 'Earning a headline rate — not offset cash.' },
+  { ...base, id: 'lb-monthly-surplus', label: 'Monthly disposable investable cashflow', amount: 8_000, protected_minimum: 0, interest_rate: 0, tax_treatment: 'offset', entity_id: null, purpose: 'Ongoing monthly surplus available for deployment once the protected-liquidity rule is met.', note: 'Planning range only, not a spend budget.' },
+  { ...base, id: 'lb-deployable-today', label: 'Deployable opportunity capital today', amount: 0, protected_minimum: 0, interest_rate: 0, tax_treatment: 'offset', entity_id: null, purpose: 'One-off deployable cash above the protected minimum.', note: 'Keep at zero until total cash exceeds the protected minimum.' },
 ];
 
 const agentMessages: AgentMessage[] = [

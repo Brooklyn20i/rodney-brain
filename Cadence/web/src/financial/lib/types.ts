@@ -201,6 +201,12 @@ export interface Decision {
   deleted_at: string | null;
 }
 
+// How a cash dollar behaves economically. 'offset' sits against a loan (earns
+// the loan rate, tax-free, capped at the balance); 'taxable' is a savings/term
+// account (earns interest_rate, taxed at the marginal rate); 'tax_free' is
+// interest-bearing but untaxed (rare — e.g. certain structures).
+export type BucketTaxTreatment = 'offset' | 'taxable' | 'tax_free';
+
 export interface LiquidityBucket {
   id: string;
   owner_id: string;
@@ -209,6 +215,11 @@ export interface LiquidityBucket {
   protected_minimum: number;
   purpose: string;
   note: string;
+  // Added in migration 0038. Optional so rows loaded before the migration ran
+  // (column drift) don't crash the reader; default at every read site.
+  interest_rate?: number; // annual, as a decimal (0.0465 = 4.65%)
+  tax_treatment?: BucketTaxTreatment;
+  entity_id?: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
