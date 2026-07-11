@@ -207,6 +207,37 @@ export interface Decision {
 // interest-bearing but untaxed (rare — e.g. certain structures).
 export type BucketTaxTreatment = 'offset' | 'taxable' | 'tax_free';
 
+// ── Investment thesis / conviction (migration 0039) ────────────────────────
+// A written thesis + action-driving rating + review cadence, attachable to any
+// asset (property / holding / cash bucket) or a whole sleeve.
+export type ThesisTargetKind = 'property' | 'holding' | 'bucket' | 'sleeve';
+// Conviction maps to an ACTION, not a mood: core = buy more on weakness,
+// hold = right-sized, trim = overweight/weakening, exit = thesis broken.
+export type Conviction = 'core' | 'hold' | 'trim' | 'exit';
+export type ThesisStatus = 'intact' | 'watch' | 'broken';
+
+export interface InvestmentThesis {
+  id: string;
+  owner_id: string;
+  target_kind: ThesisTargetKind;
+  target_id: string | null;
+  target_label: string;
+  driver: string;          // return-driver tag — the correlation-audit key
+  role: string;            // what job it does in the portfolio
+  thesis: string;          // why I own it
+  kill_criteria: string;   // what would make me sell (written while calm)
+  conviction: Conviction;
+  status: ThesisStatus;
+  conviction_score: number | null;
+  is_structural: boolean;  // family/locked — not graded as an investment
+  review_frequency_months: number; // property 6, others 3
+  last_reviewed: string | null;
+  next_review_date: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface LiquidityBucket {
   id: string;
   owner_id: string;
@@ -495,6 +526,7 @@ export interface CadenceFinancialData {
   budget_lines: BudgetLine[];
   budget_categories: BudgetCategory[];
   budget_fx_rates: BudgetFxRate[];
+  investment_theses: InvestmentThesis[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -517,6 +549,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'budget_lines',
   'budget_categories',
   'budget_fx_rates',
+  'investment_theses',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -539,4 +572,5 @@ export const emptyData = (): CadenceFinancialData => ({
   budget_lines: [],
   budget_categories: [],
   budget_fx_rates: [],
+  investment_theses: [],
 });
