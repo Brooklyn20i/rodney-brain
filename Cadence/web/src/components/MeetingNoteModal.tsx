@@ -10,6 +10,9 @@ import { useMeetingDates, getUpcomingNoteId } from '../lib/meetings';
 import { parseMeeting, serializeMeeting, uid } from '../lib/meetingData';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
 import { readAgendaQueue, useAgendaQueue } from '../lib/agendaQueue';
+import { usePrepTopics } from '../lib/prepTopics';
+import type { PrepTopic } from '../lib/prepTopics';
+import { TopicsPanel } from './TopicsPanel';
 import { buildTaskFromAction, isLinkedToPerson } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 import { sanitizeHtml } from '../lib/sanitize';
@@ -399,6 +402,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
   const [notes, setNotes] = useState<string>(parsed.notes);
   const [title, setTitle] = useState(note.title);
+  const [showTopics, setShowTopics] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
@@ -723,11 +727,26 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     onClose();
   };
 
+  // Covered-topic sync (group meetings): when this occurrence closes with a
+  // topic's agenda item marked covered, the series prep topic flips to
+  // covered too — the work trail resolves itself.
+  const { markCovered, topics: seriesTopics } = usePrepTopics(person.id);
+  const seriesTopicsRef = useRef(seriesTopics);
+  seriesTopicsRef.current = seriesTopics;
+  const syncCoveredTopics = useCallback(async () => {
+    if (!isGroupMeeting) return;
+    const coveredIds = agendaRef.current
+      .filter((a) => a.topic_id && a.status === 'covered')
+      .map((a) => a.topic_id as string)
+      .filter((id) => seriesTopicsRef.current.find((t) => t.id === id)?.status !== 'covered');
+    if (coveredIds.length) await markCovered(coveredIds);
+  }, [isGroupMeeting, markCovered]);
+
   // Auto-split before the final save so the pushed flags land in the same
   // write. On navigate between meetings the split also runs — leaving a
   // meeting IS closing it.
-  const handleClose = async () => { await autoSplitActions(); flushSave(); onClose(); };
-  const handleNavigate = async (id: string) => { await autoSplitActions(); flushSave(); onNavigate(id); };
+  const handleClose = async () => { await autoSplitActions(); await syncCoveredTopics(); flushSave(); onClose(); };
+  const handleNavigate = async (id: string) => { await autoSplitActions(); await syncCoveredTopics(); flushSave(); onNavigate(id); };
 
   // Unmount (e.g. overlay dismissed by a parent) still auto-splits: the refs
   // outlive the component, `pushed` flags prevent double-filing after a
@@ -800,7 +819,26 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 Import Topics ↓
               </button>
             )}
+            {isGroupMeeting && (
+              <button className={`btn btn-secondary btn-sm${showTopics ? ' btn-active' : ''}`}
+                onClick={() => setShowTopics((s) => !s)}>
+                Topics ↓
+              </button>
+            )}
           </div>
+
+          {isGroupMeeting && showTopics && (
+            <div className="mtg-import-panel">
+              <TopicsPanel
+                group={person}
+                agendaHasTopic={(topicId) => agenda.some((a) => a.topic_id === topicId)}
+                onAddToAgenda={(topic: PrepTopic) => setA([
+                  ...agenda,
+                  { id: uid(), title: topic.title, notes: topic.why || '', status: 'discuss', topic_id: topic.id },
+                ])}
+              />
+            </div>
+          )}
 
           {!isGroupMeeting && showImport && (
             <div className="mtg-import-panel">

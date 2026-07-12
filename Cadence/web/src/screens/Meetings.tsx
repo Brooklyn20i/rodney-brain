@@ -9,6 +9,8 @@ import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, todayStr } from '../
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { buildTaskFromAction } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
+import { readPrepTopics } from '../lib/prepTopics';
+import { TopicsPanel } from '../components/TopicsPanel';
 
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
@@ -331,10 +333,13 @@ function GroupMeetingNotes({ group }: { group: Person }) {
 
   const nextId = meetings.find((n) => dateKey(n) >= today)?.id;
 
+  // "+ New Meeting" accepts a date so the NEXT occurrence of a series can be
+  // created ahead of time (mixed cadences — monthly CLT, ad hoc ADX — are just
+  // dated occurrences; there is no schedule model).
+  const [newDate, setNewDate] = useState(todayStr());
   const newMeeting = async () => {
-    const todayDate = todayStr();
-    const todayLabel = fmtDMY(todayDate);
-    const title = `${group.name} · ${todayLabel}`;
+    const date = newDate || todayStr();
+    const title = `${group.name} · ${fmtDMY(date)}`;
     let n: Note;
     try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
     catch (e: any) {
@@ -346,7 +351,7 @@ function GroupMeetingNotes({ group }: { group: Person }) {
       }
       throw e;
     }
-    try { await setMeetingDate(n.id, todayDate); } catch { /* non-critical */ }
+    try { await setMeetingDate(n.id, date); } catch { /* non-critical */ }
     setOpenId(n.id);
   };
 
@@ -359,7 +364,11 @@ function GroupMeetingNotes({ group }: { group: Person }) {
       <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         📝 Meeting Notes
         {meetings.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{meetings.length}</span>}
-        <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={newMeeting}>+ New Meeting</button>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)}
+            aria-label="Date for the new meeting" style={{ fontSize: 12, padding: '4px 6px' }} />
+          <button className="btn btn-primary btn-sm" onClick={newMeeting}>+ New Meeting</button>
+        </span>
       </h3>
       {meetings.length === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
@@ -402,7 +411,11 @@ function GroupMeetingNotes({ group }: { group: Person }) {
 function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
-  const [tab, setTab] = useState<'meetings' | 'actions'>('meetings');
+  const [tab, setTab] = useState<'topics' | 'meetings' | 'actions'>('topics');
+  const topicCount = useMemo(
+    () => readPrepTopics(data.notes, group.id).filter((t) => t.status !== 'covered').length,
+    [data.notes, group.id],
+  );
 
   const folder = mtgFolder(group.id);
   const meetings = useMemo(() =>
@@ -450,8 +463,11 @@ function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — Topics first: the prep work IS the point of a meeting series */}
       <div className="people-tabs">
+        <button className={`people-tab ${tab === 'topics' ? 'active' : ''}`} onClick={() => setTab('topics')}>
+          Topics {topicCount > 0 && <span className="ptab-badge">{topicCount}</span>}
+        </button>
         <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
           Meetings {meetings.length > 0 && <span className="ptab-badge">{meetings.length}</span>}
         </button>
@@ -461,6 +477,7 @@ function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
       </div>
 
       <div className="split-panel-body">
+        {tab === 'topics' && <TopicsPanel group={group} />}
         {tab === 'meetings' && <GroupMeetingNotes group={group} />}
         {tab === 'actions' && <GroupOpenActions group={group} />}
       </div>
