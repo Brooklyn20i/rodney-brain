@@ -8,7 +8,6 @@ import {
   getStaleTasks, getStaleProjects, STALE_DAYS,
 } from '../lib/selectors';
 import { ScreenHeader } from '../components/bits';
-import { AceBriefingCard } from '../components/AceBriefingCard';
 import { StatTile } from '../components/StatTile';
 import { HEALTH_LABEL } from '../lib/health';
 import { readStrategy, kpiList } from '../lib/strategy';
@@ -182,7 +181,7 @@ function NeedsAttention({ onNavigate }: { onNavigate: (screen: string, entityId?
       <div className="needs-attention-hdr">⚑ Needs attention <span className="needs-attention-sub">untouched for {STALE_DAYS}+ days</span></div>
       <div className="needs-attention-body">
         {staleTasks.length > 0 && (
-          <button className="needs-attention-row" onClick={() => onNavigate('tasks')}>
+          <button className="needs-attention-row" onClick={() => onNavigate('home')}>
             <span className="needs-attention-count">{staleTasks.length}</span>
             stale task{staleTasks.length === 1 ? '' : 's'} — oldest: “{staleTasks[0].title.slice(0, 60)}”
           </button>
@@ -245,7 +244,6 @@ export function Dashboard({ onMenu, onNavigate }: {
     <>
       <ScreenHeader title="Dashboard" onMenu={onMenu} />
       <div className="screen-content" style={{ paddingTop: 0 }}>
-        <AceBriefingCard />
         <KpiStrip />
         <NeedsAttention onNavigate={onNavigate} />
         <div className="dash-tabs">

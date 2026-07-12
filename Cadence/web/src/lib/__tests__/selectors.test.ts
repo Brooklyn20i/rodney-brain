@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getTodoGroups, getWaitingOnOthers, getHotThisWeek, getKobeHandling,
-  getLoadSummary, ACTIVE_LOAD_CAP, getDecideItems,
+  getWaitingOnOthers, getHotThisWeek,
+  getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
   getCalendarEvents, groupEventsByDate, getDataHygieneIssues,
@@ -45,41 +45,6 @@ const dec = (o: Partial<Decision>): Decision => ({
   context: '', outcome: '', created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
 }) as Decision;
 
-// ── getTodoGroups ──────────────────────────────────────────────────────────────
-describe('getTodoGroups', () => {
-  it('buckets in-lane tasks into Overdue / Today / This week / Later in order', () => {
-    const items = [
-      wi({ id: 'over', due_date: addDaysStr(-1) }),
-      wi({ id: 'today', due_date: todayStr() }),
-      wi({ id: 'wk', due_date: addDaysStr(4) }),
-      wi({ id: 'later', due_date: addDaysStr(30) }),
-      wi({ id: 'nodue', due_date: null }),
-    ];
-    const g = getTodoGroups(items);
-    expect(g.map((x) => x.key)).toEqual(['overdue', 'today', 'week', 'later']);
-    expect(g.find((x) => x.key === 'overdue')!.items.map((w) => w.id)).toEqual(['over']);
-    // no-due items fall into Later alongside far-future ones
-    expect(g.find((x) => x.key === 'later')!.items.map((w) => w.id).sort()).toEqual(['later', 'nodue']);
-  });
-
-  it('excludes waitingFor, decisions, delegated tasks and done items, but keeps agent-created provenance', () => {
-    const items = [
-      wi({ id: 'wait', type: 'waitingFor' }),
-      wi({ id: 'decide', type: 'decision' }),
-      wi({ id: 'kobe', source: 'for:kobe' }),
-      wi({ id: 'agent', source: 'agent:kobe' }),
-      wi({ id: 'done', done: true }),
-      wi({ id: 'keep' }),
-    ];
-    const ids = getTodoGroups(items).flatMap((g) => g.items.map((w) => w.id));
-    expect(ids.sort()).toEqual(['agent', 'keep']);
-  });
-
-  it('omits empty groups', () => {
-    expect(getTodoGroups([wi({ due_date: todayStr() })]).map((g) => g.key)).toEqual(['today']);
-  });
-});
-
 // ── getWaitingOnOthers ─────────────────────────────────────────────────────────
 describe('getWaitingOnOthers', () => {
   it('returns only open waitingFor items', () => {
@@ -89,23 +54,6 @@ describe('getWaitingOnOthers', () => {
       wi({ id: 'task' }),
     ];
     expect(getWaitingOnOthers(items).map((w) => w.id)).toEqual(['w']);
-  });
-});
-
-// ── getDecideItems ─────────────────────────────────────────────────────────────
-describe('getDecideItems', () => {
-  it('surfaces pending decisions from work items and the decisions table without a migration', () => {
-    const items = [
-      wi({ id: 'wi-decision', title: 'Choose vendor', type: 'decision', due_date: addDaysStr(2) }),
-      wi({ id: 'normal', title: 'Normal task' }),
-      wi({ id: 'done-decision', type: 'decision', done: true }),
-      wi({ id: 'deleted-decision', type: 'decision', deleted_at: '2026-06-10' }),
-    ];
-    const decisions = [
-      dec({ id: 'd-pending', title: 'Approve plan', due_date: todayStr() }),
-      dec({ id: 'd-decided', title: 'Old decision', status: 'decided' }),
-    ];
-    expect(getDecideItems(items, decisions).map((d) => d.title)).toEqual(['Approve plan', 'Choose vendor']);
   });
 });
 
@@ -132,30 +80,20 @@ describe('getHotThisWeek', () => {
   });
 });
 
-// ── getKobeHandling ────────────────────────────────────────────────────────────
-describe('getKobeHandling', () => {
-  it('includes for:kobe, excludes agent:kobe and done', () => {
-    expect(getKobeHandling([wi({ source: 'for:kobe' })])).toHaveLength(1);
-    expect(getKobeHandling([wi({ source: 'agent:kobe' })])).toHaveLength(0);
-    expect(getKobeHandling([wi({ source: 'for:kobe', done: true })])).toHaveLength(0);
-  });
-});
-
 // ── getLoadSummary ─────────────────────────────────────────────────────────────
 describe('getLoadSummary', () => {
-  it('counts in-lane active, overdue subset, waiting and kobe separately', () => {
+  it('counts in-lane active, overdue subset and waiting separately', () => {
     const items = [
       wi({ id: 'a1', due_date: addDaysStr(2) }),
       wi({ id: 'a2', due_date: addDaysStr(-1) }), // overdue, still active
       wi({ id: 'wait', type: 'waitingFor' }),
-      wi({ id: 'kobe', source: 'for:kobe' }),
+      wi({ id: 'kobe', source: 'for:kobe' }), // delegated away — not in any lane
       wi({ id: 'agent', source: 'agent:kobe' }), // provenance only, still in Rodney's lane
     ];
     const s = getLoadSummary(items);
     expect(s.active).toBe(3);
     expect(s.overdue).toBe(1);
     expect(s.waiting).toBe(1);
-    expect(s.kobe).toBe(1);
   });
   it('flags overCap only above the cap', () => {
     const under = Array.from({ length: ACTIVE_LOAD_CAP }, () => wi({}));

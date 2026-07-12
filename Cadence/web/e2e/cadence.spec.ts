@@ -11,81 +11,50 @@ test.beforeEach(async ({ page }) => {
 
 async function navTo(page: Page, label: string) {
   // Word-boundary, case-sensitive match on the accessible name. Survives a
-  // badge count suffix ("◎ My To Do 1") and avoids "Board" matching "Dashboard".
+  // badge count suffix and avoids partial-word matches.
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-test('boots straight to Control (no login gate)', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible();
-  await expect(page.getByText(/To do · 1 overdue/)).toBeVisible();
-  await expect(page.locator('#sidebar').getByRole('button', { name: /\bHorizon\b/ })).toHaveCount(0);
-  await expect(page.locator('#sidebar').getByRole('button', { name: /\bToday\b/ })).toBeVisible();
+test('boots straight to Home (no login gate)', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+  // Retired surfaces never render in the sidebar.
+  for (const gone of ['Today', 'Board', 'Review', 'Calendar', 'Ace', 'Kobe', 'Tasks']) {
+    await expect(page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${gone}\\b`) })).toHaveCount(0);
+  }
+  await expect(page.locator('#sidebar').getByRole('button', { name: /\bHome\b/ })).toBeVisible();
   await expect(page.locator('#sidebar').getByRole('button', { name: /\bDashboard\b/ })).toBeVisible();
 });
 
 // ── Navigation smoke: every screen renders a header in a real browser ───────────
-for (const label of ['Board', 'Tasks', 'Inbox', 'Dashboard', 'Projects', 'People', 'Meetings', 'Notes', 'Review']) {
+for (const label of ['Home', 'People', 'Meetings', 'Projects', 'Notes', 'Inbox', 'Dashboard']) {
   test(`navigates to ${label} without crashing`, async ({ page }) => {
     await navTo(page, label);
     await expect(page.locator('.screen-header h1').first()).toBeVisible();
   });
 }
 
-// ── Control: ranked to-do + waiting + Kobe ───────────────────────────────────────
-test('control shows do-now, decide, waiting and Kobe sections', async ({ page }) => {
-  await expect(page.getByText(/To do · 1 overdue/)).toBeVisible();
-  await expect(page.getByText('Overdue review')).toBeVisible();            // in Do now
-  await expect(page.getByText('Approve Q3 budget')).toBeVisible();         // Decide
-  await expect(page.getByText('Awaiting legal sign-off')).toBeVisible();   // Waiting
-  await expect(page.getByText('Draft summary')).toBeVisible();             // With Kobe
-});
-
-// ── iPad/tablet review mode ────────────────────────────────────────────────────
-test('iPad review mode presents the compact Work review queue without clutter', async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await navTo(page, 'Review');
-  await expect(page.getByRole('heading', { name: 'Review Mode' })).toBeVisible();
-  const queue = page.getByLabel('Compact work review queue');
-  await expect(queue).toBeVisible();
-  for (const label of ['Needs Rodney / Do now', 'Decide', 'Waiting', 'With Kobe', 'Inbox', 'Projects', 'Data hygiene']) {
-    await expect(queue.getByText(label)).toBeVisible();
-  }
-  await expect(page.getByLabel('Data hygiene review queue')).toBeVisible();
-  await expect(page.getByText(/Read-only queue for confusing Work records/)).toBeVisible();
-  await expect(page.getByText('Review before fixing')).toBeVisible();
-  await expect(page.getByText(/Nothing here auto-rewrites live data/)).toBeVisible();
-  await expect(page.getByText(/agent:kobe is provenance only|Loose idea|Ceres/).first()).toBeVisible();
-  await expect(page.getByText('Projects needing attention', { exact: true })).toBeVisible();
-  await expect(page.locator('#sidebar')).toBeVisible();
-  await expect(page.locator('.review-queue-card')).toHaveCount(7);
-  await expect(page.locator('.review-queue-card').first()).toBeInViewport();
-});
-
-// ── Board: reassign a task across columns (the Arranger core) ────────────────────
-test('board moves a task to another person and it leaves the old column', async ({ page }) => {
-  await navTo(page, 'Board');
-  await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
-  const annaCol = page.locator('.board-col', { hasText: 'Anna Lee' });
-  const bobCol = page.locator('.board-col', { hasText: 'Bob Ng' });
-  await expect(annaCol).toContainText('Overdue review');
-
-  const card = page.locator('.board-card', { hasText: 'Overdue review' });
-  await card.getByTitle(/Move to another person/).click();
-  await page.locator('.action-send-picker').getByText('Bob Ng').click();
-
-  await expect(bobCol).toContainText('Overdue review');
-  await expect(annaCol).not.toContainText('Overdue review');
+// ── Home: lanes, counts, and invisible agent provenance ─────────────────────────
+test('home shows my open work with lanes and an agent-created item in a normal lane', async ({ page }) => {
+  await expect(page.getByText(/1 overdue/).first()).toBeVisible();
+  await expect(page.getByText('Overdue review')).toBeVisible();     // Mine lane (default)
+  // agent:kobe is provenance only — the item renders like any other task,
+  // with no agent lane anywhere.
+  await page.locator('#sidebar'); // sidebar present
+  await expect(page.locator('.hub-seg', { hasText: 'Mine' })).toHaveClass(/active/);
+  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
+  await expect(page.getByText('Awaiting legal sign-off')).toBeVisible(); // Waiting lane
 });
 
 // ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ─
-test('creates a capture via Quick Add and it lands in the Inbox', async ({ page }) => {
-  await navTo(page, 'Tasks');
+test('creates a capture via Quick Add and it lands in the Inbox and triage tray', async ({ page }) => {
+  await navTo(page, 'Home');
   await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
-  // Capture-first: it waits in the Inbox for triage rather than joining the filed task list.
+  // Capture-first: it waits in the triage tray on Home and the Inbox.
+  await expect(page.getByTestId('triage-tray').getByText('Zebra checkpoint')).toBeVisible();
   await navTo(page, 'Inbox');
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });

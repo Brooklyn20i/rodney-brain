@@ -5,7 +5,7 @@
  * are mocked; every other piece of component logic runs for real.
  */
 import type { ReactElement } from 'react';
-import { render, screen, fireEvent, within, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WORK_NAV } from '../../components/Sidebar';
 import { emptyData } from '../../lib/types';
@@ -19,14 +19,10 @@ vi.mock('../../lib/meetings', async (orig) => ({
   useMeetingDates: () => ({ dates: h.dates, setMeetingDate: vi.fn() }),
 }));
 
-import { Board } from '../Board';
 import { Dashboard } from '../Dashboard';
-import { Today } from '../Today';
-import { Tasks } from '../taskScreens';
+import { Home } from '../taskScreens';
 import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
-import { Review } from '../Review';
-import { Kobe } from '../Kobe';
 import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
@@ -39,12 +35,6 @@ const wi = (o: any) => ({
   id: 'w', title: 'T', type: 'task', priority: 'medium', due_date: null, project_id: null, person_id: null,
   notes: '', done: false, inboxed: false, source: '', completed_at: null, related_entities: undefined,
   created_at: '', updated_at: '', deleted_at: null, ...o,
-});
-const msg = (o: any) => ({
-  id: 'm', owner_id: 'me', sender_type: 'user', sender_id: null, recipient_type: 'agent', recipient_key: 'agent:kobe',
-  body: 'Message', status: 'unread', linked_work_item_id: null, linked_project_id: null, linked_person_id: null,
-  linked_note_id: null, metadata: {}, created_at: '2026-06-20T09:00:00.000Z', updated_at: '2026-06-20T09:00:00.000Z',
-  processed_at: null, deleted_at: null, ...o,
 });
 function setStore(over: any = {}) {
   const { data: dataOver, ...rest } = over;
@@ -64,166 +54,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-// ── Kobe native message loop ───────────────────────────────────────────────────
-describe('Kobe Ask Kobe message loop', () => {
-  it('defaults to Ask Kobe and keeps the existing tabs available', () => {
-    setStore();
-    render(<Kobe onMenu={() => {}} />);
-    expect(screen.getByText('Kobe reads this channel through Cadence and replies here.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ask Kobe' })).toHaveClass('active');
-    expect(screen.getByRole('button', { name: 'For Kobe' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Briefings' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'From Kobe' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Activity Log' })).toBeInTheDocument();
-  });
-
-  it('filters the thread to agent:kobe and excludes Ace or other agents', () => {
-    setStore({ data: { agent_messages: [
-      msg({ id: 'u1', body: 'Rodney request', sender_type: 'user', recipient_key: 'agent:kobe', created_at: '2026-06-20T09:00:00.000Z' }),
-      msg({ id: 'k1', body: '<p>Kobe reply</p>', sender_type: 'agent', recipient_key: 'agent:kobe', created_at: '2026-06-20T09:01:00.000Z' }),
-      msg({ id: 'a1', body: 'Ace reply', sender_type: 'agent', recipient_key: 'agent:ace', created_at: '2026-06-20T09:02:00.000Z' }),
-      msg({ id: 'x1', body: 'Other agent', sender_type: 'agent', recipient_key: 'agent:other', created_at: '2026-06-20T09:03:00.000Z' }),
-    ] } });
-    render(<Kobe onMenu={() => {}} />);
-    expect(screen.getByText('Rodney request')).toBeInTheDocument();
-    expect(screen.getByText('Kobe reply')).toBeInTheDocument();
-    expect(screen.queryByText('Ace reply')).not.toBeInTheDocument();
-    expect(screen.queryByText('Other agent')).not.toBeInTheDocument();
-  });
-
-  it('inserts the correct user-to-agent payload and clears the composer', async () => {
-    vi.useRealTimers();
-    const insert = vi.fn().mockResolvedValue(msg({ id: 'new' }));
-    setStore({ insert });
-    render(<Kobe onMenu={() => {}} />);
-    const input = screen.getByPlaceholderText('Ask Kobe to act on Cadence…');
-    fireEvent.change(input, { target: { value: '  Chase the pricing decision  ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(insert).toHaveBeenCalledWith('agent_messages', {
-      sender_type: 'user',
-      recipient_type: 'agent',
-      recipient_key: 'agent:kobe',
-      body: 'Chase the pricing decision',
-      status: 'unread',
-    }));
-    expect(input).toHaveValue('');
-  });
-
-  it('rejects empty or whitespace-only sends without calling the store', () => {
-    const insert = vi.fn().mockResolvedValue(msg({ id: 'new' }));
-    setStore({ insert });
-    render(<Kobe onMenu={() => {}} />);
-    const input = screen.getByPlaceholderText('Ask Kobe to act on Cadence…');
-    const send = screen.getByRole('button', { name: 'Send to Kobe' });
-    // Nothing typed — button disabled and Enter is a no-op.
-    expect(send).toBeDisabled();
-    fireEvent.keyDown(input, { key: 'Enter' });
-    // Whitespace-only draft stays blocked.
-    fireEvent.change(input, { target: { value: '   ' } });
-    expect(send).toBeDisabled();
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(insert).not.toHaveBeenCalled();
-  });
-
-  it('renders user and agent messages with linked context chips in the thread', () => {
-    setStore({ data: {
-      work_items: [wi({ id: 'w1', title: 'Pricing proof point' })],
-      projects: [project({ id: 'p1', name: 'CTS' })],
-      people: [person({ id: 'person1', name: 'Milad' })],
-      notes: [{ id: 'n1', title: 'Meeting note', body: '', owner_id: 'me', created_at: '', updated_at: '', deleted_at: null }],
-      agent_messages: [
-        msg({ id: 'user', body: 'Please chase this', sender_type: 'user' }),
-        msg({
-          id: 'ctx', body: '<p>Done</p>', sender_type: 'agent', linked_work_item_id: 'w1', linked_project_id: 'p1',
-          linked_person_id: 'person1', linked_note_id: 'n1', created_at: '2026-06-20T09:01:00.000Z',
-        }),
-      ],
-    } });
-    render(<Kobe onMenu={() => {}} />);
-    expect(screen.getByText('Please chase this')).toBeInTheDocument();
-    expect(screen.getByText('Done')).toBeInTheDocument();
-    expect(screen.getByText('Pricing proof point')).toBeInTheDocument();
-    expect(screen.getByText('CTS')).toBeInTheDocument();
-    expect(screen.getByText('Milad')).toBeInTheDocument();
-    expect(screen.getByText('Meeting note')).toBeInTheDocument();
-  });
-});
-
 // ── Work navigation ─────────────────────────────────────────────────────────────
 describe('Work navigation', () => {
-  it('puts the Control cockpit first with plain names, and Dashboard in the nav', () => {
-    expect(WORK_NAV[0].section).toBe('Control');
-    expect(WORK_NAV[0].items.map((i) => i.label)).toEqual([
-      'Today', 'Dashboard', 'Inbox', 'Calendar',
+  it('is seven screens, Home first, with Search/Settings in the footer only', () => {
+    const items = WORK_NAV.flatMap((g) => g.items);
+    expect(items.map((i) => i.id)).toEqual([
+      'home', 'people', 'meetings', 'projects', 'notes', 'inbox', 'dashboard',
     ]);
-    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'dashboard')).toBeDefined();
-    // Working surfaces live under Work with plain vocabulary.
-    const work = WORK_NAV.find((g) => g.section === 'Work');
-    expect(work!.items.map((i) => i.label)).toEqual([
-      'Projects', 'Tasks', 'People', 'Meetings', 'Notes', 'Board',
-    ]);
+    expect(items[0].label).toBe('Home');
   });
 
-  it('makes Ace the sole in-app Work agent — Kobe is no longer a Work nav surface', () => {
-    const agents = WORK_NAV.find((g) => g.section === 'Agents');
-    expect(agents).toBeDefined();
-    expect(agents!.items.map((i) => i.id)).toEqual(['ace']);
-    // Kobe must not appear anywhere in the Work sidebar.
-    expect(WORK_NAV.flatMap((g) => g.items).find((i) => i.id === 'kobe')).toBeUndefined();
-  });
-});
-
-// ── Board ───────────────────────────────────────────────────────────────────────
-describe('Board workflow', () => {
-  it('renders columns by person, folds orphaned tasks into Unassigned', () => {
-    setStore({ data: {
-      people: [person({ id: 'pA', name: 'Anna' }), person({ id: 'pB', name: 'Bob' })],
-      work_items: [
-        wi({ id: 't1', title: 'Alpha', person_id: 'pA' }),
-        wi({ id: 't2', title: 'Ghosted', person_id: 'pGHOST' }), // owner not in people
-      ],
-    }});
-    render(<Board onMenu={() => {}} />);
-    expect(screen.getByText('Anna')).toBeInTheDocument();
-    expect(screen.getByText('Alpha')).toBeInTheDocument();
-    // orphan must still be visible under Unassigned, never dropped
-    expect(screen.getByText('Unassigned')).toBeInTheDocument();
-    expect(screen.getByText('Ghosted')).toBeInTheDocument();
-  });
-
-  it('move reassigns person_id and reconciles related_entities', () => {
-    setStore({ data: {
-      people: [person({ id: 'pA', name: 'Anna' }), person({ id: 'pB', name: 'Bob' })],
-      work_items: [wi({ id: 't1', title: 'Alpha', person_id: 'pA', related_entities: [{ type: 'person', id: 'pA', name: 'Anna' }] })],
-    }});
-    render(<Board onMenu={() => {}} />);
-    const card = screen.getByText('Alpha').closest('.board-card') as HTMLElement;
-    fireEvent.click(within(card).getByTitle(/Move to another person/));
-    fireEvent.click(screen.getByText('Bob')); // Bob is a picker option (no column yet)
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 't1', {
-      person_id: 'pB', related_entities: [{ type: 'person', id: 'pB', name: 'Bob' }],
-    });
-  });
-
-  it('projects mode reassigns project_id and reconciles related_entities', () => {
-    setStore({ data: {
-      projects: [project({ id: 'prA', name: 'Apollo' }), project({ id: 'prB', name: 'Borealis' })],
-      work_items: [wi({ id: 't1', title: 'Alpha', project_id: 'prA', related_entities: [{ type: 'project', id: 'prA', name: 'Apollo' }] })],
-    }});
-    render(<Board onMenu={() => {}} />);
-    fireEvent.click(screen.getByText(/By project/));
-    const card = screen.getByText('Alpha').closest('.board-card') as HTMLElement;
-    fireEvent.click(within(card).getByTitle(/Move to another project/));
-    fireEvent.click(screen.getByText('Borealis'));
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 't1', {
-      project_id: 'prB', related_entities: [{ type: 'project', id: 'prB', name: 'Borealis' }],
-    });
-  });
-
-  it('shows an empty state when there are no open tasks', () => {
-    setStore({ data: { people: [person({ id: 'pA', name: 'Anna' })], work_items: [] } });
-    render(<Board onMenu={() => {}} />);
-    expect(screen.getByText(/No open tasks to arrange/)).toBeInTheDocument();
+  it('has no agent or retired-cockpit surfaces in the sidebar', () => {
+    const ids = WORK_NAV.flatMap((g) => g.items).map((i) => i.id);
+    for (const gone of ['ace', 'kobe', 'today', 'tasks', 'board', 'review', 'calendar']) {
+      expect(ids).not.toContain(gone);
+    }
   });
 });
 
@@ -254,62 +99,17 @@ describe('Dashboard workflow', () => {
   });
 });
 
-// ── Control (Today) ──────────────────────────────────────────────────────────────
-describe('Control workflow', () => {
-  it('shows the load strip with an over-cap nudge', () => {
-    setStore({ data: {
-      work_items: Array.from({ length: 8 }, (_, i) => wi({ id: 't' + i, title: 'Task' + i })),
-    }});
-    render(<Today onMenu={() => {}} />);
-    expect(screen.getByText('To do')).toBeInTheDocument();
-    expect(screen.getByText(/holding 8 open items/)).toBeInTheDocument();
-  });
-
-  it('ranks the to-do list by urgency, separates waiting, opens the editor', () => {
-    setStore({ data: {
-      people: [person({ id: 'pA', name: 'Anna' })],
-      work_items: [
-        wi({ id: 'o1', title: 'Overdue task', due_date: addDaysStr(-1) }),
-        wi({ id: 'w1', title: 'Week task', due_date: addDaysStr(3) }),
-        wi({ id: 'd1', title: 'Decision task', type: 'decision' }),
-        wi({ id: 'wf', title: 'Vendor reply', type: 'waitingFor', person_id: 'pA' }),
-        wi({ id: 'k1', title: 'Kobe task', source: 'for:kobe' }),
-        wi({ id: 'ak1', title: 'Created by Kobe task', source: 'agent:kobe' }),
-      ],
-    }});
-    render(<Today onMenu={() => {}} />);
-    // urgency group headers and control lanes
-    expect(screen.getByText(/Overdue · 1/)).toBeInTheDocument();
-    expect(screen.getByText(/This week · 1/)).toBeInTheDocument();
-    expect(screen.getByText('Needs Rodney / Do now')).toBeInTheDocument();
-    expect(screen.getByText('Decide')).toBeInTheDocument();
-    expect(screen.getByText('Decision task')).toBeInTheDocument();
-    expect(screen.getByText('Created by Kobe task')).toBeInTheDocument();
-    expect(screen.getByText('Created by Kobe')).toBeInTheDocument();
-    // waiting + delegated-to-kobe are their own sections, not in the to-do
-    expect(screen.getByText('Vendor reply')).toBeInTheDocument();
-    expect(screen.getByText('Kobe task')).toBeInTheDocument();
-    // tapping a task opens the editor
-    fireEvent.click(screen.getByText('Overdue task'));
-    expect(screen.getByText('Edit Item')).toBeInTheDocument();
-  });
-
-  it('hides the load strip entirely when there is nothing to show', () => {
-    setStore({ data: { work_items: [] } });
-    render(<Today onMenu={() => {}} />);
-    expect(screen.queryByText('To do')).not.toBeInTheDocument();
-  });
-});
-
-// ── Tasks ────────────────────────────────────────────────────────────────────────
-describe('Tasks workflow', () => {
-  it('reads as Tasks, not the primary Control cockpit', () => {
+// ── Home ────────────────────────────────────────────────────────────────────────
+describe('Home workflow', () => {
+  it('lands as Home: my commitments with lanes and counts', () => {
     setStore({ data: { work_items: [
       wi({ id: 't1', title: 'Overdue one', due_date: addDaysStr(-1) }),
       wi({ id: 't2', title: 'Later one', due_date: addDaysStr(20) }),
     ]}});
-    render(<Tasks onMenu={() => {}} />);
-    expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument();
+    render(<Home onMenu={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByText('Mine')).toBeInTheDocument();
+    expect(screen.getByText('Waiting')).toBeInTheDocument();
     expect(screen.getByText('Overdue one')).toBeInTheDocument();
     expect(screen.getByText('Later one')).toBeInTheDocument();
     expect(screen.getByText(/2 open · 1 overdue/)).toBeInTheDocument();
@@ -321,7 +121,7 @@ describe('Tasks workflow', () => {
       people: [person({ id: 'pA', name: 'Anna' })],
       work_items: [wi({ id: 't1', title: 'Hers', person_id: 'pA' })],
     }});
-    render(<Tasks onMenu={() => {}} />);
+    render(<Home onMenu={() => {}} />);
     fireEvent.click(screen.getByText('Person'));
     // 'Anna' shows as both the group header and the task's person tag.
     expect(screen.getAllByText('Anna').length).toBeGreaterThanOrEqual(1);
@@ -335,7 +135,7 @@ describe('Tasks workflow', () => {
       notes: '',
     });
     setStore({ data: { notes: [{ id: 'n1', title: 'Ops sync', folder: '__mtg__team', body }] } });
-    render(<Tasks onMenu={() => {}} />);
+    render(<Home onMenu={() => {}} />);
     fireEvent.click(screen.getByText('File →'));
     fireEvent.click(screen.getByText('↓ Send to Tasks'));
     await Promise.resolve();
@@ -363,43 +163,6 @@ describe('Inbox workflow', () => {
     expect(screen.getByText('Captured note')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Done triaging' }));
     expect(h.store.update).toHaveBeenCalledWith('work_items', 'in1', { inboxed: false });
-  });
-});
-
-// ── Review ─────────────────────────────────────────────────────────────────────
-describe('Review workflow', () => {
-  it('renders a compact iPad review queue in priority order with project attention', () => {
-    setStore({ data: {
-      projects: [
-        project({ id: 'prA', name: 'Apollo', health: 'red', next_action: 'Lock scope' }),
-        project({ id: 'prB', name: 'Borealis', health: 'green', next_action: '' }),
-      ],
-      work_items: [
-        wi({ id: 'todo', title: 'Rodney task', due_date: addDaysStr(-1) }),
-        wi({ id: 'decide', title: 'Decision task', type: 'decision', project_id: 'prA' }),
-        wi({ id: 'wait', title: 'Waiting task', type: 'waitingFor', project_id: 'prA' }),
-        wi({ id: 'kobe', title: 'Kobe task', source: 'for:kobe' }),
-        wi({ id: 'capture', title: 'Loose capture', inboxed: true }),
-        wi({ id: 'agent', title: 'Created by Kobe task', source: 'agent:kobe', person_id: 'pA' }),
-      ],
-    }});
-    render(<Review onMenu={() => {}} />);
-
-    const queue = screen.getByLabelText('Compact work review queue');
-    expect(within(queue).getByText('Needs Rodney / Do now')).toBeInTheDocument();
-    expect(within(queue).getByText('Decide')).toBeInTheDocument();
-    expect(within(queue).getByText('Waiting')).toBeInTheDocument();
-    expect(within(queue).getByText('With Kobe')).toBeInTheDocument();
-    expect(within(queue).getByText('Inbox')).toBeInTheDocument();
-    expect(within(queue).getByText('Projects')).toBeInTheDocument();
-    expect(within(queue).getByText('Data hygiene')).toBeInTheDocument();
-    expect(screen.getByLabelText('Data hygiene review queue')).toBeInTheDocument();
-    expect(screen.getByText(/Read-only queue for confusing Work records/)).toBeInTheDocument();
-    expect(screen.getByText(/agent:kobe is provenance only/)).toBeInTheDocument();
-    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-    expect(screen.getByText('Projects needing attention')).toBeInTheDocument();
-    expect(screen.getAllByText('Apollo').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Borealis').length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -442,13 +205,10 @@ describe('Gantt', () => {
 // ── Smoke: every screen renders without crashing (empty + populated) ──────────────
 describe('Screen render smoke', () => {
   const screens: [string, () => ReactElement][] = [
-    ['Tasks', () => <Tasks onMenu={() => {}} />],
+    ['Home', () => <Home onMenu={() => {}} />],
     ['Inbox', () => <Inbox onMenu={() => {}} />],
     ['Notes', () => <Notes onMenu={() => {}} />],
-    ['Review', () => <Review onMenu={() => {}} />],
     ['Dashboard', () => <Dashboard onMenu={() => {}} onNavigate={() => {}} />],
-    ['Board', () => <Board onMenu={() => {}} />],
-    ['Today', () => <Today onMenu={() => {}} />],
   ];
   for (const [name, el] of screens) {
     it(`${name} renders with empty data`, () => {

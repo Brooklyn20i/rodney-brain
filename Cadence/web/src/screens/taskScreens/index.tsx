@@ -7,19 +7,21 @@ import { QuickAdd } from '../../components/QuickAdd';
 import { TaskList, MeetingActionRow } from './TaskList';
 import type { TaskGroup } from './TaskList';
 import { TaskDetailPanel } from './TaskDetailPanel';
+import { TriageTray } from '../../components/TriageTray';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
 import { bucketForDue } from '../../lib/dateBuckets';
 import { createMeetingActionFiler } from '../../lib/meetingActions';
-import { collectOpenMeetingActions, isFiledTask, isAgentTask, isUserTask } from '../../lib/tasks';
+import { collectOpenMeetingActions, isFiledTask } from '../../lib/tasks';
 import type { OpenMeetingAction, PushTarget } from '../../lib/tasks';
 
-type Lane = 'all' | 'mine' | 'waiting' | 'delegated';
+type Lane = 'mine' | 'waiting';
 type GroupBy = 'due' | 'priority' | 'person' | 'project' | 'type';
 type DateFilter = 'all' | 'overdue' | 'today' | 'week' | 'none';
 
+// Two lanes only: Mine = what I owe; Waiting = what others owe me (the global
+// they-owe-me view, grouped by person). No All/Delegated — those were noise.
 const LANE_OPTS: { v: Lane; label: string }[] = [
-  { v: 'all', label: 'All' }, { v: 'mine', label: 'Mine' },
-  { v: 'waiting', label: 'Waiting' }, { v: 'delegated', label: 'Delegated' },
+  { v: 'mine', label: 'Mine' }, { v: 'waiting', label: 'Waiting' },
 ];
 const GROUP_OPTS: { v: GroupBy; label: string }[] = [
   { v: 'due', label: 'Due date' }, { v: 'priority', label: 'Priority' },
@@ -35,19 +37,18 @@ const PRI_META: Record<string, { label: string; color: string; rank: number }> =
 
 const inLane = (w: WorkItem, lane: Lane): boolean => {
   switch (lane) {
-    case 'mine': return isFiledTask(w) && w.type !== 'waitingFor';
     case 'waiting': return isFiledTask(w) && w.type === 'waitingFor';
-    case 'delegated': return !w.done && isAgentTask(w);
-    default: return !w.done && !w.inboxed && (isUserTask(w) || isAgentTask(w));
+    default: return isFiledTask(w) && w.type !== 'waitingFor';
   }
 };
 
-// The unified Task Hub: every open task in one place — lanes (Mine / Waiting /
-// Delegated), clickable stat tiles as date filters, grouped master list with
-// inline quick-add, and an edit-in-place detail panel (People's split view).
-export function Tasks({ onMenu }: { onMenu?: () => void }) {
+// Home: Rodney's commitments in one place — the triage tray for fresh
+// captures, lanes (Mine = what I owe / Waiting = what others owe me),
+// clickable stat tiles as date filters, grouped master list with inline
+// quick-add, and an edit-in-place detail panel (People's split view).
+export function Home({ onMenu }: { onMenu?: () => void }) {
   const { data, insert, update } = useCadence();
-  const [lane, setLane] = useState<Lane>('all');
+  const [lane, setLane] = useState<Lane>('mine');
   const [groupBy, setGroupBy] = useState<GroupBy>('due');
   const [filter, setFilter] = useState<DateFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -176,7 +177,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Tasks" subtitle={subtitle} onMenu={onMenu}>
+      <ScreenHeader title="Home" subtitle={subtitle} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
@@ -200,6 +201,9 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       <div className="split-view task-hub">
         <div className="split-left task-hub-left">
           <div className="split-panel-body">
+            {/* Fresh captures land here until shaped — the zero-navigation triage view. */}
+            <TriageTray onEdit={(w) => setSelectedId(w.id)} />
+
             <div className="hub-stats" aria-label="Task filters">
               {tile('overdue', counts.overdue, 'Overdue', counts.overdue ? 'red' : 'default')}
               {tile('today', counts.today, 'Today', counts.today ? 'orange' : 'default')}
@@ -272,3 +276,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
     </>
   );
 }
+
+// Transitional alias — the shim at screens/Tasks.tsx and older tests import
+// `Tasks`; the screen itself is Home now.
+export { Home as Tasks };

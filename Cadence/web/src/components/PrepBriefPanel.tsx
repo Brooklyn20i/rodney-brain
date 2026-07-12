@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Person, WorkItem, Project, ProjectUpdate } from '../lib/types';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
@@ -6,9 +6,6 @@ import { uid } from '../lib/meetingData';
 import { inferHealthReason } from '../lib/selectors';
 import { sanitizeHtml } from '../lib/sanitize';
 import { isOverdue, fmtDM } from '../lib/util';
-import { sendAceTurn, createTurnKeeper } from '../lib/aceClient';
-import { meetingPrepPrompt } from '../lib/acePrompts';
-import { useCadence } from '../lib/store';
 
 const isPersonLinked = (w: { person_id: string | null; related_entities?: { type: string; id: string }[] }, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
@@ -37,16 +34,8 @@ export function PrepBriefPanel({
   person, agenda, carryForward, deferredAgenda,
   workItems, projects, projectUpdates, onAddToAgenda, onClose,
 }: PrepBriefPanelProps) {
-  const { workspace } = useCadence();
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [aceSent, setAceSent] = useState(false);
-  const [aceBusy, setAceBusy] = useState(false);
-  const [aceError, setAceError] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
-  // Idempotency keeper: reuses the same request_id across retries of the same
-  // brief prompt (so an ambiguous accepted-but-response-lost send can't
-  // duplicate it); a different prompt/person mints a fresh id.
-  const briefKeeper = useRef(createTurnKeeper());
 
   const alreadyInAgenda = useMemo(
     () => new Set(agenda.map((a) => a.title.toLowerCase())),
@@ -96,25 +85,6 @@ export function PrepBriefPanel({
     });
     if (toAdd.length > 0) onAddToAgenda(toAdd);
     setChecked(new Set());
-  };
-
-  const sendToAce = async () => {
-    if (aceBusy) return;
-    setAceBusy(true);
-    setAceError(null);
-    const prompt = meetingPrepPrompt(person);
-    const requestId = briefKeeper.current.idFor(prompt);
-    const result = await sendAceTurn({ message: prompt, requestId, workspaceId: workspace?.id });
-    if (result.accepted) {
-      // Accepted — this turn is done; a later brief mints a fresh id.
-      briefKeeper.current.accepted();
-      setAceSent(true);
-    } else {
-      // Not accepted — the keeper retains the id so an identical retry reuses
-      // it; surface the failure and never claim "sent".
-      setAceError("Couldn't reach Ace — try again.");
-    }
-    setAceBusy(false);
   };
 
   const hasFromLast = deferredAgenda.length > 0 || carryForward.length > 0;
@@ -236,19 +206,6 @@ export function PrepBriefPanel({
             </div>
           )}
 
-        </div>
-
-        {/* Ace footer */}
-        <div className="prep-ace-footer">
-          {aceSent
-            ? <div className="prep-ace-sent">✓ Brief sent — check the Ace screen</div>
-            : <>
-                <button className="prep-ace-btn" onClick={sendToAce} disabled={aceBusy}>
-                  {aceBusy ? 'Asking Ace…' : '✨ Ask Ace for summary'}
-                </button>
-                {aceError && <div className="prep-ace-error" role="alert">{aceError}</div>}
-              </>
-          }
         </div>
       </div>
     </>,
