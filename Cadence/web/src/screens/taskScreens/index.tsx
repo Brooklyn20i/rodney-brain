@@ -7,7 +7,6 @@ import { QuickAdd } from '../../components/QuickAdd';
 import { TaskList } from './TaskList';
 import type { TaskGroup } from './TaskList';
 import { TaskDetailPanel } from './TaskDetailPanel';
-import { TriageTray } from '../../components/TriageTray';
 import { TodayStrip } from '../../components/TodayStrip';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
 import { bucketForDue } from '../../lib/dateBuckets';
@@ -205,9 +204,8 @@ export function Home({ onMenu, onNavigate }: {
             {/* Do I have meetings today? Answered before anything else. */}
             <TodayStrip onNavigate={onNavigate} />
 
-            {/* Fresh captures land here until shaped — the zero-navigation triage view. */}
-            <TriageTray onEdit={(w) => setSelectedId(w.id)} />
-
+            {/* Home shows only committed work. Fresh captures live in the Inbox
+                until triaged — Home never duplicates that queue. */}
             {pinnedItems.length > 0 && (
               <div className="detail-section day-plan" aria-label="Today's focus">
                 <h3>★ Today's focus
