@@ -83,6 +83,18 @@ describe('createRestTimerCue', () => {
     expect(oscillators.every((osc) => osc.start.mock.calls.length === 1 && osc.stop.mock.calls.length === 1)).toBe(true);
   });
 
+  it('plays a fresh cue each time a later rest timer completes', () => {
+    const { win, oscillators } = makeAudioWindow();
+    const cue = createRestTimerCue(win);
+
+    cue.play();
+    cue.play();
+
+    expect(oscillators).toHaveLength(4);
+    expect(oscillators.map((osc) => osc.frequency.value)).toEqual([880, 1175, 880, 1175]);
+    expect(oscillators.every((osc) => osc.start.mock.calls.length === 1 && osc.stop.mock.calls.length === 1)).toBe(true);
+  });
+
   it('resumes a suspended context when primed by a user gesture', () => {
     const { win, resume } = makeAudioWindow('suspended');
     const cue = createRestTimerCue(win);
