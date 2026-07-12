@@ -679,7 +679,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
     } finally {
       pushing.current = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insert, isGroupMeeting, person.id, person.name, scheduleSave, logActivity]);
 
   const sending = useRef<Set<string>>(new Set());
