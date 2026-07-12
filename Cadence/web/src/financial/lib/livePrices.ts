@@ -11,7 +11,7 @@
 // and scraping it violates its terms, so property stays a one-tap manual
 // reprice from the portal's estimate (see Debt & Offset screen).
 
-import type { InvestmentHolding } from './types';
+import type { BudgetFxRate, InvestmentHolding } from './types';
 
 export interface LiveQuote {
   price: number;
@@ -19,6 +19,9 @@ export interface LiveQuote {
 }
 
 export type QuoteMap = Record<string, LiveQuote>;
+
+// Yahoo Finance's USD -> AUD FX pair. `price` is AUD per 1 USD.
+export const USD_AUD_FX_SYMBOL = 'USDAUD=X';
 
 // Map a holding to its Yahoo Finance symbol:
 //   BTC                      -> BTC-AUD  (spot in AUD directly)
@@ -30,6 +33,35 @@ export function yahooSymbol(h: Pick<InvestmentHolding, 'ticker' | 'market'>): st
   if (ticker === 'BTC') return 'BTC-AUD';
   if (/\b(asx|stake\s+aus|australia|australian)\b/i.test(market)) return `${ticker}.AX`;
   return ticker;
+}
+
+export function quoteSymbolsForHoldings(
+  holdings: Pick<InvestmentHolding, 'ticker' | 'market' | 'currency' | 'deleted_at'>[]
+): string[] {
+  const symbols = new Set<string>();
+  for (const h of holdings) {
+    if (h.deleted_at) continue;
+    symbols.add(yahooSymbol(h));
+    if ((h.currency || 'AUD').toUpperCase() === 'USD') symbols.add(USD_AUD_FX_SYMBOL);
+  }
+  return [...symbols];
+}
+
+export function liveFxRatesFromQuotes(quotes: QuoteMap): BudgetFxRate[] {
+  const usdAud = quotes[USD_AUD_FX_SYMBOL];
+  if (!usdAud || !Number.isFinite(usdAud.price) || usdAud.price <= 0) return [];
+  if ((usdAud.currency || '').toUpperCase() !== 'AUD') return [];
+  return [
+    {
+      id: 'live-usd-aud',
+      owner_id: 'live-quote',
+      currency: 'USD',
+      rate_to_aud: usdAud.price,
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+    },
+  ];
 }
 
 export function quoteCurrencyMatchesHolding(symbol: string, quoteCurrency: string, holdingCurrency: string): boolean {
@@ -59,6 +91,7 @@ const DEMO_QUOTES: QuoteMap = {
   'BTC-AUD': { price: 88_900, currency: 'AUD' },
   MSFT: { price: 512, currency: 'AUD' },
   VOO: { price: 845, currency: 'AUD' },
+  [USD_AUD_FX_SYMBOL]: { price: 1.5, currency: 'AUD' },
 };
 
 export async function fetchLiveQuotes(symbols: string[], demo: boolean): Promise<QuoteMap> {
