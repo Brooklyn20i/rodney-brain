@@ -331,6 +331,7 @@ export interface InvestmentBucketSummary {
   label: string;
   invested: number;
   currentValue: number;
+  currentValueBasis: 'month_close' | 'holdings';
   totalGain: number;
   totalReturn: number | null;
   fyOpeningValue: number | null;
@@ -425,6 +426,13 @@ function openingValueForBucket(bucket: InvestmentBucket, opening: MonthlyMetric 
   return null;
 }
 
+function latestMetricValueForBucket(bucket: InvestmentBucket, latest: MonthlyMetric | null): number | null {
+  if (!latest) return null;
+  if (bucket === 'shares') return latest.shares;
+  if (bucket === 'crypto') return latest.btc_crypto;
+  return null;
+}
+
 function buildBucketSummary(
   bucket: InvestmentBucket,
   holdings: InvestmentHolding[],
@@ -461,7 +469,12 @@ function buildBucketSummary(
   );
   const fyNetBuysC = fyBuys.reduce((sum, t) => sum + toCents(t.amount_aud), 0);
   const openingValue = openingValueForBucket(bucket, opening);
-  const currentValue = centsToDollars(currentC);
+  const metricCurrentValue = latestMetricValueForBucket(bucket, latest);
+  // Top investment cards are ledger/reconciliation cards. They must reconcile
+  // to the latest monthly close; holding rows can be repriced intra-month and
+  // may intentionally differ until the next close is posted.
+  const currentValue = metricCurrentValue ?? centsToDollars(currentC);
+  const currentValueBasis = metricCurrentValue === null ? 'holdings' : 'month_close';
   const invested = centsToDollars(investedC);
   const totalGain = currentValue - invested;
   const fyGain = openingValue === null ? null : currentValue - openingValue - centsToDollars(fyNetBuysC);
@@ -472,6 +485,7 @@ function buildBucketSummary(
     label: bucket === 'shares' ? 'Shares & ETFs' : 'BTC / crypto custody',
     invested,
     currentValue,
+    currentValueBasis,
     totalGain,
     totalReturn: invested > 0 ? totalGain / invested : null,
     fyOpeningValue: openingValue,
@@ -479,7 +493,7 @@ function buildBucketSummary(
     fyGain,
     fyReturn: fyGain === null || !fyDenominator ? null : fyGain / fyDenominator,
     holdings: bucketHoldings.length,
-    asOfDate: maxAsOf,
+    asOfDate: currentValueBasis === 'month_close' ? latest?.period ?? maxAsOf : maxAsOf,
     missingCurrencies: [...missing].sort(),
   };
 }
@@ -516,6 +530,10 @@ export function investmentPerformanceSummary(
       label: 'Total investments',
       invested: totalInvested,
       currentValue: totalCurrent,
+      currentValueBasis:
+        shares.currentValueBasis === 'month_close' && crypto.currentValueBasis === 'month_close'
+          ? 'month_close'
+          : 'holdings',
       totalGain: totalCurrent - totalInvested,
       totalReturn: totalInvested > 0 ? (totalCurrent - totalInvested) / totalInvested : null,
       fyOpeningValue: fyOpenParts.length > 0 ? fyOpenParts.reduce((sum, v) => sum + v, 0) : null,

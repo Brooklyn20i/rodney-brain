@@ -39,18 +39,19 @@ function nativeMoney(value: number, currency: string): string {
 function PerformanceCard({ summary }: { summary: InvestmentBucketSummary }) {
   const totalTone = summary.totalGain >= 0 ? 'good' : 'bad';
   const fyTone = summary.fyGain === null ? 'neutral' : summary.fyGain >= 0 ? 'good' : 'bad';
+  const basisLabel = summary.currentValueBasis === 'month_close' ? 'month-close ledger' : 'holding rows';
   return (
     <div className={`inv-perf-card inv-${summary.bucket}`}>
       <div className="inv-perf-head">
         <div>
           <div className="inv-perf-label">{summary.label}</div>
           <div className="inv-perf-sub">
-            {summary.holdings} holding{summary.holdings === 1 ? '' : 's'} · as of {summary.asOfDate ?? 'TBC'}
+            {basisLabel} · {summary.holdings} holding{summary.holdings === 1 ? '' : 's'} · {summary.asOfDate ?? 'TBC'}
           </div>
         </div>
         <span className="grade-tag">AUD</span>
       </div>
-      <div className="inv-perf-main">{formatMoney(summary.currentValue, true)}</div>
+      <div className="inv-perf-main">{formatMoney(summary.currentValue)}</div>
       <div className="inv-perf-split">
         <div>
           <span>Invested</span>
@@ -328,6 +329,9 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
               <strong>Management-grade, not tax-grade</strong>
             </div>
           </div>
+          <p className="inv-note">
+            Top cards use the latest month-close ledger so they reconcile to Monthly Metrics. Holdings below are position rows and may differ after intra-month repricing until the next close is posted.
+          </p>
           <p className="inv-note">
             FY YTD gain = current value − FY opening value − FY buys. This separates market movement from new capital deployed.
             {perf.total.missingCurrencies.length > 0 ? ` Set FX for ${perf.total.missingCurrencies.join(', ')} to make AUD totals decision-grade.` : ''}
