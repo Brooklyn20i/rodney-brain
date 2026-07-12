@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
 import { Table } from '@tiptap/extension-table';
@@ -110,8 +109,9 @@ function Toolbar({ editor }: { editor: Editor }) {
 export function RichEditor({ content, onBlur, onChange, placeholder = 'Start typing…' }: Props) {
   const editor = useEditor({
     extensions: [
+      // StarterKit already ships underline in tiptap v3 — adding the standalone
+      // extension again logs a duplicate-extension warning on every mount.
       StarterKit,
-      Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Highlight.configure({ multicolor: false }),
       Table.configure({ resizable: false }),
