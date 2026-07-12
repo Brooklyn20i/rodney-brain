@@ -129,26 +129,6 @@ describe('Home workflow', () => {
     expect(screen.getByText('Hers')).toBeInTheDocument();
   });
 
-  it('files an unassigned meeting action directly into Tasks', async () => {
-    const body = JSON.stringify({
-      agenda: [],
-      actions: [{ id: 'a1', title: 'Unassigned meeting action', owner: 'me', due: '', done: false, pushed: false }],
-      notes: '',
-    });
-    setStore({ data: { notes: [{ id: 'n1', title: 'Ops sync', folder: '__mtg__team', body }] } });
-    render(<Home onMenu={() => {}} />);
-    fireEvent.click(screen.getByText('File →'));
-    fireEvent.click(screen.getByText('↓ Send to Tasks'));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(h.store.insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
-      title: 'Unassigned meeting action',
-      inboxed: false,
-    }));
-    expect(h.store.update).toHaveBeenCalledWith('notes', 'n1', expect.objectContaining({
-      body: expect.stringContaining('"pushed_to":"Tasks"'),
-    }));
-  });
 });
 
 // ── People ledger ───────────────────────────────────────────────────────────────

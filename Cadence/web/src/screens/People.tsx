@@ -8,6 +8,8 @@ import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, fmtWeekDM, todayStr,
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isAgentTask } from '../lib/tasks';
 import { getPersonLedger } from '../lib/selectors';
+import { readAgendaQueue, useAgendaQueue } from '../lib/agendaQueue';
+import { RaiseAt1on1Button } from '../components/RaiseAt1on1Button';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -238,7 +240,7 @@ function MeetingNotes({ person }: { person: Person }) {
 }
 
 // ── Single topic (work_item) card ──────────────────────────────────────────────
-function TopicCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }) {
+function TopicCard({ w, onEdit, raisable }: { w: WorkItem; onEdit: (w: WorkItem) => void; raisable?: boolean }) {
   const { data, update } = useCadence();
   const proj = data.projects.find((p) => p.id === w.project_id);
   const toggle = () => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
@@ -254,6 +256,7 @@ function TopicCard({ w, onEdit }: { w: WorkItem; onEdit: (w: WorkItem) => void }
         </div>
         {w.notes && <div className="topic-notes">{w.notes.slice(0, 140)}{w.notes.length > 140 ? '…' : ''}</div>}
       </div>
+      {raisable && <RaiseAt1on1Button task={w} compact />}
       <button className="btn-icon" onClick={() => onEdit(w)}>✎</button>
     </div>
   );
@@ -355,7 +358,7 @@ function LedgerSection({ person, title, items, overdue, accent, addType, addPlac
         {items.length > 0 && <span className="section-count" style={{ background: accent }}>{items.length}</span>}
         {overdue > 0 && <span className="ledger-overdue-chip">{overdue} overdue</span>}
       </h3>
-      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} />)}
+      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} raisable />)}
       {items.length === 0 && <p className="ledger-empty">Nothing here — all square.</p>}
       <div className="topic-add">
         <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
@@ -387,6 +390,10 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
 
   const meetingCount = data.notes.filter((n) => n.folder === mtgFolder(person.id)).length;
   const first = person.name.trim().split(/\s+/)[0] || person.name;
+
+  // Items queued for the next 1:1 (merged into the meeting agenda on open).
+  const queued = useMemo(() => readAgendaQueue(data.notes, person.id), [data.notes, person.id]);
+  const { clear: clearQueue } = useAgendaQueue();
 
   return (
     <div className="split-right">
@@ -447,6 +454,21 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
               addPlaceholder={`Something I owe ${first} — press Enter`}
               onEdit={setEditing}
             />
+            {queued.length > 0 && (
+              <div className="detail-section">
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>🗓 Queued for next 1:1
+                  <span className="section-count" style={{ background: 'var(--purple)' }}>{queued.length}</span>
+                </h3>
+                {queued.map((q) => (
+                  <div key={q.id} className="work-item-row">
+                    <span style={{ color: 'var(--purple)', fontSize: 13 }}>▸</span>
+                    <span className="wi-title" style={{ flex: 1 }}>{q.title}</span>
+                    <button className="btn-icon" title="Remove from the next agenda"
+                      onClick={() => void clearQueue(person.id, [q.id])}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={() => setAdding(true)}>
               + Add with full details
             </button>

@@ -1,18 +1,16 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
 import { ScreenHeader, EmptyState } from '../../components/bits';
 import { StatTile } from '../../components/StatTile';
 import { QuickAdd } from '../../components/QuickAdd';
-import { TaskList, MeetingActionRow } from './TaskList';
+import { TaskList } from './TaskList';
 import type { TaskGroup } from './TaskList';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TriageTray } from '../../components/TriageTray';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
 import { bucketForDue } from '../../lib/dateBuckets';
-import { createMeetingActionFiler } from '../../lib/meetingActions';
-import { collectOpenMeetingActions, isFiledTask } from '../../lib/tasks';
-import type { OpenMeetingAction, PushTarget } from '../../lib/tasks';
+import { isFiledTask } from '../../lib/tasks';
 
 type Lane = 'mine' | 'waiting';
 type GroupBy = 'due' | 'priority' | 'person' | 'project' | 'type';
@@ -55,8 +53,6 @@ export function Home({ onMenu }: { onMenu?: () => void }) {
   const [adding, setAdding] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
 
-  const openActions = useMemo(() => collectOpenMeetingActions(data.notes), [data.notes]);
-
   const { groups, counts, recentlyDone } = useMemo(() => {
     const open = data.work_items.filter((w) => !w.deleted_at && inLane(w, lane));
     const counts = {
@@ -65,7 +61,6 @@ export function Home({ onMenu }: { onMenu?: () => void }) {
       today: open.filter((w) => isDueToday(w.due_date)).length,
       week: open.filter((w) => !!w.due_date && w.due_date > todayStr() && w.due_date <= addDaysStr(7)).length,
       none: open.filter((w) => !w.due_date).length,
-      unfiled: openActions.length,
     };
 
     // Date filter applies before grouping.
@@ -123,15 +118,7 @@ export function Home({ onMenu }: { onMenu?: () => void }) {
       .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
 
     return { groups, counts, recentlyDone };
-  }, [data, lane, groupBy, filter, openActions]);
-
-  // Keep the filer reading the freshest notes even across re-renders.
-  const notesRef = useRef(data.notes);
-  notesRef.current = data.notes;
-  const filerRef = useRef<ReturnType<typeof createMeetingActionFiler> | null>(null);
-  if (!filerRef.current) filerRef.current = createMeetingActionFiler({ insert, update });
-  const fileAction = (action: OpenMeetingAction, target: PushTarget | null) =>
-    filerRef.current!(() => notesRef.current, action, target);
+  }, [data, lane, groupBy, filter]);
 
   const quickAddDueFor = (groupKey: string): string | null | undefined => {
     if (groupBy !== 'due') return null; // group semantics handled in onQuickAdd
@@ -163,12 +150,9 @@ export function Home({ onMenu }: { onMenu?: () => void }) {
     insert('work_items', row);
   };
 
-  const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
-  const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
   const selected = selectedId ? data.work_items.find((w) => w.id === selectedId) || null : null;
 
-  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
-    + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
+  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`;
 
   const tile = (key: DateFilter, num: number, label: string, tone: 'default' | 'red' | 'orange' = 'default') => (
     <StatTile num={num} label={label} tone={tone} active={filter === key}
@@ -211,21 +195,7 @@ export function Home({ onMenu }: { onMenu?: () => void }) {
               {tile('none', counts.none, 'No date')}
             </div>
 
-            {/* Unfiled meeting actions — the anti-"lost in meetings" surface. */}
-            {openActions.length > 0 && (
-              <>
-                <div className="section-header">
-                  <h2>Meeting actions to file</h2>
-                  <span className="section-count" style={{ background: 'var(--purple)' }}>{openActions.length}</span>
-                </div>
-                {openActions.map((a) => (
-                  <MeetingActionRow key={`${a.noteId}-${a.id}`} action={a}
-                    people={people} projects={projects} onFile={fileAction} />
-                ))}
-              </>
-            )}
-
-            {groups.length === 0 && openActions.length === 0 && (
+            {groups.length === 0 && (
               <EmptyState icon="✓" title="Tasks are clear" sub="Capture a task when needed; quick captures land in the Inbox for triage." />
             )}
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../../lib/types';
 import { EntityLinkPicker } from '../../components/EntityLinkPicker';
+import { RaiseAt1on1Button } from '../../components/RaiseAt1on1Button';
 import { TypeTag, PriTag } from '../../components/bits';
 import { todayStr, addDaysStr, fmtDMY, TYPE_LABEL } from '../../lib/util';
 
@@ -76,6 +77,7 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <span>{task.done ? 'Done' : 'Mark done'}</span>
         </label>
         <div className="task-detail-head-actions">
+          <RaiseAt1on1Button task={task} compact />
           <button className="btn btn-ghost btn-sm" onClick={del} title="Delete task">🗑</button>
           <button className="btn btn-ghost btn-sm task-detail-close" onClick={onClose} title="Close">✕</button>
         </div>
@@ -132,7 +134,7 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
         </div>
 
         <div className="task-detail-meta">
-          Created {fmtDMY(task.created_at)}
+          {task.created_at && <>Created {fmtDMY(task.created_at)}</>}
           {task.completed_at && <> · completed {fmtDMY(task.completed_at)}</>}
         </div>
       </div>

@@ -1742,6 +1742,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 /* ── Meeting Prep Brief panel ─────────────────────────────────────────────── */
 .btn-active { border-color: var(--accent) !important; color: var(--accent) !important; background: var(--blue-bg) !important; }
 
+.prep-overdue-chip { font-size: 10px; font-weight: 800; color: var(--red); background: var(--red-bg);
+  border-radius: 10px; padding: 1px 7px; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.raise-1on1-btn { white-space: nowrap; }
 .prep-backdrop { position: fixed; inset: 0; z-index: 255; }
 .prep-panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(380px, 100vw);
   background: var(--surface); border-left: 1px solid var(--border);

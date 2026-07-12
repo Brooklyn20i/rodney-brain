@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Person, WorkItem, Project, ProjectUpdate } from '../lib/types';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
 import { uid } from '../lib/meetingData';
-import { inferHealthReason } from '../lib/selectors';
+import { inferHealthReason, getPersonLedger } from '../lib/selectors';
 import { sanitizeHtml } from '../lib/sanitize';
 import { isOverdue, fmtDM } from '../lib/util';
 
@@ -42,19 +42,8 @@ export function PrepBriefPanel({
     [agenda],
   );
 
-  // Open action items for this person, priority-sorted (top 5)
-  const openItems = useMemo(() => {
-    const PRI = { high: 0, medium: 1, low: 2 };
-    return workItems
-      .filter((w) => isPersonLinked(w, person.id) && !w.done)
-      .sort((a, b) => {
-        const dp = (PRI[a.priority as keyof typeof PRI] ?? 1) - (PRI[b.priority as keyof typeof PRI] ?? 1);
-        if (dp !== 0) return dp;
-        if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
-        return a.due_date ? -1 : b.due_date ? 1 : 0;
-      })
-      .slice(0, 5);
-  }, [workItems, person.id]);
+  // The two-way ledger — what to chase and what to own up to in this 1:1.
+  const ledger = useMemo(() => getPersonLedger(workItems, person.id), [workItems, person.id]);
 
   // Projects linked to this person via open work items (max 3)
   const linkedProjects = useMemo(() => {
@@ -149,14 +138,35 @@ export function PrepBriefPanel({
             )}
           </div>
 
-          {/* Open action items */}
+          {/* The two-way ledger — chase theirs, own up to mine */}
           <div className="prep-section">
             <div className="prep-section-hdr">
-              📋 Open action items{openItems.length > 0 ? ` (${openItems.length})` : ''}
+              📤 {person.name.split(' ')[0]} owes me{ledger.theyOwe.length > 0 ? ` (${ledger.theyOwe.length})` : ''}
+              {ledger.theyOweOverdue > 0 && <span className="prep-overdue-chip"> {ledger.theyOweOverdue} overdue</span>}
             </div>
-            {openItems.length === 0
-              ? <div className="prep-empty">No open items</div>
-              : openItems.map((w) => (
+            {ledger.theyOwe.length === 0
+              ? <div className="prep-empty">Nothing outstanding</div>
+              : ledger.theyOwe.slice(0, 6).map((w) => (
+                  <div key={w.id} className="prep-row">
+                    <span className="prep-pri-dot" style={{ background: PRI_DOT[w.priority] || 'var(--text3)' }} />
+                    <span style={{ flex: 1 }}>{w.title}</span>
+                    {w.due_date && (
+                      <span style={{ fontSize: 11, color: isOverdue(w.due_date) ? 'var(--red)' : 'var(--text3)', flexShrink: 0, marginLeft: 4 }}>
+                        {fmtDM(w.due_date)}
+                      </span>
+                    )}
+                  </div>
+                ))
+            }
+          </div>
+          <div className="prep-section">
+            <div className="prep-section-hdr">
+              📥 I owe {person.name.split(' ')[0]}{ledger.iOwe.length > 0 ? ` (${ledger.iOwe.length})` : ''}
+              {ledger.iOweOverdue > 0 && <span className="prep-overdue-chip"> {ledger.iOweOverdue} overdue</span>}
+            </div>
+            {ledger.iOwe.length === 0
+              ? <div className="prep-empty">All square</div>
+              : ledger.iOwe.slice(0, 6).map((w) => (
                   <div key={w.id} className="prep-row">
                     <span className="prep-pri-dot" style={{ background: PRI_DOT[w.priority] || 'var(--text3)' }} />
                     <span style={{ flex: 1 }}>{w.title}</span>
