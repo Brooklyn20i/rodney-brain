@@ -46,10 +46,12 @@ const localStore = (): Storage | undefined => (typeof localStorage === 'undefine
 // touch targets) like Whoop / MacroFactor; a List toggle shows everything.
 // Default rest for exercises without a program slot (ad-hoc sessions).
 const REST_DEFAULT_KEY = 'cadence-fitness:rest-default';
+const REST_CUE_MUTED_KEY = 'cadence-fitness:rest-cue-muted';
 const REST_PRESETS = [60, 90, 120, 180, 300];
 const fmtRest = (s: number) => (s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
 const hasDraftValue = (d: { weight?: string; reps?: string; dur?: string } | undefined): boolean =>
   Boolean(d && (['weight', 'reps', 'dur'] as const).some((k) => d[k] !== undefined && d[k] !== ''));
+const nonNegativeNumber = (value: string | number | null | undefined): number => Math.max(0, Number(value) || 0);
 
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
   const { data, insert, insertMany, update, remove, saving, syncError } = useCadenceFitness();
@@ -122,6 +124,13 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const cueRef = useRef(createRestTimerCue());
   const primeAudio = () => cueRef.current.prime();
   const chime = () => cueRef.current.play();
+  const [restCueMuted, setRestCueMuted] = useState(() => localStorage.getItem(REST_CUE_MUTED_KEY) === '1');
+  const restCueMutedRef = useRef(restCueMuted);
+  const changeRestCueMuted = (muted: boolean) => {
+    restCueMutedRef.current = muted;
+    setRestCueMuted(muted);
+    localStorage.setItem(REST_CUE_MUTED_KEY, muted ? '1' : '0');
+  };
 
   // ── Rest timer ──────────────────────────────────────────────────────────
   const [restLeft, setRestLeft] = useState<number | null>(null);
@@ -138,8 +147,10 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         setRestLeft(left);
         if (shouldFireRestCompleteCue(left, chimedRef.current)) {
           chimedRef.current = true;
-          chime();
-          if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+          if (!restCueMutedRef.current) {
+            chime();
+            if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
+          }
         }
       }
     }, 1000);
@@ -230,15 +241,24 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   // ref guards re-entry synchronously; the state disables the buttons.
   const actionLock = useRef(false);
   const [pendingAction, setPendingAction] = useState<'start' | 'finish' | 'discard' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const runGuarded = async (kind: 'start' | 'finish' | 'discard', fn: () => Promise<void>) => {
     if (actionLock.current) return;
     actionLock.current = true;
     setPendingAction(kind);
+    setActionError(null);
     try {
       await fn();
     } catch {
       // The store already surfaces write failures via `syncError`; swallow here
       // so an un-awaited onClick handler can't raise an unhandled rejection.
+      setActionError(
+        kind === 'finish'
+          ? "Couldn't finish yet. Your workout is still open; check connection and try Finish again."
+          : kind === 'start'
+            ? "Couldn't start the workout. Check connection and try again."
+            : "Couldn't discard the workout. Check connection and try again."
+      );
     } finally {
       actionLock.current = false;
       setPendingAction(null);
@@ -512,7 +532,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const hadDraft = hasDraftValue(d);
     const patch: Partial<WorkoutSet> = { ...extra };
     const prevWeight = Number(set.weight_kg) || 0;
-    if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
+    if (d.weight !== undefined) patch.weight_kg = nonNegativeNumber(d.weight);
     if (d.reps !== undefined) patch.reps = Math.max(0, Math.round(Number(d.reps) || 0));
     if (d.dur !== undefined) patch.duration_seconds = parseDuration(d.dur);
     if (Object.keys(patch).length) await update('workout_sets', set.id, patch);
@@ -653,8 +673,12 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       const value = isTimedTracking(trackingFor(s.exercise_id)) ? dur : reps;
       return { done: s.done, value };
     });
-    const confirmMessage = finishConfirmMessage(summariseFinish(finishRows));
+    const loggedCardio = sessionCardio.filter((c) => Number(c.duration_min) > 0 || Number(c.distance_km) > 0 || Number(c.calories) > 0).length;
+    const confirmMessage = finishConfirmMessage(summariseFinish(finishRows, loggedCardio));
     if (confirmMessage && !window.confirm(confirmMessage)) return;
+    // First pass the server-acknowledged completion gate. If this fails, leave
+    // the still-open workout exactly as-is so retry does not lose planned rows.
+    await update('workouts', active.id, { status: 'completed', completed_at: new Date().toISOString() }, { strict: true });
     // Fold in any weight/reps typed but not yet blurred, then decide each set's
     // fate from its EFFECTIVE reps (draft beats stored). A set you filled in but
     // forgot to tick still counts as trained — that was the "did 12, logged 11"
@@ -662,7 +686,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     for (const s of sessionSets) {
       const d = drafts[s.id] || {};
       const reps = d.reps !== undefined ? Math.max(0, Math.round(Number(d.reps) || 0)) : s.reps;
-      const weight = d.weight !== undefined ? Number(d.weight) || 0 : Number(s.weight_kg) || 0;
+      const weight = d.weight !== undefined ? nonNegativeNumber(d.weight) : nonNegativeNumber(s.weight_kg);
       const dur = d.dur !== undefined ? parseDuration(d.dur) : setDuration(s);
       const tracking = trackingFor(s.exercise_id);
       const touched = d.weight !== undefined || d.reps !== undefined || d.dur !== undefined;
@@ -683,7 +707,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         await remove('workout_sets', s.id);
       }
     }
-    await update('workouts', active.id, { status: 'completed', completed_at: new Date().toISOString() });
     stopRest();
     pendingStepRef.current.clear();
     clearDrafts(localStore());
@@ -1143,24 +1166,24 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </div>
             <div className="form-grid" style={{ marginTop: 8 }}>
               <div>
-                <label className="field">Duration (min)</label>
-                <input type="number" inputMode="numeric" defaultValue={Number(c.duration_min) || ''} onBlur={(e) => updateCardio(c, { duration_min: Math.max(0, Number(e.target.value) || 0) })} />
+                <label className="field" htmlFor={`cardio-duration-${c.id}`}>Duration (min)</label>
+                <input id={`cardio-duration-${c.id}`} type="number" inputMode="numeric" defaultValue={Number(c.duration_min) || ''} onBlur={(e) => updateCardio(c, { duration_min: Math.max(0, Number(e.target.value) || 0) })} />
               </div>
               <div>
-                <label className="field">Distance (km)</label>
-                <input type="number" inputMode="decimal" step="0.1" defaultValue={Number(c.distance_km) || ''} onBlur={(e) => updateCardio(c, { distance_km: Math.max(0, Number(e.target.value) || 0) })} />
+                <label className="field" htmlFor={`cardio-distance-${c.id}`}>Distance (km)</label>
+                <input id={`cardio-distance-${c.id}`} type="number" inputMode="decimal" step="0.1" defaultValue={Number(c.distance_km) || ''} onBlur={(e) => updateCardio(c, { distance_km: Math.max(0, Number(e.target.value) || 0) })} />
               </div>
               <div>
-                <label className="field">Calories</label>
-                <input type="number" inputMode="numeric" defaultValue={c.calories || ''} onBlur={(e) => updateCardio(c, { calories: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                <label className="field" htmlFor={`cardio-calories-${c.id}`}>Calories</label>
+                <input id={`cardio-calories-${c.id}`} type="number" inputMode="numeric" defaultValue={c.calories || ''} onBlur={(e) => updateCardio(c, { calories: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
               </div>
               <div>
-                <label className="field">Avg HR</label>
-                <input type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} onBlur={(e) => updateCardio(c, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                <label className="field" htmlFor={`cardio-avg-hr-${c.id}`}>Avg HR</label>
+                <input id={`cardio-avg-hr-${c.id}`} type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} onBlur={(e) => updateCardio(c, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
               </div>
               <div>
-                <label className="field">{c.kind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
-                <input type="text" defaultValue={c.notes || ''} placeholder={c.kind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline, 6:00/km'} onBlur={(e) => updateCardio(c, { notes: e.target.value })} />
+                <label className="field" htmlFor={`cardio-notes-${c.id}`}>{c.kind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
+                <input id={`cardio-notes-${c.id}`} type="text" defaultValue={c.notes || ''} placeholder={c.kind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline, 6:00/km'} onBlur={(e) => updateCardio(c, { notes: e.target.value })} />
               </div>
             </div>
           </div>
@@ -1185,28 +1208,28 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           </div>
           <div className="form-grid" style={{ marginTop: 8 }}>
             <div>
-              <label className="field">Time (min)</label>
-              <input type="number" inputMode="numeric" value={cardioMin} autoFocus placeholder="e.g. 28"
+              <label className="field" htmlFor="workout-cardio-time">Time (min)</label>
+              <input id="workout-cardio-time" type="number" inputMode="numeric" value={cardioMin} autoFocus placeholder="e.g. 28"
                 onChange={(e) => setCardioMin(e.target.value)} />
             </div>
             <div>
-              <label className="field">Distance (km)</label>
-              <input type="number" inputMode="decimal" value={cardioKm} placeholder="e.g. 5"
+              <label className="field" htmlFor="workout-cardio-distance">Distance (km)</label>
+              <input id="workout-cardio-distance" type="number" inputMode="decimal" value={cardioKm} placeholder="e.g. 5"
                 onChange={(e) => setCardioKm(e.target.value)} />
             </div>
             <div>
-              <label className="field">Calories</label>
-              <input type="number" inputMode="numeric" value={cardioCals} placeholder="optional"
+              <label className="field" htmlFor="workout-cardio-calories">Calories</label>
+              <input id="workout-cardio-calories" type="number" inputMode="numeric" value={cardioCals} placeholder="optional"
                 onChange={(e) => setCardioCals(e.target.value)} />
             </div>
             <div>
-              <label className="field">Avg HR</label>
-              <input type="number" inputMode="numeric" value={cardioHr} placeholder="optional"
+              <label className="field" htmlFor="workout-cardio-avg-hr">Avg HR</label>
+              <input id="workout-cardio-avg-hr" type="number" inputMode="numeric" value={cardioHr} placeholder="optional"
                 onChange={(e) => setCardioHr(e.target.value)} />
             </div>
             <div>
-              <label className="field">{cardioKind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
-              <input type="text" value={cardioNotes} placeholder={cardioKind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline'} onChange={(e) => setCardioNotes(e.target.value)} />
+              <label className="field" htmlFor="workout-cardio-notes">{cardioKind === 'hiit' ? 'Score / rounds / reps / peak HR / notes' : 'Pace / incline / intervals'}</label>
+              <input id="workout-cardio-notes" type="text" value={cardioNotes} placeholder={cardioKind === 'hiit' ? 'e.g. 4 rounds + 250m ski; peak HR 176' : 'e.g. progressive 15 min, 3% incline'} onChange={(e) => setCardioNotes(e.target.value)} />
             </div>
           </div>
           <div className="wo-cardio-actions">
@@ -1280,6 +1303,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             +30s
           </button>
         )}
+        <button className="rest-timer-skip" aria-pressed={restCueMuted} onClick={() => changeRestCueMuted(!restCueMuted)}>
+          {restCueMuted ? 'Sound off' : 'Sound on'}
+        </button>
         {restLeft <= 0 && restSetHasUnsavedDraft && (
           <>
             <button className="rest-timer-skip" onClick={saveRestSet}>
@@ -1316,6 +1342,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       </ScreenHeader>
 
       <div className={`screen-content ${gymMode ? 'gym-mode' : ''}`}>
+        {actionError && <div className="cf-callout cf-callout-warn" role="alert">{actionError}</div>}
         {restBar}
 
         {gymMode ? (

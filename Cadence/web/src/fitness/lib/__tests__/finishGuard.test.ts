@@ -9,7 +9,7 @@ describe('finish guard', () => {
       { done: false, value: 0 }, // empty target — dropped
       { done: true, value: 0 }, // done with no value — kept/logged
     ]);
-    expect(s).toEqual({ total: 4, completed: 3, remaining: 1 });
+    expect(s).toEqual({ total: 4, completed: 3, remaining: 1, loggedExtras: 0 });
   });
 
   it('requires confirmation for unfinished OR empty sessions, not a complete one', () => {
@@ -23,6 +23,12 @@ describe('finish guard', () => {
     const msg = finishConfirmMessage(summariseFinish([]));
     expect(msg).toContain('empty');
     expect(msg).toContain('Finish');
+  });
+
+  it('does not call a cardio-only workout empty', () => {
+    const summary = summariseFinish([], 1);
+    expect(finishNeedsConfirm(summary)).toBe(false);
+    expect(finishConfirmMessage(summary)).toBeNull();
   });
 
   it('warns loudly about a fully-empty finish (the 0/16 case)', () => {

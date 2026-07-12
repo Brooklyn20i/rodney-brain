@@ -35,8 +35,10 @@ beforeEach(() => {
     resolveInsertMany: [],
     failInsertMany: false,
     failActivation: false,
+    failCompletion: false,
     failRemove: false,
     latest: null,
+    navigations: [],
   });
 });
 afterEach(() => {
@@ -51,8 +53,10 @@ const control = {
   resolveInsertMany: [] as Array<() => void>,
   failInsertMany: false,
   failActivation: false,
+  failCompletion: false,
   failRemove: false,
   latest: null as CadenceFitnessData | null,
+  navigations: [] as string[],
 };
 
 const STAMP = { owner_id: 't', created_at: '2026-07-01', updated_at: '2026-07-01', deleted_at: null };
@@ -70,6 +74,13 @@ function seedActive(): CadenceFitnessData {
   const d = seedStart();
   d.workouts.push({ id: 'wk', date: '2026-07-01', program_id: 'prog', program_day_id: 'day1', week_number: 1, name: 'Day 1 — Push', status: 'in_progress', started_at: '2026-07-01T06:00:00.000Z', completed_at: null, notes: '', ...STAMP } as never);
   d.workout_sets.push({ id: 's1', workout_id: 'wk', exercise_id: 'ex1', set_number: 1, weight_kg: 100, reps: 0, duration_seconds: 0, rpe: null, is_warmup: false, done: false, ...STAMP } as never);
+  return d;
+}
+
+function seedActiveCardioOnly(): CadenceFitnessData {
+  const d = emptyData();
+  d.workouts.push({ id: 'wk', date: '2026-07-01', program_id: null, program_day_id: null, week_number: null, name: 'Ad-hoc session', status: 'in_progress', started_at: '2026-07-01T06:00:00.000Z', completed_at: null, notes: '', ...STAMP } as never);
+  d.cardio_sessions.push({ id: 'c1', date: '2026-07-01', workout_id: 'wk', kind: 'run', duration_min: 28, distance_km: 5, avg_hr: 0, calories: 0, notes: '', ...STAMP } as never);
   return d;
 }
 
@@ -133,7 +144,8 @@ function Harness({ seed }: { seed: () => CadenceFitnessData }) {
     // Mirror the real store's STRICT semantics: a failed strict write throws and
     // does NOT apply the optimistic change (so a rejected activation can't leave
     // a false `in_progress` locally).
-    if (opts?.strict && control.failActivation) throw new Error('activation rejected');
+    if (opts?.strict && table === 'workouts' && patch.status === 'in_progress' && control.failActivation) throw new Error('activation rejected');
+    if (opts?.strict && table === 'workouts' && patch.status === 'completed' && control.failCompletion) throw new Error('completion rejected');
     setData((prev) => ({ ...prev, [table]: (prev[table] as Array<{ id: string }>).map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
     return {} as never;
   };
@@ -145,7 +157,7 @@ function Harness({ seed }: { seed: () => CadenceFitnessData }) {
   const value = { demo: true, data, insert, insertMany, update, upsert: update, remove, saving: false, syncError: null, clearSyncError: () => {} } as unknown as Ctx;
   return (
     <CadenceFitnessCtx.Provider value={value}>
-      <Workout onMenu={() => {}} onNavigate={() => {}} />
+      <Workout onMenu={() => {}} onNavigate={(id) => control.navigations.push(id)} />
     </CadenceFitnessCtx.Provider>
   );
 }
@@ -331,6 +343,90 @@ describe('set persistence state', () => {
 
     await waitFor(() => expect(control.latest?.workout_sets[0].reps).toBe(8));
     await waitFor(() => expect(localStorage.getItem('cadence-fitness:workout-drafts')).toBeNull());
+  });
+
+  it('clamps negative typed weights on blur before saving', async () => {
+    render(<Harness seed={seedActive} />);
+
+    await act(async () => {
+      const weight = screen.getByRole('spinbutton', { name: /Bench, set 1, weight in kilograms/i });
+      fireEvent.change(weight, { target: { value: '-20' } });
+      fireEvent.blur(weight);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(Number(control.latest?.workout_sets[0].weight_kg)).toBe(0));
+  });
+
+  it('finishes cardio-only sessions without calling them empty', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    render(<Harness seed={seedActiveCardioOnly} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Finish$/i }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(control.latest?.workouts[0].status).toBe('completed'));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(control.navigations).toContain('history');
+  });
+
+  it('keeps the workout open with a recoverable message if completion is rejected', async () => {
+    control.failCompletion = true;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Harness seed={seedActiveCardioOnly} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Finish$/i }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't finish yet/i));
+    expect(control.latest?.workouts[0].status).toBe('in_progress');
+    expect(control.navigations).toEqual([]);
+  });
+
+  it('does not mutate set rows when the final completion gate is rejected', async () => {
+    control.failCompletion = true;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Harness seed={seedActive} />);
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('spinbutton', { name: /Bench, set 1, reps/i }), { target: { value: '8' } });
+      fireEvent.click(screen.getByRole('button', { name: /^Finish$/i }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Couldn't finish yet/i));
+    expect(control.latest?.workouts[0].status).toBe('in_progress');
+    expect(control.latest?.workout_sets).toHaveLength(1);
+    expect(control.latest?.workout_sets[0].done).toBe(false);
+    expect(control.latest?.workout_sets[0].reps).toBe(0);
+    expect(control.navigations).toEqual([]);
+  });
+
+  it('associates cardio form labels with their inputs', async () => {
+    render(<Harness seed={seedActiveCardioOnly} />);
+
+    expect(screen.getByLabelText(/Duration \(min\)/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Distance \(km\)/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Calories/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Avg HR/i)).toBeTruthy();
+  });
+
+  it('mutes rest-complete sound and persists the setting', async () => {
+    render(<Harness seed={seedActive} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Bench, set 1, mark done/i }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Sound on/i }));
+    });
+
+    expect(localStorage.getItem('cadence-fitness:rest-cue-muted')).toBe('1');
+    expect(screen.getByRole('button', { name: /Sound off/i }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('makes expired rest show whether the previous set has unsaved edits', async () => {

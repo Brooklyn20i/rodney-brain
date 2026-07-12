@@ -15,12 +15,14 @@ export interface FinishSummary {
   completed: number;
   /** Rows that will be dropped as empty targets (no value, not done). */
   remaining: number;
+  /** Non-set work already logged against the workout, e.g. cardio_sessions. */
+  loggedExtras: number;
 }
 
-export function summariseFinish(rows: FinishSetInput[]): FinishSummary {
+export function summariseFinish(rows: FinishSetInput[], loggedExtras = 0): FinishSummary {
   const total = rows.length;
   const completed = rows.filter((r) => r.value > 0 || r.done).length;
-  return { total, completed, remaining: total - completed };
+  return { total, completed, remaining: total - completed, loggedExtras };
 }
 
 /**
@@ -28,7 +30,7 @@ export function summariseFinish(rows: FinishSetInput[]): FinishSummary {
  * session (no rows at all) — both should be confirmed, never silently ended.
  */
 export function finishNeedsConfirm(summary: FinishSummary): boolean {
-  return summary.total === 0 || summary.completed < summary.total;
+  return (summary.total === 0 && summary.loggedExtras === 0) || summary.completed < summary.total;
 }
 
 /**
@@ -37,8 +39,9 @@ export function finishNeedsConfirm(summary: FinishSummary): boolean {
  */
 export function finishConfirmMessage(summary: FinishSummary): string | null {
   if (!finishNeedsConfirm(summary)) return null;
-  const { total, completed, remaining } = summary;
+  const { total, completed, remaining, loggedExtras } = summary;
   if (total === 0) {
+    if (loggedExtras > 0) return null;
     return "This session is empty — you haven't logged any sets. Finish and close it anyway?";
   }
   if (completed === 0) {
