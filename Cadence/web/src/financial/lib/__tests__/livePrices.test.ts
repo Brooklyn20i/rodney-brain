@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLiveQuotes, liveNativeValue, quoteCurrencyMatchesHolding, yahooSymbol } from '../livePrices';
+import {
+  fetchLiveQuotes,
+  liveFxRatesFromQuotes,
+  liveNativeValue,
+  quoteCurrencyMatchesHolding,
+  quoteSymbolsForHoldings,
+  USD_AUD_FX_SYMBOL,
+  yahooSymbol,
+} from '../livePrices';
 
 describe('yahooSymbol', () => {
   it('maps BTC to the AUD spot pair regardless of market label', () => {
@@ -27,6 +35,33 @@ describe('yahooSymbol', () => {
   });
 });
 
+describe('quoteSymbolsForHoldings', () => {
+  it('includes live USD/AUD FX when any active holding is USD denominated', () => {
+    const symbols = quoteSymbolsForHoldings([
+      { ticker: 'WIRE', market: 'Stake Aus', currency: 'AUD', deleted_at: null },
+      { ticker: 'GOOG', market: 'Stake Wall St larger', currency: 'USD', deleted_at: null },
+      { ticker: 'TSLA', market: 'Stake Wall St smaller', currency: 'USD', deleted_at: '2026-01-01' },
+    ]);
+
+    expect(symbols).toEqual(['WIRE.AX', 'GOOG', USD_AUD_FX_SYMBOL]);
+  });
+});
+
+describe('liveFxRatesFromQuotes', () => {
+  it('turns a live USD/AUD quote into an app FX rate row', () => {
+    expect(liveFxRatesFromQuotes({ [USD_AUD_FX_SYMBOL]: { price: 1.44, currency: 'AUD' } })).toEqual([
+      expect.objectContaining({ currency: 'USD', rate_to_aud: 1.44, deleted_at: null }),
+    ]);
+  });
+
+  it('does not create an FX rate from a missing or invalid quote', () => {
+    expect(liveFxRatesFromQuotes({})).toEqual([]);
+    expect(liveFxRatesFromQuotes({ [USD_AUD_FX_SYMBOL]: { price: 0, currency: 'AUD' } })).toEqual([]);
+    expect(liveFxRatesFromQuotes({ [USD_AUD_FX_SYMBOL]: { price: Number.NaN, currency: 'AUD' } })).toEqual([]);
+    expect(liveFxRatesFromQuotes({ [USD_AUD_FX_SYMBOL]: { price: 1.44, currency: 'USD' } })).toEqual([]);
+  });
+});
+
 describe('quoteCurrencyMatchesHolding', () => {
   it('requires quote and holding currencies to match before repricing', () => {
     expect(quoteCurrencyMatchesHolding('GOOG', 'USD', 'USD')).toBe(true);
@@ -50,9 +85,10 @@ describe('liveNativeValue', () => {
 
 describe('fetchLiveQuotes (demo mode)', () => {
   it('returns canned quotes without any network call', async () => {
-    const quotes = await fetchLiveQuotes(['BTC-AUD', 'MSFT', 'UNKNOWN'], true);
+    const quotes = await fetchLiveQuotes(['BTC-AUD', 'MSFT', USD_AUD_FX_SYMBOL, 'UNKNOWN'], true);
     expect(quotes['BTC-AUD'].currency).toBe('AUD');
     expect(quotes.MSFT.price).toBeGreaterThan(0);
+    expect(quotes[USD_AUD_FX_SYMBOL].price).toBe(1.5);
     expect(quotes.UNKNOWN).toBeUndefined();
   });
 
