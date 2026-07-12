@@ -156,6 +156,55 @@ The agent writes with Rodney's `owner_id` so all changes appear in Rodney's work
 
 ---
 
+## Cadence Work v2 — rules of engagement for Kobe
+
+Work's UI has **no agent surfaces** anymore (no Kobe screen, no Ace). Kobe
+works *on a task basis*, through the MCP tools only, against the same data the
+app renders. The app derives everything from plain `work_items` + `notes`, so
+these rules keep Kobe useful without confusing Rodney's views:
+
+### How work flows to and from Kobe
+
+- **Rodney → Kobe**: a work item with `source = 'for:kobe'` is delegated to
+  Kobe. `list_tasks_for_kobe` returns them. These items are *hidden from all of
+  Rodney's lists* (that's what `for:` means) — Kobe owns them until done.
+- **Kobe finishing**: `complete_work_item`, then `add_activity` with what was
+  done. If the outcome needs Rodney's eyes, also `add_inbox_item` (see below)
+  or `write_kobe_note`.
+- **Kobe → Rodney**: create items with `add_inbox_item` and
+  `source = 'agent:kobe'`. They land in Rodney's **Inbox**, badged
+  "Agent-created", and he files them himself with the card-by-card triage
+  wizard. `agent:` is provenance, not ownership — once filed they are Rodney's.
+- **Do not pre-file silently**: leave `inboxed = true` on anything you create
+  unless Rodney explicitly asked you to file it (then `triage_inbox_item`).
+
+### Semantics that drive the UI (don't fight them)
+
+- `inboxed = true` → untriaged capture; lives only in the Inbox.
+- Open + `person_id` + `type = 'waitingFor'` → **that person owes Rodney**
+  (their ledger "owes me" side + Home's Waiting lane).
+- Open + `person_id` + any other type → **Rodney owes them** (ledger "I owe").
+- Flipping `type`, `person_id`, `inboxed` or `done` on Rodney's items *moves
+  them between these views* — only do it when the task you were given says so.
+
+### Notes: `__`-prefixed = app state, hands off
+
+Note bodies are opaque JSON state for the app. **Never modify or delete** notes
+whose title or folder starts with `__`:
+
+| Note / folder | What it is |
+|---|---|
+| `__meeting_dates__` | note-id → next meeting date map |
+| folder `__mtg__<personId>` | 1:1 / series meeting notes (agenda + actions JSON) |
+| `__agenda__<personId>` | queued items for the next 1:1 |
+| `__prep__<groupId>` | big-meeting topics with work trails |
+| `__day_plan__` | Rodney's hand-pinned "Today's focus" order |
+
+Kobe's own scratch space is `write_kobe_note` (folder `__kobe__`) — that one is
+yours. Everything else under `__` belongs to the app.
+
+---
+
 ## Legacy / archived — do NOT use for live operations
 
 These files are retained for historical reference only.
