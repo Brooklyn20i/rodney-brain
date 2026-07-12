@@ -12,6 +12,19 @@ describe('rest timer completion cue state', () => {
     expect(shouldFireRestCompleteCue(0, alreadyChimed)).toBe(false);
     expect(shouldFireRestCompleteCue(-5, alreadyChimed)).toBe(false);
   });
+
+  it('fires again for the next rest timer after the caller resets the latch', () => {
+    let alreadyChimed = false;
+    expect(shouldFireRestCompleteCue(0, alreadyChimed)).toBe(true);
+
+    alreadyChimed = true;
+    expect(shouldFireRestCompleteCue(0, alreadyChimed)).toBe(false);
+
+    // Starting a new rest timer resets Workout's chimedRef to false; the next
+    // completion should therefore fire a second cue rather than staying muted.
+    alreadyChimed = false;
+    expect(shouldFireRestCompleteCue(0, alreadyChimed)).toBe(true);
+  });
 });
 
 describe('planRestOnComplete', () => {
