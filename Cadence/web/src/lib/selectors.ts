@@ -3,7 +3,7 @@
 
 import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
-import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject, isUserTask } from './tasks';
+import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToPerson, isLinkedToProject, isUserTask } from './tasks';
 
 // ── Triage tray (Quick Capture / untriaged) ───────────────────────────────────
 // Every open capture awaiting triage, newest first — the same population the
@@ -24,6 +24,31 @@ export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
   return items
     .filter((w) => isFiledTask(w) && w.type === 'waitingFor')
     .sort(byDueThenPri);
+}
+
+// ── Person ledger ─────────────────────────────────────────────────────────────
+// The two-way ledger with a person: what I owe them vs what they owe me.
+// Pure derivation over existing data — `waitingFor` + person link ≡ they owe
+// me; any other open, filed, person-linked item ≡ I owe them. One selector so
+// the People detail, the list rail counts, the 1:1 prep view and Home's
+// Waiting lane can never disagree.
+export interface PersonLedger {
+  iOwe: WorkItem[];
+  theyOwe: WorkItem[];
+  iOweOverdue: number;
+  theyOweOverdue: number;
+}
+
+export function getPersonLedger(items: WorkItem[], personId: string): PersonLedger {
+  const linked = items.filter((w) => isFiledTask(w) && isLinkedToPerson(w, personId));
+  const iOwe = linked.filter((w) => w.type !== 'waitingFor').sort(byDueThenPri);
+  const theyOwe = linked.filter((w) => w.type === 'waitingFor').sort(byDueThenPri);
+  return {
+    iOwe,
+    theyOwe,
+    iOweOverdue: iOwe.filter((w) => isOverdue(w.due_date)).length,
+    theyOweOverdue: theyOwe.filter((w) => isOverdue(w.due_date)).length,
+  };
 }
 
 // ── Hot this week ─────────────────────────────────────────────────────────────

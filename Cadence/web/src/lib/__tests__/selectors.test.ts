@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getWaitingOnOthers, getHotThisWeek,
+  getWaitingOnOthers, getHotThisWeek, getPersonLedger,
   getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
@@ -44,6 +44,50 @@ const dec = (o: Partial<Decision>): Decision => ({
   id: 'd1', owner_id: 'o', title: 'Decision', status: 'pending', due_date: null,
   context: '', outcome: '', created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
 }) as Decision;
+
+// ── getPersonLedger ────────────────────────────────────────────────────────────
+describe('getPersonLedger', () => {
+  it('splits person-linked open items into I-owe vs they-owe by waitingFor', () => {
+    const items = [
+      wi({ id: 'mine', person_id: 'anna', type: 'task' }),
+      wi({ id: 'theirs', person_id: 'anna', type: 'waitingFor' }),
+      wi({ id: 'other', person_id: 'bob', type: 'task' }),
+    ];
+    const l = getPersonLedger(items, 'anna');
+    expect(l.iOwe.map((w) => w.id)).toEqual(['mine']);
+    expect(l.theyOwe.map((w) => w.id)).toEqual(['theirs']);
+  });
+
+  it('matches related_entities person links, not just person_id', () => {
+    const items = [
+      wi({ id: 're', person_id: null, related_entities: [{ type: 'person', id: 'anna', name: 'Anna' }], type: 'waitingFor' }),
+    ];
+    expect(getPersonLedger(items, 'anna').theyOwe.map((w) => w.id)).toEqual(['re']);
+  });
+
+  it('excludes inboxed captures, done items and delegated tasks; counts overdue per side', () => {
+    const items = [
+      wi({ id: 'inb', person_id: 'anna', inboxed: true }),
+      wi({ id: 'done', person_id: 'anna', done: true }),
+      wi({ id: 'kobe', person_id: 'anna', source: 'for:kobe' }),
+      wi({ id: 'late-mine', person_id: 'anna', due_date: addDaysStr(-1) }),
+      wi({ id: 'late-theirs', person_id: 'anna', type: 'waitingFor', due_date: addDaysStr(-2) }),
+    ];
+    const l = getPersonLedger(items, 'anna');
+    expect(l.iOwe.map((w) => w.id)).toEqual(['late-mine']);
+    expect(l.theyOwe.map((w) => w.id)).toEqual(['late-theirs']);
+    expect(l.iOweOverdue).toBe(1);
+    expect(l.theyOweOverdue).toBe(1);
+  });
+
+  it('sorts each side by due date then priority', () => {
+    const items = [
+      wi({ id: 'b', person_id: 'anna', due_date: addDaysStr(5) }),
+      wi({ id: 'a', person_id: 'anna', due_date: addDaysStr(1) }),
+    ];
+    expect(getPersonLedger(items, 'anna').iOwe.map((w) => w.id)).toEqual(['a', 'b']);
+  });
+});
 
 // ── getWaitingOnOthers ─────────────────────────────────────────────────────────
 describe('getWaitingOnOthers', () => {

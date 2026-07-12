@@ -663,6 +663,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .avatar-md { width: 32px; height: 32px; font-size: 12px; }
 .avatar-sm { width: 22px; height: 22px; font-size: 9px; }
 
+/* ── Person ledger (two-way: I owe / they owe) ── */
+.ledger-section { border-left: 3px solid var(--section-accent, var(--accent)); padding-left: 12px; }
+.ledger-overdue-chip { font-size: 10px; font-weight: 800; color: var(--red); background: var(--red-bg);
+  border-radius: 10px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+.ledger-empty { font-size: 13px; color: var(--text3); padding: 4px 0 8px; }
+
 /* ── Topics (rich per-person work items) ── */
 .topic-card { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; }
 .topic-card input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }

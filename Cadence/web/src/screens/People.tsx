@@ -4,9 +4,10 @@ import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { MeetingNoteModal } from '../components/MeetingNoteModal';
-import { autoColor, AVATAR_COLORS, initials, priorityScore, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
+import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { isFiledTask, isAgentTask } from '../lib/tasks';
+import { isAgentTask } from '../lib/tasks';
+import { getPersonLedger } from '../lib/selectors';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -322,37 +323,70 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
   );
 }
 
-// ── Person detail panel ────────────────────────────────────────────────────────
-function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
-  const { data, insert, logActivity } = useCadence();
-  const { dates } = useMeetingDates();
-  const nextMeeting = getNextMeeting(person.id, data.notes, dates);
-  const [tab, setTab] = useState<'topics' | 'meetings'>('topics');
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<WorkItem | null>(null);
+// ── Ledger section: one direction of the two-way ledger ───────────────────────
+// "I owe {name}" and "{name} owes me" are the same UI with a different item
+// type behind the quick-add — I-owe inserts a task, owes-me inserts a
+// waitingFor (which is what puts it in this column and Home's Waiting lane).
+function LedgerSection({ person, title, items, overdue, accent, addType, addPlaceholder, onEdit }: {
+  person: Person; title: string; items: WorkItem[]; overdue: number;
+  accent: string; addType: WorkItem['type']; addPlaceholder: string;
+  onEdit: (w: WorkItem) => void;
+}) {
+  const { insert, logActivity } = useCadence();
   const [draft, setDraft] = useState('');
 
-  // Exclude inboxed captures: a quick note tagged with this person still waits
-  // in the Inbox for triage — it only appears in their folder once filed.
+  const quickAdd = async () => {
+    const t = draft.trim();
+    if (!t) return;
+    try {
+      await insert('work_items', {
+        title: t, type: addType, priority: 'medium', person_id: person.id,
+        related_entities: [{ type: 'person', id: person.id, name: person.name }],
+        notes: '', inboxed: false, source: 'you',
+      } as Partial<WorkItem>);
+      setDraft(''); // clear only after the save succeeds, so nothing is lost
+      logActivity('add_item', t);
+    } catch { /* error surfaced via syncError; keep the draft for retry */ }
+  };
+
+  return (
+    <div className="detail-section ledger-section" style={{ ['--section-accent' as string]: accent }}>
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{title}
+        {items.length > 0 && <span className="section-count" style={{ background: accent }}>{items.length}</span>}
+        {overdue > 0 && <span className="ledger-overdue-chip">{overdue} overdue</span>}
+      </h3>
+      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} />)}
+      {items.length === 0 && <p className="ledger-empty">Nothing here — all square.</p>}
+      <div className="topic-add">
+        <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
+        <input value={draft} placeholder={addPlaceholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') quickAdd(); }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Person detail panel ────────────────────────────────────────────────────────
+function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => void }) {
+  const { data } = useCadence();
+  const { dates } = useMeetingDates();
+  const nextMeeting = getNextMeeting(person.id, data.notes, dates);
+  const [tab, setTab] = useState<'ledger' | 'meetings'>('ledger');
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<WorkItem | null>(null);
+
+  // The two-way ledger: what I owe them vs what they owe me. Inboxed captures
+  // are excluded until triaged (getPersonLedger builds on isFiledTask).
+  const ledger = useMemo(() => getPersonLedger(data.work_items, person.id), [data.work_items, person.id]);
+  const openCount = ledger.iOwe.length + ledger.theyOwe.length;
+
   const mine = data.work_items.filter((w) => !isAgentTask(w) && !w.inboxed && isPersonLinked(w, person.id));
-  const open = mine.filter((w) => !w.done).sort((a, b) => priorityScore(b) - priorityScore(a));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
 
   const meetingCount = data.notes.filter((n) => n.folder === mtgFolder(person.id)).length;
-
-  const quickAdd = async () => {
-    const title = draft.trim();
-    if (!title) return;
-    try {
-      await insert('work_items', {
-        title, type: 'followUp', priority: 'medium', person_id: person.id,
-        notes: '', inboxed: false, source: 'you',
-      } as Partial<WorkItem>);
-      setDraft(''); // clear only after the save succeeds, so nothing is lost
-      logActivity('add_item', title);
-    } catch { /* error surfaced via syncError; keep the draft for retry */ }
-  };
+  const first = person.name.trim().split(/\s+/)[0] || person.name;
 
   return (
     <div className="split-right">
@@ -380,8 +414,8 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
 
       {/* Tabs */}
       <div className="people-tabs">
-        <button className={`people-tab ${tab === 'topics' ? 'active' : ''}`} onClick={() => setTab('topics')}>
-          Action Items {open.length > 0 && <span className="ptab-badge">{open.length}</span>}
+        <button className={`people-tab ${tab === 'ledger' ? 'active' : ''}`} onClick={() => setTab('ledger')}>
+          Ledger {openCount > 0 && <span className="ptab-badge">{openCount}</span>}
         </button>
         <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
           Meetings {meetingCount > 0 && <span className="ptab-badge">{meetingCount}</span>}
@@ -389,23 +423,33 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
       </div>
 
       <div className="split-panel-body">
-        {tab === 'topics' && (
+        {tab === 'ledger' && (
           <>
             {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
             <InlineNotes person={person} />
-            <div className="detail-section">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>📋 Action Items
-                {open.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{open.length}</span>}
-                <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setAdding(true)}>+ Add</button>
-              </h3>
-              {open.map((w) => <TopicCard key={w.id} w={w} onEdit={setEditing} />)}
-              <div className="topic-add">
-                <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
-                <input value={draft} placeholder="Quick add — press Enter"
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') quickAdd(); }} />
-              </div>
-            </div>
+            <LedgerSection
+              person={person}
+              title={`📤 ${first} owes me`}
+              items={ledger.theyOwe}
+              overdue={ledger.theyOweOverdue}
+              accent="var(--teal)"
+              addType="waitingFor"
+              addPlaceholder={`Give ${first} a task — press Enter`}
+              onEdit={setEditing}
+            />
+            <LedgerSection
+              person={person}
+              title={`📥 I owe ${first}`}
+              items={ledger.iOwe}
+              overdue={ledger.iOweOverdue}
+              accent="var(--accent)"
+              addType="task"
+              addPlaceholder={`Something I owe ${first} — press Enter`}
+              onEdit={setEditing}
+            />
+            <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={() => setAdding(true)}>
+              + Add with full details
+            </button>
             <RecentlyDone items={recentDone} />
           </>
         )}
@@ -481,8 +525,8 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
                   <div key={groupName}>
                     <div className="people-group-hdr">{groupName}</div>
                     {gPeople.map((p, idx) => {
-                      const openCount = data.work_items.filter((w) => isFiledTask(w) && isPersonLinked(w, p.id)).length;
-                      const mtgCount = data.notes.filter(n => n.folder === mtgFolder(p.id)).length;
+                      const ledger = getPersonLedger(data.work_items, p.id);
+                      const overdue = ledger.iOweOverdue + ledger.theyOweOverdue;
                       const pMeeting = getNextMeeting(p.id, data.notes, dates);
                       return (
                         <div key={p.id} className="person-list-row">
@@ -491,8 +535,9 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
                             <div className="project-info">
                               <div className="project-name">{p.name}</div>
                               <div className="project-meta">
-                                {p.role ? p.role + ' · ' : ''}{openCount} {openCount === 1 ? 'action item' : 'action items'}
-                                {mtgCount > 0 ? ` · ${mtgCount} mtgs` : ''}
+                                {p.role ? p.role + ' · ' : ''}
+                                owes you {ledger.theyOwe.length} · you owe {ledger.iOwe.length}
+                                {overdue > 0 ? ` · ${overdue} overdue` : ''}
                                 {pMeeting ? ` · 📅 ${fmtNextMtg(pMeeting)}` : ''}
                               </div>
                             </div>

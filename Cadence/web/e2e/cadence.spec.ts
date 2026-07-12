@@ -59,6 +59,26 @@ test('creates a capture via Quick Add and it lands in the Inbox and triage tray'
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });
 
+// ── People: the two-way ledger ──────────────────────────────────────────────────
+test('person detail is a two-way ledger and delegation lands in owes-me + Home Waiting', async ({ page }) => {
+  await navTo(page, 'People');
+  await page.locator('.person-item', { hasText: 'Bob Ng' }).click();
+  // Bob owes the seeded waitingFor.
+  await expect(page.getByText('📤 Bob owes me')).toBeVisible();
+  await expect(page.getByText('Awaiting legal sign-off')).toBeVisible();
+
+  // Delegate a new task to Bob via the owes-me quick-add.
+  const give = page.getByPlaceholder('Give Bob a task — press Enter');
+  await give.fill('Send me the Q3 numbers');
+  await give.press('Enter');
+  await expect(page.getByText('Send me the Q3 numbers')).toBeVisible();
+
+  // The same record shows in Home's global Waiting lane.
+  await navTo(page, 'Home');
+  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
+  await expect(page.getByText('Send me the Q3 numbers')).toBeVisible();
+});
+
 // ── Projects: Analytical evidence-on-demand ─────────────────────────────────────
 test('project detail opens as a practical control sheet', async ({ page }) => {
   await navTo(page, 'Projects');

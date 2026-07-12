@@ -23,6 +23,7 @@ import { Dashboard } from '../Dashboard';
 import { Home } from '../taskScreens';
 import { Inbox } from '../Inbox';
 import { Notes } from '../Notes';
+import { People } from '../People';
 import { ProjectGantt, PortfolioTimeline } from '../../components/Gantt';
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
@@ -146,6 +147,56 @@ describe('Home workflow', () => {
     }));
     expect(h.store.update).toHaveBeenCalledWith('notes', 'n1', expect.objectContaining({
       body: expect.stringContaining('"pushed_to":"Tasks"'),
+    }));
+  });
+});
+
+// ── People ledger ───────────────────────────────────────────────────────────────
+describe('People ledger', () => {
+  it('splits a person into owes-me and I-owe sections with overdue flag', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna Lee' })],
+      work_items: [
+        wi({ id: 'mine', title: 'Send Anna the deck', person_id: 'pA', type: 'task' }),
+        wi({ id: 'theirs', title: 'Q3 numbers from Anna', person_id: 'pA', type: 'waitingFor', due_date: addDaysStr(-1) }),
+      ],
+    }});
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    expect(screen.getByText('📤 Anna owes me')).toBeInTheDocument();
+    expect(screen.getByText('📥 I owe Anna')).toBeInTheDocument();
+    expect(screen.getByText('Q3 numbers from Anna')).toBeInTheDocument();
+    expect(screen.getByText('Send Anna the deck')).toBeInTheDocument();
+    expect(screen.getByText('1 overdue')).toBeInTheDocument();
+    // Rail meta shows the two-way counts.
+    expect(screen.getByText(/owes you 1 · you owe 1/)).toBeInTheDocument();
+  });
+
+  it('the owes-me quick-add delegates: inserts a waitingFor linked to the person', () => {
+    const insert = vi.fn().mockResolvedValue({});
+    setStore({ insert, data: { people: [person({ id: 'pA', name: 'Anna Lee' })] } });
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    const input = screen.getByPlaceholderText('Give Anna a task — press Enter');
+    fireEvent.change(input, { target: { value: 'Send me the Q3 numbers' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
+      title: 'Send me the Q3 numbers',
+      type: 'waitingFor',
+      person_id: 'pA',
+      inboxed: false,
+    }));
+  });
+
+  it('the I-owe quick-add inserts a plain task linked to the person', () => {
+    const insert = vi.fn().mockResolvedValue({});
+    setStore({ insert, data: { people: [person({ id: 'pA', name: 'Anna Lee' })] } });
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    const input = screen.getByPlaceholderText('Something I owe Anna — press Enter');
+    fireEvent.change(input, { target: { value: 'Review her proposal' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
+      title: 'Review her proposal',
+      type: 'task',
+      person_id: 'pA',
     }));
   });
 });
