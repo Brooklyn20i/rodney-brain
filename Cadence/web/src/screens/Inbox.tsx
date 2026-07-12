@@ -4,6 +4,7 @@ import type { WorkItem } from '../lib/types';
 import { TaskRow, EmptyState, ScreenHeader } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
 import { QuickAdd } from '../components/QuickAdd';
+import { TriageWizard } from '../components/TriageWizard';
 import { priorityScore } from '../lib/util';
 import { isUserTask } from '../lib/tasks';
 import { bucketForDue, DUE_BUCKETS, DUE_BUCKET_ORDER } from '../lib/dateBuckets';
@@ -12,15 +13,15 @@ import type { DueBucketKey } from '../lib/dateBuckets';
 const BUCKETS = DUE_BUCKET_ORDER.map((k) => DUE_BUCKETS[k]);
 
 export function Inbox({ onMenu }: { onMenu?: () => void }) {
-  const { data, update } = useCadence();
+  const { data } = useCadence();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
-  // The Inbox is the triage queue: every unprocessed user-facing capture
-  // (inboxed), INCLUDING ones already tagged with a person or project. Tagging
-  // no longer files an item — capturing is deliberately separate from filing, so
-  // a quick note tagged "Promace" still waits here until you triage it. Filing
-  // (the "Done triaging" button) clears `inboxed` and reveals it in its folders.
+  // The Inbox is the triage queue: every unprocessed capture (inboxed),
+  // INCLUDING ones already tagged with a person or project — capturing is
+  // deliberately separate from filing. The card-by-card wizard is the filing
+  // ritual; this list is the glanceable overview behind it.
   const grouped = useMemo(() => {
     const open = data.work_items.filter((w) => isUserTask(w) && w.inboxed);
     const grouped: Record<DueBucketKey, WorkItem[]> = { overdue: [], today: [], week: [], later: [], none: [] };
@@ -32,12 +33,16 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
   }, [data]);
 
   const totalOpen = BUCKETS.reduce((n, b) => n + grouped[b.key].length, 0);
-  const file = (w: WorkItem) => update('work_items', w.id, { inboxed: false } as Partial<WorkItem>);
 
   return (
     <>
       <ScreenHeader title="Inbox" subtitle="Unprocessed captures — triage each into its home" onMenu={onMenu}>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
+        <button className="btn btn-secondary" onClick={() => setAdding(true)}>+ Capture task</button>
+        {totalOpen > 0 && (
+          <button className="btn btn-primary" onClick={() => setWizardOpen(true)}>
+            Start triage ({totalOpen})
+          </button>
+        )}
       </ScreenHeader>
       <div className="screen-content">
         {totalOpen === 0 ? (
@@ -49,11 +54,7 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
             <React.Fragment key={key}>
               <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{items.length}</span></div>
               {items.map((w) => (
-                <div key={w.id} className="inbox-triage-row">
-                  <div style={{ flex: 1, minWidth: 0 }}><TaskRow w={w} onEdit={setEditing} /></div>
-                  <button className="btn btn-ghost btn-sm inbox-file-btn" title="Mark as filed — remove from Inbox"
-                    onClick={() => file(w)}>Done triaging</button>
-                </div>
+                <TaskRow key={w.id} w={w} onEdit={setEditing} />
               ))}
             </React.Fragment>
           );
@@ -62,6 +63,7 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
 
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
       {editing && <ItemModal existing={editing} onClose={() => setEditing(null)} />}
+      {wizardOpen && <TriageWizard onClose={() => setWizardOpen(false)} />}
     </>
   );
 }

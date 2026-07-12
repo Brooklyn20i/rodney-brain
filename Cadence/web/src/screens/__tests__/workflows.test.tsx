@@ -183,7 +183,7 @@ describe('People ledger', () => {
 
 // ── Inbox ──────────────────────────────────────────────────────────────────────
 describe('Inbox workflow', () => {
-  it('stays the quick-capture triage queue', () => {
+  it('lists captures and launches the triage wizard', () => {
     setStore({ data: { work_items: [
       wi({ id: 'in1', title: 'Captured note', inboxed: true }),
     ]}});
@@ -192,8 +192,16 @@ describe('Inbox workflow', () => {
     expect(screen.getByText('Unprocessed captures — triage each into its home')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
     expect(screen.getByText('Captured note')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Done triaging' }));
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 'in1', { inboxed: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Start triage (1)' }));
+    expect(screen.getByRole('dialog', { name: 'Triage captures' })).toBeInTheDocument();
+    expect(screen.getByText('Card 1 of 1')).toBeInTheDocument();
+  });
+
+  it('hides the triage button when the inbox is clear', () => {
+    setStore({ data: { work_items: [] } });
+    render(<Inbox onMenu={() => {}} />);
+    expect(screen.queryByRole('button', { name: /Start triage/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Inbox is clear')).toBeInTheDocument();
   });
 });
 
