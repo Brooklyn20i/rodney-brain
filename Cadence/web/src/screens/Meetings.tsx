@@ -486,10 +486,14 @@ function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
 }
 
 // ── Main Meetings screen ──────────────────────────────────────────────────────
-export function Meetings({ onMenu }: { onMenu?: () => void }) {
+export function Meetings({ onMenu, initialSelectedId }: { onMenu?: () => void; initialSelectedId?: string | null }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialSelectedId ?? null);
+
+  useEffect(() => {
+    if (initialSelectedId) setSelected(initialSelectedId);
+  }, [initialSelectedId]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
 

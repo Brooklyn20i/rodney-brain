@@ -10,8 +10,9 @@ export interface TaskGroup { key: string; label: string; color: string; items: W
 
 // A single row in the hub's master list. Checkbox completes inline; clicking
 // the body selects the task into the detail panel (no modal round-trip).
-function HubTaskRow({ w, selected, onSelect }: {
+function HubTaskRow({ w, selected, onSelect, pinned, onTogglePin }: {
   w: WorkItem; selected: boolean; onSelect: (w: WorkItem) => void;
+  pinned?: boolean; onTogglePin?: (w: WorkItem) => void;
 }) {
   const { data, update } = useCadence();
   const proj = data.projects.find((p) => p.id === w.project_id);
@@ -49,6 +50,13 @@ function HubTaskRow({ w, selected, onSelect }: {
             <Due date={w.due_date} />
           </div>
         </div>
+        {onTogglePin && (
+          <button
+            className={`pin-star${pinned ? ' pinned' : ''}`}
+            title={pinned ? "Unpin from Today's focus" : "Pin to Today's focus"}
+            onClick={(e) => { e.stopPropagation(); onTogglePin(w); }}
+          >{pinned ? '★' : '☆'}</button>
+        )}
       </div>
     </div>
   );
@@ -77,7 +85,7 @@ function GroupQuickAdd({ due, onAdd }: { due: string | null; onAdd: (title: stri
   );
 }
 
-export function TaskList({ groups, selectedId, onSelect, quickAddDueFor, onQuickAdd }: {
+export function TaskList({ groups, selectedId, onSelect, quickAddDueFor, onQuickAdd, pinnedIds, onTogglePin }: {
   groups: TaskGroup[];
   selectedId: string | null;
   onSelect: (w: WorkItem) => void;
@@ -85,6 +93,8 @@ export function TaskList({ groups, selectedId, onSelect, quickAddDueFor, onQuick
   // (null = no date, undefined = no quick-add for this grouping).
   quickAddDueFor?: (groupKey: string) => string | null | undefined;
   onQuickAdd: (title: string, due: string | null, groupKey: string) => void;
+  pinnedIds?: Set<string>;
+  onTogglePin?: (w: WorkItem) => void;
 }) {
   return (
     <>
@@ -97,7 +107,8 @@ export function TaskList({ groups, selectedId, onSelect, quickAddDueFor, onQuick
               <span className="section-count" style={{ background: g.color }}>{g.items.length}</span>
             </div>
             {g.items.map((w) => (
-              <HubTaskRow key={w.id} w={w} selected={selectedId === w.id} onSelect={onSelect} />
+              <HubTaskRow key={w.id} w={w} selected={selectedId === w.id} onSelect={onSelect}
+                pinned={pinnedIds?.has(w.id)} onTogglePin={onTogglePin} />
             ))}
             {due !== undefined && (
               <GroupQuickAdd due={due} onAdd={(title, d) => onQuickAdd(title, d, g.key)} />

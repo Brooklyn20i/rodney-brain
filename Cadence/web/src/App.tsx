@@ -250,12 +250,12 @@ export function App() {
       }
     }
     switch (screen) {
-      case 'home': return <Home onMenu={onMenu} />;
+      case 'home': return <Home onMenu={onMenu} onNavigate={navigate} />;
       case 'dashboard': return <Dashboard onMenu={onMenu} onNavigate={navigate} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
       case 'projects': return <Projects onMenu={onMenu} initialSelectedId={focusId} />;
       case 'people': return <People onMenu={onMenu} initialSelectedId={focusId} />;
-      case 'meetings': return <Meetings onMenu={onMenu} />;
+      case 'meetings': return <Meetings onMenu={onMenu} initialSelectedId={focusId} />;
       case 'notes': return <Notes onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;

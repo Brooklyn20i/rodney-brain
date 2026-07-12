@@ -129,6 +129,58 @@ describe('Home workflow', () => {
     expect(screen.getByText('Hers')).toBeInTheDocument();
   });
 
+  it("shows Today's focus in plan order and reorders with ↑", () => {
+    setStore({ data: {
+      work_items: [wi({ id: 't1', title: 'First task' }), wi({ id: 't2', title: 'Second task' })],
+      notes: [{ id: 'dp', title: '__day_plan__', body: JSON.stringify({ pinned: ['t2', 't1'] }),
+        folder: '', created_at: '', updated_at: '2026-06-01', deleted_at: null }],
+    }});
+    render(<Home onMenu={() => {}} />);
+    expect(screen.getByText(/Today's focus/)).toBeInTheDocument();
+    const rows = document.querySelectorAll('.day-plan-row .wi-title');
+    expect([...rows].map((r) => r.textContent)).toEqual(['Second task', 'First task']);
+
+    // Move the second row up — the plan note is rewritten in the new order.
+    fireEvent.click(screen.getAllByTitle('Move up')[1]);
+    expect(h.store.update).toHaveBeenCalledWith('notes', 'dp', { body: JSON.stringify({ pinned: ['t1', 't2'] }) });
+  });
+
+  it('the star on a task row pins it into a fresh day plan', () => {
+    setStore({ data: { work_items: [wi({ id: 't1', title: 'Pin me' })] } });
+    render(<Home onMenu={() => {}} />);
+    expect(screen.queryByText(/Today's focus/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Pin to Today's focus"));
+    expect(h.store.insert).toHaveBeenCalledWith('notes', {
+      title: '__day_plan__', body: JSON.stringify({ pinned: ['t1'] }),
+    });
+  });
+
+  it('the Today strip shows meetings happening today and deep-opens them', () => {
+    const onNavigate = vi.fn();
+    h.dates = { n1: '2026-06-20' }; // fake clock is 2026-06-20
+    setStore({ data: {
+      people: [
+        person({ id: 'pA', name: 'Anna' }),
+        person({ id: 'gC', name: 'CLT', type: 'meeting_group' }),
+      ],
+      notes: [
+        { id: 'n1', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+      ],
+    }});
+    render(<Home onMenu={() => {}} onNavigate={onNavigate} />);
+    expect(screen.getByText('Meetings today')).toBeInTheDocument();
+    // Anna meets today; CLT (no dated note) does not.
+    expect(screen.getByText('No agenda yet')).toBeInTheDocument();
+    expect(screen.queryByText('CLT')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Anna/ }));
+    expect(onNavigate).toHaveBeenCalledWith('people', 'pA');
+  });
+
+  it('hides the Today strip when nothing meets today', () => {
+    setStore({ data: { people: [person({ id: 'pA', name: 'Anna' })] } });
+    render(<Home onMenu={() => {}} />);
+    expect(screen.queryByText('Meetings today')).not.toBeInTheDocument();
+  });
 });
 
 // ── People ledger ───────────────────────────────────────────────────────────────
