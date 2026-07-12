@@ -21,14 +21,26 @@ export interface LiveQuote {
 export type QuoteMap = Record<string, LiveQuote>;
 
 // Map a holding to its Yahoo Finance symbol:
-//   BTC             -> BTC-AUD  (spot in AUD directly)
-//   ASX-market rows -> TICKER.AX
-//   everything else -> TICKER   (US listings resolve as-is)
+//   BTC                      -> BTC-AUD  (spot in AUD directly)
+//   ASX / Australian brokers -> TICKER.AX
+//   everything else          -> TICKER   (US listings resolve as-is)
 export function yahooSymbol(h: Pick<InvestmentHolding, 'ticker' | 'market'>): string {
   const ticker = h.ticker.trim().toUpperCase();
+  const market = h.market.trim();
   if (ticker === 'BTC') return 'BTC-AUD';
-  if (/asx/i.test(h.market)) return `${ticker}.AX`;
+  if (/\b(asx|stake\s+aus|australia|australian)\b/i.test(market)) return `${ticker}.AX`;
   return ticker;
+}
+
+export function quoteCurrencyMatchesHolding(symbol: string, quoteCurrency: string, holdingCurrency: string): boolean {
+  const quote = (quoteCurrency || '').toUpperCase();
+  const holding = (holdingCurrency || 'AUD').toUpperCase();
+  if (quote === holding) return true;
+  // Yahoo occasionally returns a blank currency for ASX ETPs (for example
+  // PMGOLD.AX) even though the listing trades in AUD. Only accept that blank
+  // currency for an explicit .AX symbol against an AUD holding; never use it
+  // for US/other listings where a blank currency would hide a mismatch.
+  return quote === '' && symbol.toUpperCase().endsWith('.AX') && holding === 'AUD';
 }
 
 // units * price, rounded to cents -- the holding's new native_value if the

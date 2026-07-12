@@ -12,7 +12,7 @@ import {
   type InvestmentBucketSummary,
   type InvestmentExposureBucket,
 } from '../lib/financeCalc';
-import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
+import { fetchLiveQuotes, liveNativeValue, quoteCurrencyMatchesHolding, yahooSymbol, type QuoteMap } from '../lib/livePrices';
 import { formatMoney, formatPercent, monthLabel, periodRange } from '../lib/util';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
@@ -103,25 +103,30 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   }, []); // on mount only; the Refresh button re-pulls on demand
 
   const liveFor = (h: (typeof data.investment_holdings)[number]) => {
-    const q = quotes[yahooSymbol(h)];
+    const symbol = yahooSymbol(h);
+    const q = quotes[symbol];
     if (!q) return null;
     // Guard: the quote is in the LISTING's currency (Yahoo returns USD for a US
     // listing), but native_value is stored in the HOLDING's currency. Applying
     // a USD quote to an AUD-labelled holding would write a USD number into an
     // AUD field — a silent ~1.5× error. Only reprice when the currencies match;
-    // cross-currency conversion isn't done here (FX rates are AUD-pegged).
-    if ((q.currency || '').toUpperCase() !== (h.currency || 'AUD').toUpperCase()) return null;
+    // cross-currency conversion isn't done here (FX rates are AUD-pegged). A
+    // blank Yahoo currency is accepted only for explicit .AX/AUD symbols by the
+    // helper, covering ASX ETPs such as PMGOLD.AX.
+    if (!quoteCurrencyMatchesHolding(symbol, q.currency, h.currency)) return null;
     return liveNativeValue(h.units, q.price);
   };
 
   // A quote exists but its currency doesn't match the holding's → return the
   // quote currency so the row can explain why no live reprice is offered.
   const quoteCurrencyMismatch = (h: (typeof data.investment_holdings)[number]) => {
-    const q = quotes[yahooSymbol(h)];
+    const symbol = yahooSymbol(h);
+    const q = quotes[symbol];
     if (!q) return null;
-    const qc = (q.currency || '').toUpperCase();
+    if (quoteCurrencyMatchesHolding(symbol, q.currency, h.currency)) return null;
+    const qc = (q.currency || 'UNKNOWN').toUpperCase();
     const hc = (h.currency || 'AUD').toUpperCase();
-    return qc && qc !== hc ? { quote: qc, holding: hc } : null;
+    return { quote: qc, holding: hc };
   };
 
   const applyLive = async (id: string) => {
@@ -383,7 +388,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                       </div>
                       <div className="inv-holding-values">
                         <div>
-                          <span>Current</span>
+                          <span>Current (AUD)</span>
                           {editing ? (
                             <input
                               type="text"
@@ -393,7 +398,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                           ) : (
                             <strong>{formatMoney(audCurrent.value, true)}</strong>
                           )}
-                          <small>{nativeMoney(h.native_value, h.currency)}</small>
+                          <small>Native value: {nativeMoney(h.native_value, h.currency)}</small>
                         </div>
                         <div>
                           <span>Invested</span>
