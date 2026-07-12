@@ -22,6 +22,7 @@ import {
   type QuoteMap,
 } from '../lib/livePrices';
 import { formatMoney, formatPercent, monthLabel, periodRange } from '../lib/util';
+import { Chip, CONVICTION_TONE, ThesisDossier, priceSignal } from '../components/ThesisDossier';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -86,6 +87,8 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const [form, setForm] = useState<'holding' | 'buy' | null>(null);
   // Per-row reprice state: holding id -> { value, date }
   const [reprice, setReprice] = useState<Record<string, { value: string; date: string }>>({});
+  // Per-card thesis dossier expander: holding id | null
+  const [thesisFor, setThesisFor] = useState<string | null>(null);
 
   // ── Live quotes: display + reprice-assist. Nothing persists until Apply,
   // which stamps as_of_date and (for Apply-all) logs a market_repriced
@@ -381,6 +384,9 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   {rows.map((h) => {
                   const editing = reprice[h.id];
                   const live = liveFor(h);
+                  const thesis = (data.investment_theses ?? []).find((t) => t.target_id === h.id && !t.deleted_at);
+                  const perUnit = h.units > 0 ? (live !== null ? live : h.native_value) / h.units : null;
+                  const sig = thesis && !thesis.is_structural ? priceSignal(thesis, perUnit) : null;
                   const liveDelta = live !== null ? live - h.native_value : null;
                   const audCurrent = toAudWithFx(h.native_value, h.currency, fxRates);
                   const audCost = toAudWithFx(h.cost_basis, h.currency, fxRates);
@@ -455,6 +461,29 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                           >
                             Reprice
                           </button>
+                        )}
+                      </div>
+                      <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 8 }}>
+                        <button
+                          onClick={() => setThesisFor(thesisFor === h.id ? null : h.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                            font: 'inherit', fontSize: 12.5, color: 'var(--accent)', fontWeight: 600,
+                            display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10 }}>{thesisFor === h.id ? '▾' : '▸'}</span>
+                          Thesis
+                          {thesis && (
+                            <Chip bg={CONVICTION_TONE[thesis.conviction].bg} fg={CONVICTION_TONE[thesis.conviction].fg}>
+                              {CONVICTION_TONE[thesis.conviction].label}
+                            </Chip>
+                          )}
+                          {sig && <Chip bg={sig.bg} fg={sig.fg}>{sig.label}</Chip>}
+                          {!thesis && <span style={{ color: 'var(--text3)', fontWeight: 400 }}>none yet</span>}
+                        </button>
+                        {thesisFor === h.id && (
+                          <div style={{ marginTop: 10 }}>
+                            <ThesisDossier targetKind="holding" targetId={h.id}
+                              targetLabel={`${h.ticker} · ${h.market}`} currentPrice={perUnit} />
+                          </div>
                         )}
                       </div>
                     </article>

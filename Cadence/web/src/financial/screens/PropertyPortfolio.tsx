@@ -12,6 +12,7 @@ import {
   trailingAverages,
 } from '../lib/propertyCalc';
 import type { Loan, Property, PropertyLedgerCategory, PropertyType } from '../lib/types';
+import { ThesisDossier } from '../components/ThesisDossier';
 import {
   EVIDENCE_GRADE_LABEL,
   GEARING_LABEL,
@@ -437,6 +438,11 @@ function PropertyDetailPage({
             </div>
           </Card>
         )}
+
+                <Card title="Investment thesis">
+          <ThesisDossier targetKind="property" targetId={property.id} targetLabel={property.address}
+            currentPrice={property.value} defaultFrequencyMonths={6} />
+        </Card>
 
         <p style={{ fontSize: 12, color: 'var(--text2)' }}>
           Net cashflow / net yield are interest-only P&amp;L (loan principal excluded — it's a
