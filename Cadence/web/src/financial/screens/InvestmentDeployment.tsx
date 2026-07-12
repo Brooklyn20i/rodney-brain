@@ -12,7 +12,15 @@ import {
   type InvestmentBucketSummary,
   type InvestmentExposureBucket,
 } from '../lib/financeCalc';
-import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
+import {
+  fetchLiveQuotes,
+  liveFxRatesFromQuotes,
+  liveNativeValue,
+  quoteCurrencyMatchesHolding,
+  quoteSymbolsForHoldings,
+  yahooSymbol,
+  type QuoteMap,
+} from '../lib/livePrices';
 import { formatMoney, formatPercent, monthLabel, periodRange } from '../lib/util';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
@@ -39,18 +47,19 @@ function nativeMoney(value: number, currency: string): string {
 function PerformanceCard({ summary }: { summary: InvestmentBucketSummary }) {
   const totalTone = summary.totalGain >= 0 ? 'good' : 'bad';
   const fyTone = summary.fyGain === null ? 'neutral' : summary.fyGain >= 0 ? 'good' : 'bad';
+  const basisLabel = summary.currentValueBasis === 'month_close' ? 'month-close ledger' : 'holding rows';
   return (
     <div className={`inv-perf-card inv-${summary.bucket}`}>
       <div className="inv-perf-head">
         <div>
           <div className="inv-perf-label">{summary.label}</div>
           <div className="inv-perf-sub">
-            {summary.holdings} holding{summary.holdings === 1 ? '' : 's'} · as of {summary.asOfDate ?? 'TBC'}
+            {basisLabel} · {summary.holdings} holding{summary.holdings === 1 ? '' : 's'} · {summary.asOfDate ?? 'TBC'}
           </div>
         </div>
         <span className="grade-tag">AUD</span>
       </div>
-      <div className="inv-perf-main">{formatMoney(summary.currentValue, true)}</div>
+      <div className="inv-perf-main">{formatMoney(summary.currentValue)}</div>
       <div className="inv-perf-split">
         <div>
           <span>Invested</span>
@@ -66,7 +75,7 @@ function PerformanceCard({ summary }: { summary: InvestmentBucketSummary }) {
         </div>
       </div>
       {summary.missingCurrencies.length > 0 && (
-        <div className="inv-warning">Missing FX for {summary.missingCurrencies.join(', ')} — AUD totals use native value until FX is set.</div>
+        <div className="inv-warning">Missing FX for {summary.missingCurrencies.join(', ')} — AUD totals use native value until live FX is available.</div>
       )}
     </div>
   );
@@ -85,7 +94,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const [quotesState, setQuotesState] = useState<'idle' | 'loading' | 'error'>('idle');
 
   const refreshQuotes = useCallback(async () => {
-    const symbols = [...new Set(data.investment_holdings.map(yahooSymbol))];
+    const symbols = quoteSymbolsForHoldings(data.investment_holdings);
     if (symbols.length === 0) return;
     setQuotesState('loading');
     try {
@@ -98,29 +107,33 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   useEffect(() => {
     void refreshQuotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // on mount only; the Refresh button re-pulls on demand
+  }, [refreshQuotes]);
 
   const liveFor = (h: (typeof data.investment_holdings)[number]) => {
-    const q = quotes[yahooSymbol(h)];
+    const symbol = yahooSymbol(h);
+    const q = quotes[symbol];
     if (!q) return null;
     // Guard: the quote is in the LISTING's currency (Yahoo returns USD for a US
     // listing), but native_value is stored in the HOLDING's currency. Applying
     // a USD quote to an AUD-labelled holding would write a USD number into an
     // AUD field — a silent ~1.5× error. Only reprice when the currencies match;
-    // cross-currency conversion isn't done here (FX rates are AUD-pegged).
-    if ((q.currency || '').toUpperCase() !== (h.currency || 'AUD').toUpperCase()) return null;
+    // cross-currency conversion isn't done here (FX rates are AUD-pegged). A
+    // blank Yahoo currency is accepted only for explicit .AX/AUD symbols by the
+    // helper, covering ASX ETPs such as PMGOLD.AX.
+    if (!quoteCurrencyMatchesHolding(symbol, q.currency, h.currency)) return null;
     return liveNativeValue(h.units, q.price);
   };
 
   // A quote exists but its currency doesn't match the holding's → return the
   // quote currency so the row can explain why no live reprice is offered.
   const quoteCurrencyMismatch = (h: (typeof data.investment_holdings)[number]) => {
-    const q = quotes[yahooSymbol(h)];
+    const symbol = yahooSymbol(h);
+    const q = quotes[symbol];
     if (!q) return null;
-    const qc = (q.currency || '').toUpperCase();
+    if (quoteCurrencyMatchesHolding(symbol, q.currency, h.currency)) return null;
+    const qc = (q.currency || 'UNKNOWN').toUpperCase();
     const hc = (h.currency || 'AUD').toUpperCase();
-    return qc && qc !== hc ? { quote: qc, holding: hc } : null;
+    return { quote: qc, holding: hc };
   };
 
   const applyLive = async (id: string) => {
@@ -158,11 +171,13 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const monthlyMetrics = data.monthly_metrics;
   const budgetFxRates = data.budget_fx_rates;
   const entities = data.entities;
+  const liveFxRates = useMemo(() => liveFxRatesFromQuotes(quotes), [quotes]);
+  const effectiveFxRates = useMemo(() => [...budgetFxRates, ...liveFxRates], [budgetFxRates, liveFxRates]);
   const perf = useMemo(
-    () => investmentPerformanceSummary(investmentHoldings, investmentTransactions, monthlyMetrics, budgetFxRates),
-    [budgetFxRates, investmentHoldings, investmentTransactions, monthlyMetrics]
+    () => investmentPerformanceSummary(investmentHoldings, investmentTransactions, monthlyMetrics, effectiveFxRates),
+    [effectiveFxRates, investmentHoldings, investmentTransactions, monthlyMetrics]
   );
-  const fxRates = useMemo(() => fxRateMap(budgetFxRates), [budgetFxRates]);
+  const fxRates = useMemo(() => fxRateMap(effectiveFxRates), [effectiveFxRates]);
   const entityName = (id: string | null) => entities.find((e) => e.id === id)?.name ?? 'Unassigned';
   const holdingsByExposure = useMemo(
     () =>
@@ -321,13 +336,16 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
             </div>
             <div>
               <span>Currency rule</span>
-              <strong>AUD totals; USD via FX settings</strong>
+              <strong>AUD totals; USD via live USD/AUD FX</strong>
             </div>
             <div>
               <span>Evidence grade</span>
               <strong>Management-grade, not tax-grade</strong>
             </div>
           </div>
+          <p className="inv-note">
+            Top cards use the latest month-close ledger so they reconcile to Monthly Metrics. Holdings below are position rows and may differ after intra-month repricing until the next close is posted.
+          </p>
           <p className="inv-note">
             FY YTD gain = current value − FY opening value − FY buys. This separates market movement from new capital deployed.
             {perf.total.missingCurrencies.length > 0 ? ` Set FX for ${perf.total.missingCurrencies.join(', ')} to make AUD totals decision-grade.` : ''}
@@ -379,7 +397,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                       </div>
                       <div className="inv-holding-values">
                         <div>
-                          <span>Current</span>
+                          <span>Current (AUD)</span>
                           {editing ? (
                             <input
                               type="text"
@@ -389,7 +407,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                           ) : (
                             <strong>{formatMoney(audCurrent.value, true)}</strong>
                           )}
-                          <small>{nativeMoney(h.native_value, h.currency)}</small>
+                          <small>Native value: {nativeMoney(h.native_value, h.currency)}</small>
                         </div>
                         <div>
                           <span>Invested</span>

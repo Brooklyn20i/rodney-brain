@@ -13,6 +13,7 @@ import {
   summarizePeriod,
 } from '../financeCalc';
 import type { BudgetFxRate, InvestmentHolding, InvestmentTransaction, MonthlyMetric } from '../types';
+import { liveFxRatesFromQuotes, USD_AUD_FX_SYMBOL } from '../livePrices';
 
 // Fictional fixture data only -- see CadenceFinancial/AGENTS.md for why.
 // These numbers are hand-computed, not real figures; they exercise the same
@@ -312,6 +313,7 @@ describe('investment performance summary', () => {
 
     expect(perf.fyLabel).toBe('FY2027 YTD');
     expect(perf.buckets.shares.label).toBe('Shares & ETFs');
+    expect(perf.buckets.shares.currentValueBasis).toBe('month_close');
     expect(perf.buckets.shares.invested).toBeCloseTo(310, 2);
     expect(perf.buckets.shares.currentValue).toBeCloseTo(315, 2);
     expect(perf.buckets.shares.totalGain).toBeCloseTo(5, 2);
@@ -320,5 +322,42 @@ describe('investment performance summary', () => {
     expect(perf.buckets.crypto.currentValue).toBeCloseTo(300, 2);
     expect(perf.buckets.crypto.fyGain).toBeCloseTo(50, 2);
     expect(perf.total.currentValue).toBeCloseTo(615, 2);
+  });
+
+  it('uses live USD/AUD FX quotes for invested basis instead of mixing native USD and AUD cost bases', () => {
+    const liveFx = liveFxRatesFromQuotes({ [USD_AUD_FX_SYMBOL]: { price: 1.5, currency: 'AUD' } });
+    const perf = investmentPerformanceSummary(
+      [
+        holding({ ticker: 'WIRE', market: 'Stake Aus', currency: 'AUD', native_value: 120, cost_basis: 100 }),
+        holding({ ticker: 'GOOG', market: 'Stake Wall St', currency: 'USD', native_value: 130, cost_basis: 100 }),
+      ],
+      [],
+      [month({ period: '2026-07', shares: 315 })],
+      liveFx
+    );
+
+    expect(perf.buckets.shares.invested).toBeCloseTo(250, 2); // A$100 + US$100 × 1.5, not raw 200
+    expect(perf.buckets.shares.missingCurrencies).toEqual([]);
+  });
+
+  it('uses latest monthly close values for investment hero totals when repriced holdings diverge', () => {
+    const perf = investmentPerformanceSummary(
+      [
+        holding({ ticker: 'WIRE', currency: 'AUD', native_value: 80, cost_basis: 90 }),
+        holding({ ticker: 'VBTC', market: 'Stake Aus', currency: 'AUD', native_value: 30, cost_basis: 20 }),
+        holding({ ticker: 'PMGOLD', market: 'Stake Aus', currency: 'AUD', native_value: 40, cost_basis: 50 }),
+        holding({ ticker: 'BTC', market: 'Ledger', currency: 'AUD', native_value: 300, cost_basis: 100 }),
+      ],
+      [],
+      [month({ period: '2026-06', shares: 100, btc_crypto: 250 }), month({ period: '2026-07', shares: 315, btc_crypto: 290 })],
+      []
+    );
+
+    // Holding rows currently sum to A$150 shares and A$300 crypto, but the top
+    // cards are a monthly-close ledger view and must reconcile to Monthly Metrics.
+    expect(perf.buckets.shares.currentValue).toBeCloseTo(315, 2);
+    expect(perf.buckets.crypto.currentValue).toBeCloseTo(290, 2);
+    expect(perf.total.currentValue).toBeCloseTo(605, 2);
+    expect(perf.total.currentValueBasis).toBe('month_close');
   });
 });
