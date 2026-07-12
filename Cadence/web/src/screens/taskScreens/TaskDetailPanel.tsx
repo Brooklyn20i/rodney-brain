@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../../lib/types';
 import { EntityLinkPicker } from '../../components/EntityLinkPicker';
+import { RaiseAt1on1Button } from '../../components/RaiseAt1on1Button';
 import { TypeTag, PriTag } from '../../components/bits';
-import { AceActionButton } from '../../components/AceActionButton';
-import { taskBreakdownPrompt, taskFollowUpPrompt } from '../../lib/acePrompts';
 import { todayStr, addDaysStr, fmtDMY, TYPE_LABEL } from '../../lib/util';
 
 const TYPES: { v: ItemType; label: string }[] = [
@@ -78,13 +77,7 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <span>{task.done ? 'Done' : 'Mark done'}</span>
         </label>
         <div className="task-detail-head-actions">
-          <AceActionButton
-            contextLabel={task.title.slice(0, 40)}
-            actions={[
-              { label: 'Break this down', prompt: taskBreakdownPrompt(task) },
-              { label: 'Draft a follow-up', prompt: taskFollowUpPrompt(task) },
-            ]}
-          />
+          <RaiseAt1on1Button task={task} compact />
           <button className="btn btn-ghost btn-sm" onClick={del} title="Delete task">🗑</button>
           <button className="btn btn-ghost btn-sm task-detail-close" onClick={onClose} title="Close">✕</button>
         </div>
@@ -141,7 +134,7 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
         </div>
 
         <div className="task-detail-meta">
-          Created {fmtDMY(task.created_at)}
+          {task.created_at && <>Created {fmtDMY(task.created_at)}</>}
           {task.completed_at && <> · completed {fmtDMY(task.completed_at)}</>}
         </div>
       </div>

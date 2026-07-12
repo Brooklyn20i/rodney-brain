@@ -1,10 +1,9 @@
 // Pure data selectors for the Executive Control Cockpit.
 // No React dependencies — data in, arrays out.
 
-import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone, Decision } from './types';
+import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone } from './types';
 import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
-import { bucketForDue } from './dateBuckets';
-import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToProject, isUserTask } from './tasks';
+import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToPerson, isLinkedToProject, isUserTask } from './tasks';
 
 // ── Triage tray (Quick Capture / untriaged) ───────────────────────────────────
 // Every open capture awaiting triage, newest first — the same population the
@@ -16,44 +15,9 @@ export function getTriageQueue(items: WorkItem[]): WorkItem[] {
     .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 }
 
-// ── Rodney's to-do ────────────────────────────────────────────────────────────
-// The one clear list: Rodney's own open work, ranked by when it's due. Pure and
-// deterministic — grouped by date only, no keyword guessing. "In his lane" means
-// his own task (isUserTask excludes delegated items) that isn't a waitingFor
-// (owed by others) or decision (its own lane). `agent:kobe` is provenance only,
-// so it remains in Rodney's lane unless it is explicitly `for:kobe`.
 const PRI: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const byDueThenPri = (a: WorkItem, b: WorkItem) =>
   (a.due_date || '').localeCompare(b.due_date || '') || (PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1);
-const byPriThenDue = (a: WorkItem, b: WorkItem) =>
-  ((PRI[a.priority] ?? 1) - (PRI[b.priority] ?? 1)) || (a.due_date || '9999').localeCompare(b.due_date || '9999');
-
-export interface TodoGroup {
-  key: 'overdue' | 'today' | 'week' | 'later';
-  label: string;
-  tone: 'red' | 'orange' | 'blue' | 'muted';
-  items: WorkItem[];
-}
-
-export function getTodoGroups(items: WorkItem[]): TodoGroup[] {
-  const mine = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor' && w.type !== 'decision');
-  const overdue: WorkItem[] = [], dueToday: WorkItem[] = [], week: WorkItem[] = [], later: WorkItem[] = [];
-  for (const w of mine) {
-    // No-date items ride in "later" — the cockpit has no separate no-date lane.
-    const bucket = bucketForDue(w.due_date).key;
-    if (bucket === 'overdue') overdue.push(w);
-    else if (bucket === 'today') dueToday.push(w);
-    else if (bucket === 'week') week.push(w);
-    else later.push(w);
-  }
-  overdue.sort(byDueThenPri); dueToday.sort(byPriThenDue); week.sort(byDueThenPri); later.sort(byPriThenDue);
-  const out: TodoGroup[] = [];
-  if (overdue.length) out.push({ key: 'overdue', label: 'Overdue', tone: 'red', items: overdue });
-  if (dueToday.length) out.push({ key: 'today', label: 'Today', tone: 'orange', items: dueToday });
-  if (week.length) out.push({ key: 'week', label: 'This week', tone: 'blue', items: week });
-  if (later.length) out.push({ key: 'later', label: 'Later', tone: 'muted', items: later });
-  return out;
-}
 
 // Open items Rodney is waiting on someone else for — owed by others, not his to do.
 export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
@@ -62,28 +26,29 @@ export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
     .sort(byDueThenPri);
 }
 
-// Decisions Rodney needs to make. Uses both current data shapes safely:
-// - work_items.type === 'decision' (editable like any other work item)
-// - decisions.status === 'pending' (legacy/dedicated decision records)
-// No model migration: this is a read-only cockpit lane over existing data.
-export interface DecideItem {
-  id: string;
-  title: string;
-  due_date: string | null;
-  source: 'work_item' | 'decision';
-  workItem?: WorkItem;
-  decision?: Decision;
+// ── Person ledger ─────────────────────────────────────────────────────────────
+// The two-way ledger with a person: what I owe them vs what they owe me.
+// Pure derivation over existing data — `waitingFor` + person link ≡ they owe
+// me; any other open, filed, person-linked item ≡ I owe them. One selector so
+// the People detail, the list rail counts, the 1:1 prep view and Home's
+// Waiting lane can never disagree.
+export interface PersonLedger {
+  iOwe: WorkItem[];
+  theyOwe: WorkItem[];
+  iOweOverdue: number;
+  theyOweOverdue: number;
 }
 
-export function getDecideItems(items: WorkItem[], decisions: Decision[] = []): DecideItem[] {
-  const fromWorkItems = items
-    .filter((w) => isFiledTask(w) && w.type === 'decision' && !w.deleted_at)
-    .map((w) => ({ id: `wi:${w.id}`, title: w.title, due_date: w.due_date, source: 'work_item' as const, workItem: w }));
-  const fromDecisions = decisions
-    .filter((d) => d.status === 'pending' && !d.deleted_at)
-    .map((d) => ({ id: `d:${d.id}`, title: d.title, due_date: d.due_date, source: 'decision' as const, decision: d }));
-  return [...fromWorkItems, ...fromDecisions]
-    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || a.title.localeCompare(b.title));
+export function getPersonLedger(items: WorkItem[], personId: string): PersonLedger {
+  const linked = items.filter((w) => isFiledTask(w) && isLinkedToPerson(w, personId));
+  const iOwe = linked.filter((w) => w.type !== 'waitingFor').sort(byDueThenPri);
+  const theyOwe = linked.filter((w) => w.type === 'waitingFor').sort(byDueThenPri);
+  return {
+    iOwe,
+    theyOwe,
+    iOweOverdue: iOwe.filter((w) => isOverdue(w.due_date)).length,
+    theyOweOverdue: theyOwe.filter((w) => isOverdue(w.due_date)).length,
+  };
 }
 
 // ── Hot this week ─────────────────────────────────────────────────────────────
@@ -101,25 +66,16 @@ export function getHotThisWeek(items: WorkItem[]): WorkItem[] {
     });
 }
 
-// ── Kobe handling ─────────────────────────────────────────────────────────────
-// Items explicitly delegated to Kobe (source = 'for:kobe').
-// NOT items merely created by Kobe (source = 'agent:kobe').
-export function getKobeHandling(items: WorkItem[]): WorkItem[] {
-  return items.filter((w) => !w.done && w.source === 'for:kobe');
-}
-
-// ── Active load (Responsibility #3) ───────────────────────────────────────────
+// ── Active load ───────────────────────────────────────────────────────────────
 // How much Rodney is personally carrying right now. "In your lane" = open,
 // non-delegated tasks that aren't waitingFor (waiting = owed by others, not a
-// burden) and aren't delegated to Kobe. Surfaced so over-ownership is visible,
-// not silent.
+// burden). Surfaced so over-ownership is visible, not silent.
 export const ACTIVE_LOAD_CAP = 7; // soft threshold; tune in one line
 
 export interface LoadSummary {
   active: number;   // open, in Rodney's lane
   overdue: number;  // subset of active that is overdue
   waiting: number;  // owed by others (waitingFor)
-  kobe: number;     // delegated to Kobe (for:kobe)
   overCap: boolean; // active > ACTIVE_LOAD_CAP
 }
 
@@ -128,8 +84,7 @@ export function getLoadSummary(items: WorkItem[]): LoadSummary {
   const active = inLane.length;
   const overdue = inLane.filter((w) => isOverdue(w.due_date)).length;
   const waiting = items.filter((w) => isFiledTask(w) && w.type === 'waitingFor').length;
-  const kobe = items.filter((w) => !w.done && w.source === 'for:kobe').length;
-  return { active, overdue, waiting, kobe, overCap: active > ACTIVE_LOAD_CAP };
+  return { active, overdue, waiting, overCap: active > ACTIVE_LOAD_CAP };
 }
 
 // ── Horizon (Futuristic #4) ───────────────────────────────────────────────────
@@ -460,7 +415,7 @@ export type HygieneIssueKind =
   | 'agent-provenance';
 
 export type HygieneIssueGate = 'routine' | 'owner-admin-gated';
-export type HygieneIssueRoute = 'inbox' | 'tasks' | 'projects' | 'today' | 'kobe';
+export type HygieneIssueRoute = 'inbox' | 'home' | 'projects';
 
 export interface HygieneIssue {
   id: string;
@@ -507,7 +462,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         title: w.title,
         detail: 'Filed task has no person or project home — choose where it belongs before tidying.',
         gate: 'routine',
-        route: 'tasks',
+        route: 'home',
         refId: w.id,
       });
     }
@@ -519,7 +474,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         title: w.title,
         detail: 'Waiting item has no person or project link — review who owns the follow-up.',
         gate: 'routine',
-        route: 'today',
+        route: 'home',
         refId: w.id,
       });
     }
@@ -531,7 +486,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         title: w.title,
         detail: 'Decision is more than 14 days past due — owner decision needed before closing or deferring.',
         gate: 'owner-admin-gated',
-        route: 'today',
+        route: 'home',
         refId: w.id,
       });
     }
@@ -543,7 +498,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         title: w.title,
         detail: `${w.source} is provenance only, not delegated ownership — confirm it is in the right lane.`,
         gate: 'routine',
-        route: 'tasks',
+        route: 'home',
         refId: w.id,
       });
     }
@@ -557,7 +512,7 @@ export function getDataHygieneIssues(data: Pick<CadenceData, 'work_items' | 'pro
         title: d.title,
         detail: 'Pending decision is more than 14 days past due — owner decision needed before closing or deferring.',
         gate: 'owner-admin-gated',
-        route: 'today',
+        route: 'home',
         refId: d.id,
       });
     }

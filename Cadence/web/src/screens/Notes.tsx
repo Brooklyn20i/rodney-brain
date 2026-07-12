@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, WorkItem, RelatedEntity } from '../lib/types';
-import { ScreenHeader } from '../components/bits';
+import { ScreenHeader, Modal } from '../components/bits';
 import { fmtDM } from '../lib/util';
 import { RichEditor } from '../components/RichEditor';
 import { ItemModal } from '../components/ItemModal';
@@ -14,6 +14,10 @@ const NEW_FOLDER = '__new__';
 function stripHtml(html: string) {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
 }
+
+// Full-text haystack for search — title plus the whole body, tags stripped.
+const searchBlob = (n: Note) =>
+  `${n.title} ${n.body.replace(/<[^>]+>/g, ' ')}`.toLowerCase();
 
 // ── Stable sub-components (defined outside Notes so React never remounts them) ─
 
@@ -204,14 +208,38 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [query, setQuery] = useState('');
+  const [folderModal, setFolderModal] = useState<null | { moveCurrent: boolean }>(null);
+  const [folderName, setFolderName] = useState('');
+  // Multi-device stale-guard: never save unless the user actually edited, adopt
+  // remote versions silently while clean, and ask when both sides have changes.
+  const [editorEpoch, setEditorEpoch] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const lastSeenRef = useRef('');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const note = data.notes.find((n) => n.id === selected) || null;
 
   useEffect(() => {
     setSaveStatus('idle');
+    setConflict(false);
+    dirtyRef.current = false;
+    lastSeenRef.current = note?.updated_at || '';
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note?.id]);
+
+  // Watch for the open note changing under us (another device / realtime).
+  useEffect(() => {
+    if (!note || savingRef.current) return;
+    if (!note.updated_at || note.updated_at <= lastSeenRef.current) return;
+    if (dirtyRef.current) { setConflict(true); return; }
+    lastSeenRef.current = note.updated_at;
+    setTitle(note.title || '');
+    setEditorEpoch((e) => e + 1); // remount the editor onto the fresh body
+  }, [note]);
 
   const folders = useMemo(() => {
     const fromNotes = data.notes.map(folderOf).filter(Boolean);
@@ -221,19 +249,47 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   const notesIn = (f: string) => data.notes.filter((n) => folderOf(n) === f).sort(byUpdated);
   const uncategorized = notesIn('');
 
-  const doSave = async (patch: Partial<Note>) => {
+  // All note writes go through here so our own saves are never mistaken for a
+  // remote change by the stale-guard watcher above.
+  const writeNote = async (patch: Partial<Note>) => {
     if (!note) return;
+    savingRef.current = true;
+    try {
+      const saved = (await update('notes', note.id, patch)) as Note | undefined;
+      if (saved?.updated_at) lastSeenRef.current = saved.updated_at;
+    } finally { savingRef.current = false; }
+  };
+
+  const doSave = async (patch: Partial<Note>) => {
+    if (!note || !dirtyRef.current) return; // clean instances must never clobber
     setSaveStatus('saving');
     try {
-      await update('notes', note.id, patch);
+      await writeNote(patch);
+      dirtyRef.current = false;
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus((s) => s === 'saved' ? 'idle' : s), 2000);
     } catch { setSaveStatus('error'); }
   };
 
   const scheduleBodySave = (html: string) => {
+    dirtyRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => doSave({ body: html }), 800);
+  };
+
+  const loadTheirs = () => {
+    if (!note) return;
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    dirtyRef.current = false;
+    lastSeenRef.current = note.updated_at;
+    setTitle(note.title || '');
+    setEditorEpoch((e) => e + 1);
+    setConflict(false);
+  };
+
+  const keepMine = () => {
+    if (note) lastSeenRef.current = note.updated_at;
+    setConflict(false); // local edits stay dirty; the next save wins
   };
 
   const newNote = async (folder = '') => {
@@ -250,16 +306,20 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
 
   const moveNote = async (folder: string) => {
     if (!note) return;
-    try { await update('notes', note.id, { folder } as Partial<Note>); }
+    try { await writeNote({ folder } as Partial<Note>); }
     catch (e: any) { if (!/folder/i.test(String(e?.message || e))) throw e; }
   };
 
-  const addFolder = () => {
-    const name = window.prompt('New folder name')?.trim();
-    if (!name) return name;
+  const closeFolderModal = () => { setFolderModal(null); setFolderName(''); };
+
+  const createFolder = async () => {
+    const name = folderName.trim();
+    const move = folderModal?.moveCurrent;
+    closeFolderModal();
+    if (!name) return;
     setExtraFolders((f) => Array.from(new Set([...f, name])));
     setCollapsed((c) => ({ ...c, [name]: false }));
-    return name;
+    if (move) await moveNote(name);
   };
 
   const commitRename = async () => {
@@ -278,11 +338,17 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   };
 
   const onFolderSelect = async (v: string) => {
-    if (v === NEW_FOLDER) { const name = addFolder(); if (name) await moveNote(name); }
+    if (v === NEW_FOLDER) setFolderModal({ moveCurrent: true });
     else await moveNote(v);
   };
 
   const selectNote = (n: Note) => { setSelected(n.id); setTitle(n.title || ''); setShowList(false); };
+
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return data.notes.filter((n) => searchBlob(n).includes(q)).sort(byUpdated);
+  }, [data.notes, query]);
 
   return (
     <>
@@ -291,12 +357,26 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
         <div className="split-left">
           <div className="split-panel-header"><h3>Notebooks</h3>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-secondary btn-sm" onClick={addFolder}>+ Folder</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setFolderModal({ moveCurrent: false })}>+ Folder</button>
               <button className="btn btn-primary btn-sm" onClick={() => newNote(note ? folderOf(note) : '')}>+ Note</button>
             </div>
           </div>
+          <div className="notes-search">
+            <input
+              type="search"
+              placeholder="Search notes…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
           <div className="split-panel-body">
-            {data.notes.length === 0 && folders.length === 0
+            {searchResults ? (
+              searchResults.length === 0
+                ? <small style={{ color: 'var(--text3)' }}>No notes match “{query.trim()}”.</small>
+                : searchResults.map((n) => (
+                  <NoteRow key={n.id} n={n} selected={selected} onSelect={selectNote} />
+                ))
+            ) : data.notes.length === 0 && folders.length === 0
               ? <small style={{ color: 'var(--text3)' }}>No notes yet. Tap "+ Note".</small>
               : <>
                 <div className="folder-header" style={{ cursor: 'default' }}>
@@ -354,7 +434,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
                 id="note-title-input"
                 value={title}
                 placeholder="Untitled note"
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => { dirtyRef.current = true; setTitle(e.target.value); }}
                 onBlur={() => doSave({ title: title.trim() || 'Untitled note' })}
               />
               {saveStatus !== 'idle' && (
@@ -370,9 +450,16 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
               <button className="btn btn-share btn-sm" onClick={() => setSharing(true)} title="Export to OneNote">📤 OneNote</button>
               <button className="btn btn-danger btn-sm" onClick={() => { remove('notes', note.id); setSelected(null); setShowList(true); }}>Delete</button>
             </div>
+            {conflict && (
+              <div className="note-conflict-banner">
+                <span>This note changed on another device.</span>
+                <button className="btn btn-secondary btn-sm" onClick={loadTheirs}>Load theirs</button>
+                <button className="btn btn-primary btn-sm" onClick={keepMine}>Keep mine</button>
+              </div>
+            )}
             <div className="split-panel-body" style={{ padding: 0, overflow: 'hidden', flex: '1 1 0' }}>
               <RichEditor
-                key={note.id}
+                key={`${note.id}:${editorEpoch}`}
                 content={note.body || ''}
                 onChange={scheduleBodySave}
                 onBlur={(html) => {
@@ -398,6 +485,26 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
           </div>
         )}
       </div>
+
+      {folderModal && (
+        <Modal title="New folder" onClose={closeFolderModal}
+          footer={<>
+            <button className="btn btn-secondary" onClick={closeFolderModal}>Cancel</button>
+            <button className="btn btn-primary" disabled={!folderName.trim()} onClick={() => void createFolder()}>Create</button>
+          </>}>
+          <div className="form-group">
+            <label>Folder name</label>
+            <input
+              type="text"
+              autoFocus
+              value={folderName}
+              placeholder="e.g. Leadership"
+              onChange={(e) => setFolderName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && folderName.trim()) void createFolder(); }}
+            />
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

@@ -4,27 +4,20 @@ export type Domain = 'work' | 'financial' | 'fitness';
 
 export interface NavItem { id: string; label: string; icon: string; }
 
+// Seven screens, one section — Home is the landing commitments view (my
+// tasks + waiting), everything else is a destination you visit deliberately.
 export const WORK_NAV: { section: string; items: NavItem[] }[] = [
-  { section: 'Control', items: [
-    { id: 'today', label: 'Today', icon: '☀' },
-    { id: 'dashboard', label: 'Dashboard', icon: '◧' },
-    { id: 'inbox', label: 'Inbox', icon: '↓' },
-    { id: 'calendar', label: 'Calendar', icon: '📅' },
-  ]},
-  { section: 'Work', items: [
-    { id: 'projects', label: 'Projects', icon: '▤' },
-    { id: 'tasks', label: 'Tasks', icon: '◎' },
+  { section: '', items: [
+    { id: 'home', label: 'Home', icon: '☀' },
     { id: 'people', label: 'People', icon: '✦' },
     { id: 'meetings', label: 'Meetings', icon: '🗓' },
+    { id: 'projects', label: 'Projects', icon: '▤' },
     { id: 'notes', label: 'Notes', icon: '✎' },
-    { id: 'board', label: 'Board', icon: '▦' },
-  ]},
-  { section: 'Agents', items: [
-    { id: 'ace', label: 'Ace', icon: '◆' },
+    { id: 'inbox', label: 'Inbox', icon: '↓' },
+    { id: 'dashboard', label: 'Dashboard', icon: '◧' },
   ]},
 ];
 const WORK_FOOTER: NavItem[] = [
-  { id: 'review', label: 'Review', icon: '✓' },
   { id: 'search', label: 'Search', icon: '⌕' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];

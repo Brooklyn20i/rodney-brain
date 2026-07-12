@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isFiledTask, isUserTask } from '../tasks';
-import { getTodoGroups, getHotThisWeek, getWaitingOnOthers, getProjectTopActions } from '../selectors';
+import { getHotThisWeek, getWaitingOnOthers, getProjectTopActions } from '../selectors';
 import { todayStr } from '../util';
 import type { WorkItem } from '../types';
 
@@ -33,13 +33,13 @@ describe('triage model — inboxed captures are Inbox-only until filed', () => {
     expect(isFiledTask(wi({ inboxed: false, source: 'agent:kobe' }))).toBe(true); // provenance only
   });
 
-  it("Today's to-do groups exclude an inboxed capture even if it is due today", () => {
+  it("Home's Mine lane (isFiledTask) excludes an inboxed capture even if due today", () => {
     const today = todayStr();
     const items = [
       wi({ title: 'Filed task', due_date: today, inboxed: false }),
       wi({ title: 'Quick capture', due_date: today, inboxed: true, person_id: 'p1' }),
     ];
-    const flat = getTodoGroups(items).flatMap((g) => g.items.map((w) => w.title));
+    const flat = items.filter((w) => isFiledTask(w) && w.type !== 'waitingFor').map((w) => w.title);
     expect(flat).toContain('Filed task');
     expect(flat).not.toContain('Quick capture');
   });

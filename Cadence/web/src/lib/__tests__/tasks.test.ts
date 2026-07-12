@@ -156,6 +156,48 @@ describe('buildTaskFromAction', () => {
     const task = buildTaskFromAction(baseAction({ due: '' }), 'Meeting');
     expect(task.due_date).toBeNull();
   });
+
+  // ── the auto-split ledger rules ──
+  it("owner 'them' with a person becomes waitingFor in their owes-me ledger", () => {
+    const task = buildTaskFromAction(
+      baseAction({ owner: 'them', owner_person_id: 'pAnna', owner_label: 'Anna Lee' }),
+      '1:1 · Anna · 20/06/2026',
+    );
+    expect(task.type).toBe('waitingFor');
+    expect(task.person_id).toBe('pAnna');
+    expect(task.inboxed).toBe(false);
+    expect(task.related_entities).toEqual(expect.arrayContaining([
+      { type: 'person', id: 'pAnna', name: 'Anna Lee' },
+    ]));
+  });
+
+  it("owner 'them' without any resolvable person waits in the Inbox for triage", () => {
+    const task = buildTaskFromAction(baseAction({ owner: 'them' }), 'CLT · 20/06/2026', null, 'n1');
+    expect(task.type).toBe('waitingFor');
+    expect(task.person_id).toBeNull();
+    expect(task.inboxed).toBe(true);
+  });
+
+  it("owner 'me' with a noteId is filed straight to my tasks with note provenance", () => {
+    const task = buildTaskFromAction(baseAction(), '1:1 · Anna · 20/06/2026', null, 'n1');
+    expect(task.type).toBe('task');
+    expect(task.inboxed).toBe(false);
+    expect(task.related_entities).toEqual(expect.arrayContaining([
+      { type: 'note', id: 'n1', name: '1:1 · Anna · 20/06/2026' },
+    ]));
+  });
+
+  it('an explicit person target wins over owner_person_id for both owners', () => {
+    const task = buildTaskFromAction(
+      baseAction({ owner: 'them', owner_person_id: 'pOld', owner_label: 'Old' }),
+      'Meeting',
+      { id: 'pNew', type: 'person', name: 'New Person' },
+    );
+    expect(task.person_id).toBe('pNew');
+    expect(task.related_entities).toEqual(expect.arrayContaining([
+      { type: 'person', id: 'pNew', name: 'New Person' },
+    ]));
+  });
 });
 
 // ── collectOpenMeetingActions ─────────────────────────────────────────────────

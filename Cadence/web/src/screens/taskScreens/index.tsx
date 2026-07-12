@@ -1,25 +1,27 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
 import { ScreenHeader, EmptyState } from '../../components/bits';
 import { StatTile } from '../../components/StatTile';
 import { QuickAdd } from '../../components/QuickAdd';
-import { TaskList, MeetingActionRow } from './TaskList';
+import { TaskList } from './TaskList';
 import type { TaskGroup } from './TaskList';
 import { TaskDetailPanel } from './TaskDetailPanel';
+import { TriageTray } from '../../components/TriageTray';
+import { TodayStrip } from '../../components/TodayStrip';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
 import { bucketForDue } from '../../lib/dateBuckets';
-import { createMeetingActionFiler } from '../../lib/meetingActions';
-import { collectOpenMeetingActions, isFiledTask, isAgentTask, isUserTask } from '../../lib/tasks';
-import type { OpenMeetingAction, PushTarget } from '../../lib/tasks';
+import { isFiledTask } from '../../lib/tasks';
+import { useDayPlan } from '../../lib/dayPlan';
 
-type Lane = 'all' | 'mine' | 'waiting' | 'delegated';
+type Lane = 'mine' | 'waiting';
 type GroupBy = 'due' | 'priority' | 'person' | 'project' | 'type';
 type DateFilter = 'all' | 'overdue' | 'today' | 'week' | 'none';
 
+// Two lanes only: Mine = what I owe; Waiting = what others owe me (the global
+// they-owe-me view, grouped by person). No All/Delegated — those were noise.
 const LANE_OPTS: { v: Lane; label: string }[] = [
-  { v: 'all', label: 'All' }, { v: 'mine', label: 'Mine' },
-  { v: 'waiting', label: 'Waiting' }, { v: 'delegated', label: 'Delegated' },
+  { v: 'mine', label: 'Mine' }, { v: 'waiting', label: 'Waiting' },
 ];
 const GROUP_OPTS: { v: GroupBy; label: string }[] = [
   { v: 'due', label: 'Due date' }, { v: 'priority', label: 'Priority' },
@@ -35,26 +37,27 @@ const PRI_META: Record<string, { label: string; color: string; rank: number }> =
 
 const inLane = (w: WorkItem, lane: Lane): boolean => {
   switch (lane) {
-    case 'mine': return isFiledTask(w) && w.type !== 'waitingFor';
     case 'waiting': return isFiledTask(w) && w.type === 'waitingFor';
-    case 'delegated': return !w.done && isAgentTask(w);
-    default: return !w.done && !w.inboxed && (isUserTask(w) || isAgentTask(w));
+    default: return isFiledTask(w) && w.type !== 'waitingFor';
   }
 };
 
-// The unified Task Hub: every open task in one place — lanes (Mine / Waiting /
-// Delegated), clickable stat tiles as date filters, grouped master list with
-// inline quick-add, and an edit-in-place detail panel (People's split view).
-export function Tasks({ onMenu }: { onMenu?: () => void }) {
+// Home: Rodney's commitments in one place — the triage tray for fresh
+// captures, lanes (Mine = what I owe / Waiting = what others owe me),
+// clickable stat tiles as date filters, grouped master list with inline
+// quick-add, and an edit-in-place detail panel (People's split view).
+export function Home({ onMenu, onNavigate }: {
+  onMenu?: () => void;
+  onNavigate?: (screen: string, id?: string | null) => void;
+}) {
   const { data, insert, update } = useCadence();
-  const [lane, setLane] = useState<Lane>('all');
+  const { pinned, pin, unpin, move } = useDayPlan();
+  const [lane, setLane] = useState<Lane>('mine');
   const [groupBy, setGroupBy] = useState<GroupBy>('due');
   const [filter, setFilter] = useState<DateFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
-
-  const openActions = useMemo(() => collectOpenMeetingActions(data.notes), [data.notes]);
 
   const { groups, counts, recentlyDone } = useMemo(() => {
     const open = data.work_items.filter((w) => !w.deleted_at && inLane(w, lane));
@@ -64,7 +67,6 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       today: open.filter((w) => isDueToday(w.due_date)).length,
       week: open.filter((w) => !!w.due_date && w.due_date > todayStr() && w.due_date <= addDaysStr(7)).length,
       none: open.filter((w) => !w.due_date).length,
-      unfiled: openActions.length,
     };
 
     // Date filter applies before grouping.
@@ -122,15 +124,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
 
     return { groups, counts, recentlyDone };
-  }, [data, lane, groupBy, filter, openActions]);
-
-  // Keep the filer reading the freshest notes even across re-renders.
-  const notesRef = useRef(data.notes);
-  notesRef.current = data.notes;
-  const filerRef = useRef<ReturnType<typeof createMeetingActionFiler> | null>(null);
-  if (!filerRef.current) filerRef.current = createMeetingActionFiler({ insert, update });
-  const fileAction = (action: OpenMeetingAction, target: PushTarget | null) =>
-    filerRef.current!(() => notesRef.current, action, target);
+  }, [data, lane, groupBy, filter]);
 
   const quickAddDueFor = (groupKey: string): string | null | undefined => {
     if (groupBy !== 'due') return null; // group semantics handled in onQuickAdd
@@ -162,12 +156,20 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
     insert('work_items', row);
   };
 
-  const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
-  const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
   const selected = selectedId ? data.work_items.find((w) => w.id === selectedId) || null : null;
 
-  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`
-    + (counts.unfiled ? ` · ${counts.unfiled} to file from meetings` : '');
+  // Hand-picked plan for the day, in Rodney's order (useDayPlan prunes
+  // done/deleted ids on read).
+  const pinnedItems = pinned
+    .map((id) => data.work_items.find((w) => w.id === id))
+    .filter((w): w is WorkItem => !!w);
+  const pinnedSet = new Set(pinned);
+
+  const toggleDone = (w: WorkItem) => update('work_items', w.id, {
+    done: !w.done, completed_at: !w.done ? new Date().toISOString() : null,
+  } as Partial<WorkItem>);
+
+  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`;
 
   const tile = (key: DateFilter, num: number, label: string, tone: 'default' | 'red' | 'orange' = 'default') => (
     <StatTile num={num} label={label} tone={tone} active={filter === key}
@@ -176,7 +178,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Tasks" subtitle={subtitle} onMenu={onMenu}>
+      <ScreenHeader title="Home" subtitle={subtitle} onMenu={onMenu}>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
@@ -200,6 +202,34 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
       <div className="split-view task-hub">
         <div className="split-left task-hub-left">
           <div className="split-panel-body">
+            {/* Do I have meetings today? Answered before anything else. */}
+            <TodayStrip onNavigate={onNavigate} />
+
+            {/* Fresh captures land here until shaped — the zero-navigation triage view. */}
+            <TriageTray onEdit={(w) => setSelectedId(w.id)} />
+
+            {pinnedItems.length > 0 && (
+              <div className="detail-section day-plan" aria-label="Today's focus">
+                <h3>★ Today's focus
+                  <span className="section-count" style={{ background: 'var(--accent)', marginLeft: 8 }}>{pinnedItems.length}</span>
+                </h3>
+                {pinnedItems.map((w, i) => (
+                  <div key={w.id} className={`work-item-row day-plan-row${selectedId === w.id ? ' selected' : ''}`}>
+                    <input type="checkbox" checked={w.done} onChange={() => toggleDone(w)}
+                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                    <span className="wi-title" style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}
+                      onClick={() => setSelectedId(w.id)}>{w.title}</span>
+                    <button className="btn btn-ghost btn-sm" title="Move up" disabled={i === 0}
+                      onClick={() => move(w.id, -1)}>↑</button>
+                    <button className="btn btn-ghost btn-sm" title="Move down" disabled={i === pinnedItems.length - 1}
+                      onClick={() => move(w.id, 1)}>↓</button>
+                    <button className="pin-star pinned" title="Unpin from Today's focus"
+                      onClick={() => unpin(w.id)}>★</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="hub-stats" aria-label="Task filters">
               {tile('overdue', counts.overdue, 'Overdue', counts.overdue ? 'red' : 'default')}
               {tile('today', counts.today, 'Today', counts.today ? 'orange' : 'default')}
@@ -207,21 +237,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
               {tile('none', counts.none, 'No date')}
             </div>
 
-            {/* Unfiled meeting actions — the anti-"lost in meetings" surface. */}
-            {openActions.length > 0 && (
-              <>
-                <div className="section-header">
-                  <h2>Meeting actions to file</h2>
-                  <span className="section-count" style={{ background: 'var(--purple)' }}>{openActions.length}</span>
-                </div>
-                {openActions.map((a) => (
-                  <MeetingActionRow key={`${a.noteId}-${a.id}`} action={a}
-                    people={people} projects={projects} onFile={fileAction} />
-                ))}
-              </>
-            )}
-
-            {groups.length === 0 && openActions.length === 0 && (
+            {groups.length === 0 && (
               <EmptyState icon="✓" title="Tasks are clear" sub="Capture a task when needed; quick captures land in the Inbox for triage." />
             )}
 
@@ -231,6 +247,8 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
               onSelect={(w) => setSelectedId(w.id)}
               quickAddDueFor={quickAddDueFor}
               onQuickAdd={onQuickAdd}
+              pinnedIds={pinnedSet}
+              onTogglePin={(w) => { if (pinnedSet.has(w.id)) void unpin(w.id); else void pin(w.id); }}
             />
 
             {recentlyDone.length > 0 && (
@@ -272,3 +290,7 @@ export function Tasks({ onMenu }: { onMenu?: () => void }) {
     </>
   );
 }
+
+// Transitional alias — the shim at screens/Tasks.tsx and older tests import
+// `Tasks`; the screen itself is Home now.
+export { Home as Tasks };

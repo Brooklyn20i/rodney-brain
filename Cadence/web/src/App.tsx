@@ -6,27 +6,21 @@ import { isUserTask } from './lib/tasks';
 import { getLoadSummary, getWaitingOnOthers } from './lib/selectors';
 import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
-import { AceUiProvider } from './lib/aceUi';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { GlobalCapture } from './components/GlobalCapture';
-import { Today } from './screens/Today'; // eager — the default landing screen
+import { Home } from './screens/taskScreens'; // eager — the default landing screen
 
-// Lazy-load the remaining screens so the initial bundle ships only Today plus
+// Lazy-load the remaining screens so the initial bundle ships only Home plus
 // the shell. The per-screen chunks (vite manualChunks) are now actually
 // deferred instead of eagerly imported by this module.
 const Dashboard = lazy(() => import('./screens/Dashboard').then((m) => ({ default: m.Dashboard })));
-const Calendar = lazy(() => import('./screens/Calendar').then((m) => ({ default: m.Calendar })));
-const Board = lazy(() => import('./screens/Board').then((m) => ({ default: m.Board })));
-const Tasks = lazy(() => import('./screens/taskScreens').then((m) => ({ default: m.Tasks })));
 const Inbox = lazy(() => import('./screens/Inbox').then((m) => ({ default: m.Inbox })));
 const Projects = lazy(() => import('./screens/projectScreens').then((m) => ({ default: m.Projects })));
 const People = lazy(() => import('./screens/People').then((m) => ({ default: m.People })));
 const Meetings = lazy(() => import('./screens/Meetings').then((m) => ({ default: m.Meetings })));
 const Notes = lazy(() => import('./screens/Notes').then((m) => ({ default: m.Notes })));
-const Review = lazy(() => import('./screens/Review').then((m) => ({ default: m.Review })));
 const Search = lazy(() => import('./screens/Search').then((m) => ({ default: m.Search })));
 const Settings = lazy(() => import('./screens/Settings').then((m) => ({ default: m.Settings })));
-const Ace = lazy(() => import('./screens/Ace').then((m) => ({ default: m.Ace })));
 
 // ── Financial domain ──────────────────────────────────────────────────────
 const FinOverview = lazy(() => import('./financial/screens/Overview').then((m) => ({ default: m.Overview })));
@@ -61,7 +55,7 @@ const FitSync = lazy(() => import('./fitness/screens/Sync').then((m) => ({ defau
 const FitKobe = lazy(() => import('./fitness/screens/Kobe').then((m) => ({ default: m.Kobe })));
 
 const DEFAULT_SCREEN: Record<Domain, string> = {
-  work: 'today',
+  work: 'home',
   financial: 'financial:overview',
   fitness: 'fitness:dashboard',
 };
@@ -189,7 +183,7 @@ export function App() {
   const badges = useMemo(() => ({
     // Tasks badge = overdue in Rodney's own lane. Inbox badge = unprocessed
     // captures waiting to be triaged. People badge = Waiting / owed by others.
-    tasks: { count: getLoadSummary(data.work_items).overdue, cls: 'red' },
+    home: { count: getLoadSummary(data.work_items).overdue, cls: 'red' },
     inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed).length, cls: '' },
     people: { count: getWaitingOnOthers(data.work_items).length, cls: 'blue' },
   }), [data]);
@@ -256,26 +250,22 @@ export function App() {
       }
     }
     switch (screen) {
+      case 'home': return <Home onMenu={onMenu} onNavigate={navigate} />;
       case 'dashboard': return <Dashboard onMenu={onMenu} onNavigate={navigate} />;
-      case 'today': return <Today onMenu={onMenu} />;
-      case 'calendar': return <Calendar onMenu={onMenu} onNavigate={navigate} />;
-      case 'tasks': return <Tasks onMenu={onMenu} />;
       case 'inbox': return <Inbox onMenu={onMenu} />;
-      case 'board': return <Board onMenu={onMenu} />;
       case 'projects': return <Projects onMenu={onMenu} initialSelectedId={focusId} />;
       case 'people': return <People onMenu={onMenu} initialSelectedId={focusId} />;
-      case 'meetings': return <Meetings onMenu={onMenu} />;
+      case 'meetings': return <Meetings onMenu={onMenu} initialSelectedId={focusId} />;
       case 'notes': return <Notes onMenu={onMenu} />;
-      case 'review': return <Review onMenu={onMenu} />;
       case 'search': return <Search onMenu={onMenu} onNavigate={navigate} />;
-      case 'ace': return <Ace onMenu={onMenu} />;
       case 'settings': return <Settings onMenu={onMenu} email={email} onSignOut={signOut} />;
-      default: return <Today onMenu={onMenu} />;
+      // Retired screen ids (today/tasks/calendar/board/review/ace) fall through
+      // to Home so stale deep links and old localStorage never dead-end.
+      default: return <Home onMenu={onMenu} />;
     }
   };
 
   return (
-    <AceUiProvider>
     <div id="app">
       {isOffline && (
         <div className="offline-banner">
@@ -312,6 +302,5 @@ export function App() {
         {domain === 'work' && <GlobalCapture />}
       </div>
     </div>
-    </AceUiProvider>
   );
 }

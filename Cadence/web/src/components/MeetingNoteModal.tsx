@@ -6,9 +6,13 @@ import type { Note, Person, WorkItem } from '../lib/types';
 import type { Project } from '../lib/types';
 import { RichEditor } from './RichEditor';
 import { SharePanel } from './SharePanel';
-import { useMeetingDates } from '../lib/meetings';
+import { useMeetingDates, getUpcomingNoteId } from '../lib/meetings';
 import { parseMeeting, serializeMeeting, uid } from '../lib/meetingData';
 import type { AgendaItem, ActionItem } from '../lib/meetingData';
+import { readAgendaQueue, useAgendaQueue } from '../lib/agendaQueue';
+import { usePrepTopics } from '../lib/prepTopics';
+import type { PrepTopic } from '../lib/prepTopics';
+import { TopicsPanel } from './TopicsPanel';
 import { buildTaskFromAction, isLinkedToPerson } from '../lib/tasks';
 import type { PushTarget } from '../lib/tasks';
 import { sanitizeHtml } from '../lib/sanitize';
@@ -398,6 +402,7 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const [actions, setActions] = useState<ActionItem[]>(parsed.actions);
   const [notes, setNotes] = useState<string>(parsed.notes);
   const [title, setTitle] = useState(note.title);
+  const [showTopics, setShowTopics] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importSel, setImportSel] = useState<Set<string>>(new Set());
   const [showShare, setShowShare] = useState(false);
@@ -551,6 +556,33 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const setA = (a: AgendaItem[]) => { setAgenda(a); scheduleSave(); };
   const setAc = (ac: ActionItem[]) => { setActions(ac); scheduleSave(); };
 
+  // ── Agenda queue merge ──────────────────────────────────────────────────────
+  // Anything queued for this person's next 1:1 (via "Raise at next 1:1"
+  // anywhere in the app) flows into THIS meeting's agenda when it is the
+  // upcoming one, then the queue is cleared. Queue item ids are preserved, so
+  // if the clear races a re-render the merge is idempotent (dedupe by id).
+  const { clear: clearAgendaQueue } = useAgendaQueue();
+  const isUpcoming = getUpcomingNoteId(person.id, data.notes, dates) === note.id;
+  useEffect(() => {
+    if (!isUpcoming) return;
+    const queued = readAgendaQueue(data.notes, person.id);
+    if (!queued.length) return;
+    const prev = agendaRef.current;
+    const ids = new Set(prev.map((a) => a.id));
+    const bySource = new Set(prev.map((a) => a.source_item_id).filter(Boolean) as string[]);
+    const titles = new Set(prev.map((a) => a.title.toLowerCase()));
+    const fresh = queued.filter((q) =>
+      !ids.has(q.id) &&
+      !(q.source_item_id && bySource.has(q.source_item_id)) &&
+      !titles.has(q.title.toLowerCase()));
+    if (fresh.length) {
+      setAgenda([...prev, ...fresh.map((q) => ({ ...q, status: 'discuss' as const }))]);
+      scheduleSave();
+    }
+    void clearAgendaQueue(person.id, queued.map((q) => q.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id, isUpcoming, data.notes, person.id]);
+
   // Carry-forward: uncompleted actions from the meeting immediately before this one
   const prevMeeting = useMemo(() => {
     const idx = allMeetings.findIndex((m) => m.id === note.id);
@@ -606,36 +638,52 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const addAction = (owner: 'me' | 'them' = 'me') =>
     setAc([...actions, { id: uid(), title: '', owner, due: '', done: false, pushed: false }]);
 
-  // Busy guard so a double-tap (common on iPad, before the optimistic state has
-  // re-rendered) can't insert every action twice.
+  // ── Auto-split on close ─────────────────────────────────────────────────────
+  // When the meeting closes, every unpushed action files itself with ZERO
+  // manual steps: mine → my task list; theirs → the owner's owes-me ledger
+  // (waitingFor); theirs-with-no-person → the triage Inbox. The action's own
+  // owner and the meeting note's provenance ride along (buildTaskFromAction).
+  // Busy guard so a double-tap (common on iPad, before the optimistic state
+  // has re-rendered) can't insert every action twice; the `pushed` flag makes
+  // the close→unmount double-run a no-op.
   const pushing = useRef(false);
-  const pushAllToTasks = async () => {
-    if (pushing.current) return;
+  const skipSplitRef = useRef(false);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const autoSplitActions = useCallback(async () => {
+    if (pushing.current || skipSplitRef.current) return;
     // Read from the ref, not the render closure, so we see actions filed by a
     // concurrent edit that hasn't re-rendered yet.
     const toPush = actionsRef.current.filter((a) => !a.pushed && a.title.trim());
     if (toPush.length === 0) return;
     pushing.current = true;
-    // For a 1:1, the meeting person owns the action unless it names someone
-    // else; for a group meeting there's no default owner. Either way the
-    // action's due date and explicit owner are preserved by buildTaskFromAction.
+    // For a 1:1, the meeting person anchors the ledger: mine link to them
+    // (I-owe side), theirs become their owes-me items. Group meetings rely on
+    // each action's own owner_person_id.
     const defaultTarget: PushTarget | null = isGroupMeeting
       ? null
       : { id: person.id, type: 'person', name: person.name };
     try {
       for (const a of toPush) {
-        await insert('work_items', buildTaskFromAction(a, title, defaultTarget) as Partial<WorkItem>);
+        const target = a.owner === 'them' && isGroupMeeting ? null : defaultTarget;
+        await insert('work_items', buildTaskFromAction(a, titleRef.current, target, noteIdRef.current) as Partial<WorkItem>);
       }
       const pushedIds = new Set(toPush.map((a) => a.id));
-      // Only mark the actions we actually pushed; merge against the freshest
-      // state via the functional updater to preserve concurrent edits.
-      setActions((prev) => prev.map((a) => (pushedIds.has(a.id) ? { ...a, pushed: true } : a)));
+      const label = (a: ActionItem) =>
+        a.owner === 'them' ? (a.owner_label || (isGroupMeeting ? 'Inbox' : person.name)) : 'My tasks';
+      // Update the ref FIRST so an unmount flush that races the re-render
+      // persists the pushed flags, then mirror into state (a no-op after
+      // unmount) and schedule the save.
+      const updated = actionsRef.current.map((a) =>
+        pushedIds.has(a.id) ? { ...a, pushed: true, pushed_to: a.pushed_to || label(a) } : a);
+      actionsRef.current = updated;
+      setActions(updated);
       scheduleSave();
-      logActivity('push_meeting_tasks', `${toPush.length} actions from ${title}`);
+      logActivity('auto_split_actions', `${toPush.length} actions from ${titleRef.current}`);
     } finally {
       pushing.current = false;
     }
-  };
+  }, [insert, isGroupMeeting, person.id, person.name, scheduleSave, logActivity]);
 
   const sending = useRef<Set<string>>(new Set());
   const onSendAction = async (action: ActionItem, targets: PushTarget[]) => {
@@ -670,13 +718,43 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
   const deleteNote = async () => {
     if (!confirm('Delete this meeting note?')) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    // A deleted meeting's actions must not auto-split on the unmount that
+    // follows — deleting is discarding, not closing.
+    skipSplitRef.current = true;
+    dirtyRef.current = false;
     try { await setMeetingDate(note.id, null); } catch { /* best-effort cleanup */ }
     await remove('notes', note.id);
     onClose();
   };
 
-  const handleClose = () => { flushSave(); onClose(); };
-  const handleNavigate = (id: string) => { flushSave(); onNavigate(id); };
+  // Covered-topic sync (group meetings): when this occurrence closes with a
+  // topic's agenda item marked covered, the series prep topic flips to
+  // covered too — the work trail resolves itself.
+  const { markCovered, topics: seriesTopics } = usePrepTopics(person.id);
+  const seriesTopicsRef = useRef(seriesTopics);
+  seriesTopicsRef.current = seriesTopics;
+  const syncCoveredTopics = useCallback(async () => {
+    if (!isGroupMeeting) return;
+    const coveredIds = agendaRef.current
+      .filter((a) => a.topic_id && a.status === 'covered')
+      .map((a) => a.topic_id as string)
+      .filter((id) => seriesTopicsRef.current.find((t) => t.id === id)?.status !== 'covered');
+    if (coveredIds.length) await markCovered(coveredIds);
+  }, [isGroupMeeting, markCovered]);
+
+  // Auto-split before the final save so the pushed flags land in the same
+  // write. On navigate between meetings the split also runs — leaving a
+  // meeting IS closing it.
+  const handleClose = async () => { await autoSplitActions(); await syncCoveredTopics(); flushSave(); onClose(); };
+  const handleNavigate = async (id: string) => { await autoSplitActions(); await syncCoveredTopics(); flushSave(); onNavigate(id); };
+
+  // Unmount (e.g. overlay dismissed by a parent) still auto-splits: the refs
+  // outlive the component, `pushed` flags prevent double-filing after a
+  // handleClose already ran, and flushSave persists the flags.
+  const autoSplitRef = useRef(autoSplitActions);
+  autoSplitRef.current = autoSplitActions;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => { void autoSplitRef.current().then(() => flushSave()); }, []);
 
   // Stats
   const toCover = agenda.filter((a) => a.status === 'discuss').length;
@@ -726,8 +804,6 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
           <div className="mtg-hdr-right">
             <button className={`btn btn-secondary btn-sm${showPrep ? ' btn-active' : ''}`}
               onClick={() => setShowPrep((s) => !s)} title="Meeting prep brief">✦ Prep</button>
-            <button className="btn btn-secondary btn-sm" onClick={pushAllToTasks}
-              title="Create work items for all action items">→ Push actions</button>
             <button className="btn btn-share btn-sm" onClick={() => setShowShare(true)}>📤 Share</button>
             <button className="btn btn-danger btn-sm" onClick={deleteNote}>Delete</button>
             <button className="btn btn-primary btn-sm" onClick={handleClose}>Save &amp; Close</button>
@@ -743,7 +819,26 @@ export function MeetingNoteModal({ note, person, allMeetings, onClose, onNavigat
                 Import Topics ↓
               </button>
             )}
+            {isGroupMeeting && (
+              <button className={`btn btn-secondary btn-sm${showTopics ? ' btn-active' : ''}`}
+                onClick={() => setShowTopics((s) => !s)}>
+                Topics ↓
+              </button>
+            )}
           </div>
+
+          {isGroupMeeting && showTopics && (
+            <div className="mtg-import-panel">
+              <TopicsPanel
+                group={person}
+                agendaHasTopic={(topicId) => agenda.some((a) => a.topic_id === topicId)}
+                onAddToAgenda={(topic: PrepTopic) => setA([
+                  ...agenda,
+                  { id: uid(), title: topic.title, notes: topic.why || '', status: 'discuss', topic_id: topic.id },
+                ])}
+              />
+            </div>
+          )}
 
           {!isGroupMeeting && showImport && (
             <div className="mtg-import-panel">

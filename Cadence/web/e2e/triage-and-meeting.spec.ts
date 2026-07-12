@@ -63,3 +63,50 @@ test('a person/project-tagged quick note waits in the Inbox, not the folder', as
   await expect(page.getByText('Approve Q3 budget')).toBeVisible();
   await expect(page.getByText('Talk to Anna about Apollo')).toHaveCount(0);
 });
+
+// ── Triage wizard: the end-of-day ritual empties the inbox card by card ────────
+test('triage wizard files captures to a ledger and a note, emptying the inbox', async ({ page }) => {
+  await navTo(page, 'Inbox');
+
+  // Capture two loose items (QuickAdd closes after each).
+  for (const title of ['Pricing pack for review', 'Offsite reflections']) {
+    await page.getByRole('button', { name: 'Capture task' }).click();
+    const input = page.getByPlaceholder(/Try "Follow up/);
+    await input.fill(title);
+    await input.press('Enter');
+    await expect(page.getByText(title)).toBeVisible();
+  }
+
+  // Run the wizard. Card order is newest-first but two rapid captures can tie
+  // on created_at, so branch on whichever card is showing.
+  await page.getByRole('button', { name: 'Start triage (2)' }).click();
+  await expect(page.getByText('Card 1 of 2')).toBeVisible();
+  for (let i = 0; i < 2; i++) {
+    const title = await page.locator('.wizard-card-title').inputValue();
+    if (title === 'Pricing pack for review') {
+      // → Anna, something she owes me (lands on her ledger as a waiting-for).
+      await page.getByRole('button', { name: 'Person…' }).click();
+      await page.getByRole('button', { name: 'Anna Lee' }).click();
+      await page.getByRole('button', { name: 'Something they owe me' }).click();
+    } else {
+      await page.getByRole('button', { name: 'Make it a note' }).click();
+    }
+  }
+  await expect(page.getByText('Triage complete')).toBeVisible();
+  await expect(page.getByText('2 filed · 0 skipped')).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  // The inbox is empty — the ritual is complete.
+  await expect(page.getByText('Inbox is clear')).toBeVisible();
+
+  // The ledger item is on Anna's "owes me" side…
+  await navTo(page, 'People');
+  await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
+  await expect(
+    page.locator('.ledger-section', { hasText: 'Anna owes me' }).getByText('Pricing pack for review'),
+  ).toBeVisible();
+
+  // …and the note now lives in Notes.
+  await navTo(page, 'Notes');
+  await expect(page.getByText('Offsite reflections')).toBeVisible();
+});

@@ -38,7 +38,9 @@ function renderModal(note: any) {
 const rerenderWith = (rerender: any, note: any) =>
   rerender(<MeetingNoteModal note={note} person={person} allMeetings={[note]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 const bodyWrites = () => h.store.update.mock.calls.filter((c: any[]) => c[2] && typeof c[2].body === 'string');
-const saveAndClose = () => fireEvent.click(screen.getAllByText('Save & Close')[0]);
+// handleClose is async (auto-split runs before the final flush) — drive it
+// inside act and let the microtasks settle before asserting.
+const saveAndClose = () => act(async () => { fireEvent.click(screen.getAllByText('Save & Close')[0]); });
 
 beforeEach(() => {
   h.dates = {};
@@ -56,16 +58,16 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('MeetingNoteModal multi-device sync', () => {
-  it('does not write the body when closed without any edits (stale instance cannot clobber)', () => {
+  it('does not write the body when closed without any edits (stale instance cannot clobber)', async () => {
     renderModal(mkNote(bodyWith('Alpha')));
-    saveAndClose();
+    await saveAndClose();
     expect(bodyWrites()).toHaveLength(0);
   });
 
-  it('still writes the body when the user actually edits, then closes', () => {
+  it('still writes the body when the user actually edits, then closes', async () => {
     renderModal(mkNote(bodyWith('Alpha')));
     fireEvent.change(screen.getByDisplayValue('Alpha'), { target: { value: 'Alpha edited' } });
-    saveAndClose();
+    await saveAndClose();
     const writes = bodyWrites();
     expect(writes.length).toBeGreaterThan(0);
     expect(writes[writes.length - 1][2].body).toContain('Alpha edited');
@@ -109,5 +111,80 @@ describe('MeetingNoteModal multi-device sync', () => {
     rerenderWith(rerender, { ...note, body: bodyWith('Alpha'), updated_at: T0 });
     expect(screen.getByDisplayValue('Alpha edited')).toBeTruthy();
     expect(screen.queryByDisplayValue('Alpha')).toBeNull();
+  });
+});
+
+// ── The 1:1 loop: queue merge on open + auto-split on close ────────────────────
+describe('MeetingNoteModal 1:1 loop', () => {
+  const actionsBody = serializeMeeting({
+    agenda: [],
+    actions: [
+      { id: 'ac1', title: 'Mine to do', owner: 'me', due: '', done: false, pushed: false },
+      { id: 'ac2', title: 'Theirs to chase', owner: 'them', due: '', done: false, pushed: false },
+    ],
+    notes: '',
+  });
+
+  it('auto-splits actions on close: mine → my task, theirs → their owes-me ledger', async () => {
+    renderModal(mkNote(actionsBody));
+    await saveAndClose();
+
+    const inserts = h.store.insert.mock.calls.filter((c: any[]) => c[0] === 'work_items').map((c: any[]) => c[1]);
+    expect(inserts).toHaveLength(2);
+    const mine = inserts.find((r: any) => r.title === 'Mine to do');
+    const theirs = inserts.find((r: any) => r.title === 'Theirs to chase');
+    expect(mine).toMatchObject({ type: 'task', person_id: 'p1', inboxed: false });
+    expect(theirs).toMatchObject({ type: 'waitingFor', person_id: 'p1', inboxed: false });
+    // Structured provenance back to this meeting note.
+    expect(mine.related_entities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'note', id: 'n1' }),
+    ]));
+    // The pushed flags land in the final body write of the same close.
+    const writes = bodyWrites();
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes[writes.length - 1][2].body).toContain('"pushed":true');
+  });
+
+  it('re-closing never duplicates already-pushed actions', async () => {
+    const pushedBody = serializeMeeting({
+      agenda: [],
+      actions: [{ id: 'ac1', title: 'Already filed', owner: 'me', due: '', done: false, pushed: true }],
+      notes: '',
+    });
+    renderModal(mkNote(pushedBody));
+    await saveAndClose();
+    expect(h.store.insert.mock.calls.filter((c: any[]) => c[0] === 'work_items')).toHaveLength(0);
+  });
+
+  it('merges the agenda queue into the upcoming meeting and clears the queue', async () => {
+    const meetingNote = { ...mkNote(bodyWith('Alpha')), folder: '__mtg__p1' };
+    const queueNote = {
+      id: 'q1', title: '__agenda__p1',
+      body: JSON.stringify({ items: [{ id: 'qa1', title: 'Raise budget', notes: '', status: 'discuss' }] }),
+      created_at: T0, updated_at: T0, deleted_at: null,
+    } as any;
+    h.dates = { n1: '2999-01-01' }; // this note IS the upcoming 1:1
+    h.store.data = { ...emptyData(), notes: [meetingNote, queueNote] };
+
+    renderModal(meetingNote);
+    expect(await screen.findByDisplayValue('Raise budget')).toBeTruthy();
+    // Queue emptied so a re-open can't re-merge (ids also dedupe as backstop).
+    expect(h.store.update).toHaveBeenCalledWith('notes', 'q1',
+      expect.objectContaining({ body: JSON.stringify({ items: [] }) }));
+  });
+
+  it('does NOT merge the queue into a past (non-upcoming) meeting', () => {
+    const meetingNote = { ...mkNote(bodyWith('Alpha')), folder: '__mtg__p1' };
+    const queueNote = {
+      id: 'q1', title: '__agenda__p1',
+      body: JSON.stringify({ items: [{ id: 'qa1', title: 'Raise budget', notes: '', status: 'discuss' }] }),
+      created_at: T0, updated_at: T0, deleted_at: null,
+    } as any;
+    h.dates = {}; // no upcoming date → not the upcoming meeting
+    h.store.data = { ...emptyData(), notes: [meetingNote, queueNote] };
+
+    renderModal(meetingNote);
+    expect(screen.queryByDisplayValue('Raise budget')).toBeNull();
+    expect(h.store.update).not.toHaveBeenCalledWith('notes', 'q1', expect.anything());
   });
 });

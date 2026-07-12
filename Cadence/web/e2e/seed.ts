@@ -12,6 +12,8 @@ export function makeSeed() {
     { id: 'pAnna', name: 'Anna Lee', type: 'person', role: 'Director', color: '#1B5E9E' },
     { id: 'pBob', name: 'Bob Ng', type: 'person', role: 'Lead', color: '#6B3FA0' },
     { id: 'pCara', name: 'Cara Diaz', type: 'person', role: 'Partner', color: '#1A7F37' },
+    // A big-meeting series (meeting groups piggyback on the people table).
+    { id: 'gCLT', name: 'CLT', type: 'meeting_group', role: '', color: '#0E7490' },
   ];
 
   const projects = [
