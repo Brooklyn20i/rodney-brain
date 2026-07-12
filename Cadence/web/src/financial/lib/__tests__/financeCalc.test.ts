@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveNewMonth,
+  financialYearForPeriod,
+  investmentBucketForHolding,
   investmentBuysSummary,
+  investmentPerformanceSummary,
   latestMonth,
   netWorthBridge,
   nextPeriod,
   performanceHistory,
   summarizePeriod,
 } from '../financeCalc';
-import type { InvestmentTransaction, MonthlyMetric } from '../types';
+import type { BudgetFxRate, InvestmentHolding, InvestmentTransaction, MonthlyMetric } from '../types';
 
 // Fictional fixture data only -- see CadenceFinancial/AGENTS.md for why.
 // These numbers are hand-computed, not real figures; they exercise the same
@@ -244,5 +247,65 @@ describe('performanceHistory', () => {
   it('returns null with fewer than two months', () => {
     expect(performanceHistory(months.slice(0, 1))).toBeNull();
     expect(performanceHistory([])).toBeNull();
+  });
+});
+
+function holding(overrides: Partial<InvestmentHolding> & Pick<InvestmentHolding, 'ticker'>): InvestmentHolding {
+  return {
+    id: overrides.ticker,
+    owner_id: 'demo-owner',
+    entity_id: null,
+    market: 'Stake',
+    currency: 'AUD',
+    units: 1,
+    native_value: 0,
+    cost_basis: 0,
+    as_of_date: '2026-07-12',
+    created_at: '',
+    updated_at: '',
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+function fx(currency: string, rate: number): BudgetFxRate {
+  return { id: currency, owner_id: 'demo-owner', currency, rate_to_aud: rate, created_at: '', updated_at: '', deleted_at: null };
+}
+
+describe('investment performance summary', () => {
+  it('uses Australian financial years, starting in July', () => {
+    expect(financialYearForPeriod('2026-07')).toEqual({ label: 'FY2027 YTD', start: '2026-07', openingPeriod: '2026-06' });
+    expect(financialYearForPeriod('2026-06')).toEqual({ label: 'FY2026 YTD', start: '2025-07', openingPeriod: '2025-06' });
+  });
+
+  it('classifies BTC/VBTC separately from shares and gold', () => {
+    expect(investmentBucketForHolding(holding({ ticker: 'BTC', market: 'Ledger' }))).toBe('crypto');
+    expect(investmentBucketForHolding(holding({ ticker: 'VBTC', market: 'Stake Aus' }))).toBe('crypto');
+    expect(investmentBucketForHolding(holding({ ticker: 'PMGOLD', market: 'Stake Aus' }))).toBe('other');
+    expect(investmentBucketForHolding(holding({ ticker: 'GOOG', market: 'Stake Wall St' }))).toBe('shares');
+  });
+
+  it('summarises invested/current/total and FY YTD gain by bucket in AUD', () => {
+    const perf = investmentPerformanceSummary(
+      [
+        holding({ ticker: 'GOOG', currency: 'USD', native_value: 110, cost_basis: 100 }), // A$165 / A$150
+        holding({ ticker: 'WIRE', currency: 'AUD', native_value: 80, cost_basis: 90 }),
+        holding({ ticker: 'BTC', market: 'Ledger', currency: 'AUD', native_value: 300, cost_basis: 100 }),
+        holding({ ticker: 'PMGOLD', currency: 'AUD', native_value: 40, cost_basis: 50 }),
+      ],
+      [tx({ date: '2026-07-03', ticker: 'GOOG', side: 'buy', currency: 'USD', amount: 10, amount_aud: 15 })],
+      [month({ period: '2026-06', shares: 210, btc_crypto: 250 }), month({ period: '2026-07', shares: 245, btc_crypto: 300 })],
+      [fx('USD', 1.5)]
+    );
+
+    expect(perf.fyLabel).toBe('FY2027 YTD');
+    expect(perf.buckets.shares.invested).toBeCloseTo(240, 2);
+    expect(perf.buckets.shares.currentValue).toBeCloseTo(245, 2);
+    expect(perf.buckets.shares.totalGain).toBeCloseTo(5, 2);
+    expect(perf.buckets.shares.fyGain).toBeCloseTo(20, 2); // 245 current - 210 opening - 15 buys
+    expect(perf.buckets.crypto.currentValue).toBeCloseTo(300, 2);
+    expect(perf.buckets.crypto.fyGain).toBeCloseTo(50, 2);
+    expect(perf.buckets.other.fyGain).toBeNull();
+    expect(perf.total.currentValue).toBeCloseTo(585, 2);
   });
 });

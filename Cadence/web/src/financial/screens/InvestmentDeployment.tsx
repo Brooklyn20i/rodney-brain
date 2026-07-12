@@ -1,12 +1,72 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
-import { investmentBuysSummary } from '../lib/financeCalc';
+import { ScreenHeader, Card } from '../components/bits';
+import {
+  fxRateMap,
+  investmentBucketForHolding,
+  investmentBucketForTransaction,
+  investmentBuysSummary,
+  investmentPerformanceSummary,
+  toAudWithFx,
+  type InvestmentBucket,
+  type InvestmentBucketSummary,
+} from '../lib/financeCalc';
 import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
-import { formatMoney, formatPercent, periodRange } from '../lib/util';
+import { formatMoney, formatPercent, monthLabel, periodRange } from '../lib/util';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
+const BUCKETS: InvestmentBucket[] = ['shares', 'crypto', 'other'];
+
+function signedMoney(value: number | null, compact = true): string {
+  if (value === null) return 'TBC';
+  return `${value >= 0 ? '+' : ''}${formatMoney(value, compact)}`;
+}
+
+function signedPercent(value: number | null): string {
+  if (value === null) return 'TBC';
+  return `${value >= 0 ? '+' : ''}${formatPercent(value)}`;
+}
+
+function nativeMoney(value: number, currency: string): string {
+  return `${currency.toUpperCase()} ${value.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function PerformanceCard({ summary }: { summary: InvestmentBucketSummary }) {
+  const totalTone = summary.totalGain >= 0 ? 'good' : 'bad';
+  const fyTone = summary.fyGain === null ? 'neutral' : summary.fyGain >= 0 ? 'good' : 'bad';
+  return (
+    <div className={`inv-perf-card inv-${summary.bucket}`}>
+      <div className="inv-perf-head">
+        <div>
+          <div className="inv-perf-label">{summary.label}</div>
+          <div className="inv-perf-sub">
+            {summary.holdings} holding{summary.holdings === 1 ? '' : 's'} · as of {summary.asOfDate ?? 'TBC'}
+          </div>
+        </div>
+        <span className="grade-tag">AUD</span>
+      </div>
+      <div className="inv-perf-main">{formatMoney(summary.currentValue, true)}</div>
+      <div className="inv-perf-split">
+        <div>
+          <span>Invested</span>
+          <strong>{formatMoney(summary.invested, true)}</strong>
+        </div>
+        <div>
+          <span>Total</span>
+          <strong className={`cf-tone-${totalTone}`}>{signedMoney(summary.totalGain)} / {signedPercent(summary.totalReturn)}</strong>
+        </div>
+        <div>
+          <span>FY YTD</span>
+          <strong className={`cf-tone-${fyTone}`}>{signedMoney(summary.fyGain)} / {signedPercent(summary.fyReturn)}</strong>
+        </div>
+      </div>
+      {summary.missingCurrencies.length > 0 && (
+        <div className="inv-warning">Missing FX for {summary.missingCurrencies.join(', ')} — AUD totals use native value until FX is set.</div>
+      )}
+    </div>
+  );
+}
 
 export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const { data, demo, insert, update } = useCadenceFinancial();
@@ -89,7 +149,33 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   const range = periodRange(data.investment_transactions.map((t) => t.date.slice(0, 7)));
   const summary = range ? investmentBuysSummary(data.investment_transactions, range.start, range.end) : null;
-  const entityName = (id: string | null) => data.entities.find((e) => e.id === id)?.name ?? 'Unassigned';
+  const investmentHoldings = data.investment_holdings;
+  const investmentTransactions = data.investment_transactions;
+  const monthlyMetrics = data.monthly_metrics;
+  const budgetFxRates = data.budget_fx_rates;
+  const entities = data.entities;
+  const perf = useMemo(
+    () => investmentPerformanceSummary(investmentHoldings, investmentTransactions, monthlyMetrics, budgetFxRates),
+    [budgetFxRates, investmentHoldings, investmentTransactions, monthlyMetrics]
+  );
+  const fxRates = useMemo(() => fxRateMap(budgetFxRates), [budgetFxRates]);
+  const entityName = (id: string | null) => entities.find((e) => e.id === id)?.name ?? 'Unassigned';
+  const holdingsByBucket = useMemo(
+    () =>
+      Object.fromEntries(
+        BUCKETS.map((bucket) => [
+          bucket,
+          [...investmentHoldings]
+            .filter((h) => !h.deleted_at && investmentBucketForHolding(h) === bucket)
+            .sort((a, b) => {
+              const av = toAudWithFx(a.native_value, a.currency, fxRates).value;
+              const bv = toAudWithFx(b.native_value, b.currency, fxRates).value;
+              return bv - av;
+            }),
+        ])
+      ) as Record<InvestmentBucket, typeof investmentHoldings>,
+    [investmentHoldings, fxRates]
+  );
 
   const addHolding = async () => {
     if (!holding.ticker.trim()) return;
@@ -139,7 +225,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Investment Deployment" subtitle="Capital deployed into shares and BTC, by holding and by month." onMenu={onMenu}>
+      <ScreenHeader title="Investments" subtitle="Shares vs crypto: invested, current, total and FY YTD." onMenu={onMenu}>
         <button className="btn btn-secondary btn-sm" onClick={() => setForm(form === 'holding' ? null : 'holding')}>
           {form === 'holding' ? 'Cancel' : '+ Holding'}
         </button>
@@ -199,17 +285,40 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
           </Card>
         )}
 
-        {summary && (
-          <div className="cf-metric-grid">
-            <Metric label="Share buys captured" value={formatMoney(summary.shares, true)} />
-            <Metric label="BTC buys captured" value={formatMoney(summary.btc, true)} />
-            <Metric label="Total invested" value={formatMoney(summary.total, true)} />
-            <Metric label="Active months" value={String(summary.activeMonths)} />
-          </div>
-        )}
+        <div className="inv-hero">
+          <PerformanceCard summary={perf.buckets.shares} />
+          <PerformanceCard summary={perf.buckets.crypto} />
+          <PerformanceCard summary={perf.buckets.other} />
+          <PerformanceCard summary={perf.total} />
+        </div>
 
-        <Card title="Current holdings">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <Card title={`${perf.fyLabel} performance basis`}>
+          <div className="inv-basis-grid">
+            <div>
+              <span>FY opening</span>
+              <strong>{perf.fyOpeningPeriod ? monthLabel(perf.fyOpeningPeriod) : 'Missing baseline'}</strong>
+            </div>
+            <div>
+              <span>Latest month close</span>
+              <strong>{perf.latestMetricPeriod ? monthLabel(perf.latestMetricPeriod) : 'No month close'}</strong>
+            </div>
+            <div>
+              <span>Currency rule</span>
+              <strong>AUD totals; USD via FX settings</strong>
+            </div>
+            <div>
+              <span>Evidence grade</span>
+              <strong>Management-grade, not tax-grade</strong>
+            </div>
+          </div>
+          <p className="inv-note">
+            FY YTD gain = current value − FY opening value − FY buys. This separates market movement from new capital deployed.
+            {perf.total.missingCurrencies.length > 0 ? ` Set FX for ${perf.total.missingCurrencies.join(', ')} to make AUD totals decision-grade.` : ''}
+          </p>
+        </Card>
+
+        <Card title="Holdings by category">
+          <div className="inv-live-actions">
             <button className="btn btn-secondary btn-sm" onClick={refreshQuotes} disabled={quotesState === 'loading'}>
               {quotesState === 'loading' ? 'Fetching…' : '↻ Refresh live prices'}
             </button>
@@ -218,83 +327,81 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                 Apply all live prices
               </button>
             )}
-            {quotesState === 'error' && (
-              <span style={{ fontSize: 12, color: 'var(--red)' }}>
-                Live prices unavailable right now — stored values shown.
-              </span>
-            )}
+            {quotesState === 'error' && <span className="inv-warning">Live prices unavailable right now — stored values shown.</span>}
           </div>
-          <div className="cf-table-wrap">
-            <table className="cf-table">
-              <thead>
-                <tr>
-                  <th>Ticker</th>
-                  <th>Market</th>
-                  <th>Entity</th>
-                  <th>Units</th>
-                  <th>Value</th>
-                  <th>Live</th>
-                  <th>Cost basis</th>
-                  <th>Unrealised P/L</th>
-                  <th>As of</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {data.investment_holdings.map((h) => {
-                  const pl = h.native_value - h.cost_basis;
-                  const plPct = h.cost_basis > 0 ? pl / h.cost_basis : 0;
+
+          {BUCKETS.map((bucket) => (
+            <section className="inv-section" key={bucket}>
+              <div className="inv-section-head">
+                <div>
+                  <h3>{perf.buckets[bucket].label}</h3>
+                  <p>{formatMoney(perf.buckets[bucket].currentValue, true)} current · {formatMoney(perf.buckets[bucket].invested, true)} invested</p>
+                </div>
+                <span className="grade-tag">{holdingsByBucket[bucket].length} holdings</span>
+              </div>
+              <div className="inv-holding-grid">
+                {holdingsByBucket[bucket].map((h) => {
                   const editing = reprice[h.id];
                   const live = liveFor(h);
                   const liveDelta = live !== null ? live - h.native_value : null;
+                  const audCurrent = toAudWithFx(h.native_value, h.currency, fxRates);
+                  const audCost = toAudWithFx(h.cost_basis, h.currency, fxRates);
+                  const pl = audCurrent.value - audCost.value;
+                  const plPct = audCost.value > 0 ? pl / audCost.value : null;
                   return (
-                    <tr key={h.id}>
-                      <td>{h.ticker}</td>
-                      <td>{h.market}</td>
-                      <td>{entityName(h.entity_id)}</td>
-                      <td>{h.units}</td>
-                      <td>
-                        {editing ? (
-                          <input
-                            type="text"
-                            style={{ width: 110 }}
-                            value={editing.value}
-                            onChange={(e) => setReprice((p) => ({ ...p, [h.id]: { ...editing, value: e.target.value } }))}
-                          />
-                        ) : (
-                          formatMoney(h.native_value)
-                        )}
-                      </td>
-                      <td>
+                    <article className="inv-holding-card" key={h.id}>
+                      <div className="inv-holding-top">
+                        <div>
+                          <strong>{h.ticker}</strong>
+                          <span>{h.market || 'No market'} · {entityName(h.entity_id)}</span>
+                        </div>
+                        <span className="grade-tag">{h.currency}</span>
+                      </div>
+                      <div className="inv-holding-values">
+                        <div>
+                          <span>Current</span>
+                          {editing ? (
+                            <input
+                              type="text"
+                              value={editing.value}
+                              onChange={(e) => setReprice((p) => ({ ...p, [h.id]: { ...editing, value: e.target.value } }))}
+                            />
+                          ) : (
+                            <strong>{formatMoney(audCurrent.value, true)}</strong>
+                          )}
+                          <small>{nativeMoney(h.native_value, h.currency)}</small>
+                        </div>
+                        <div>
+                          <span>Invested</span>
+                          <strong>{formatMoney(audCost.value, true)}</strong>
+                          <small>{nativeMoney(h.cost_basis, h.currency)}</small>
+                        </div>
+                        <div>
+                          <span>Total P/L</span>
+                          <strong className={pl >= 0 ? 'cf-tone-good' : 'cf-tone-bad'}>{signedMoney(pl)} / {signedPercent(plPct)}</strong>
+                          <small>{h.units.toLocaleString('en-AU')} units · {h.as_of_date}</small>
+                        </div>
+                      </div>
+                      <div className="inv-holding-live">
                         {live === null ? (
                           (() => {
                             const mm = quoteCurrencyMismatch(h);
                             return mm ? (
-                              <span style={{ fontSize: 11, color: 'var(--orange)' }} title={`Live quote is in ${mm.quote} but this holding is set to ${mm.holding}. Set the holding's currency to ${mm.quote} to reprice from live.`}>
-                                {mm.quote} quote
-                              </span>
+                              <span className="inv-warning">Live quote is {mm.quote}; holding is {mm.holding}</span>
                             ) : (
-                              <span style={{ color: 'var(--text3)' }}>—</span>
+                              <span>Live quote unavailable</span>
                             );
                           })()
                         ) : (
-                          <>
-                            {formatMoney(live)}
+                          <span>
+                            Live native: {nativeMoney(live, h.currency)}
                             {liveDelta !== null && Math.abs(liveDelta) >= 0.005 && (
-                              <div style={{ fontSize: 11, color: liveDelta >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                {liveDelta >= 0 ? '+' : ''}
-                                {formatMoney(liveDelta)}
-                              </div>
+                              <strong className={liveDelta >= 0 ? 'cf-tone-good' : 'cf-tone-bad'}>
+                                {' '}({liveDelta >= 0 ? '+' : ''}{nativeMoney(liveDelta, h.currency)})
+                              </strong>
                             )}
-                          </>
+                          </span>
                         )}
-                      </td>
-                      <td>{formatMoney(h.cost_basis)}</td>
-                      <td style={{ color: pl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                        {formatMoney(pl)} ({formatPercent(plPct)})
-                      </td>
-                      <td style={{ fontSize: 12 }}>{h.as_of_date}</td>
-                      <td>
                         {editing ? (
                           <button className="btn btn-primary btn-sm" onClick={() => saveReprice(h.id)}>
                             Save
@@ -306,64 +413,76 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                         ) : (
                           <button
                             className="btn btn-secondary btn-sm"
-                            onClick={() =>
-                              setReprice((p) => ({ ...p, [h.id]: { value: String(h.native_value), date: today() } }))
-                            }
+                            onClick={() => setReprice((p) => ({ ...p, [h.id]: { value: String(h.native_value), date: today() } }))}
                           >
                             Reprice
                           </button>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </article>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
-            Live quotes are shown in each holding's native currency and refresh on demand; nothing
-            is saved until you apply, which stamps the as-of date. "Apply all" also logs a
-            market-repriced evidence item for the month.
-          </p>
+                {holdingsByBucket[bucket].length === 0 && <p className="inv-note">No {perf.buckets[bucket].label.toLowerCase()} holdings recorded.</p>}
+              </div>
+            </section>
+          ))}
         </Card>
 
-        <Card title="Buy transactions">
-          <div className="cf-table-wrap">
-            <table className="cf-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Ticker</th>
-                  <th>Units</th>
-                  <th>Price</th>
-                  <th>Amount (native)</th>
-                  <th>Amount (AUD)</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...data.investment_transactions]
-                  .filter((t) => t.side === 'buy')
-                  .sort((a, b) => a.date.localeCompare(b.date))
-                  .map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.date}</td>
-                      <td>{t.ticker}</td>
-                      <td>{t.units}</td>
-                      <td>
-                        {t.currency} {t.price}
-                      </td>
-                      <td>
-                        {t.currency} {t.amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td>{formatMoney(t.amount_aud)}</td>
-                      <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{t.notes}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        {summary && (
+          <Card title="Capital deployed by month">
+            <div className="cf-metric-grid">
+              <div className="cf-metric">
+                <div className="cf-metric-label">Share buys captured</div>
+                <div className="cf-metric-value">{formatMoney(summary.shares, true)}</div>
+              </div>
+              <div className="cf-metric">
+                <div className="cf-metric-label">Crypto/BTC buys captured</div>
+                <div className="cf-metric-value">{formatMoney(summary.btc, true)}</div>
+              </div>
+              <div className="cf-metric">
+                <div className="cf-metric-label">Total deployed</div>
+                <div className="cf-metric-value">{formatMoney(summary.total, true)}</div>
+              </div>
+              <div className="cf-metric">
+                <div className="cf-metric-label">Active months</div>
+                <div className="cf-metric-value">{summary.activeMonths}</div>
+              </div>
+            </div>
+            <div className="cf-table-wrap">
+              <table className="cf-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Bucket</th>
+                    <th>Ticker</th>
+                    <th>Units</th>
+                    <th>Amount native</th>
+                    <th>Amount AUD</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...data.investment_transactions]
+                    .filter((t) => t.side === 'buy')
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .map((t) => (
+                      <tr key={t.id}>
+                        <td>{t.date}</td>
+                        <td>{investmentBucketForTransaction(t)}</td>
+                        <td>{t.ticker}</td>
+                        <td>{t.units}</td>
+                        <td>
+                          {t.currency} {t.amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td>{formatMoney(t.amount_aud)}</td>
+                        <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{t.notes}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
       </div>
     </>
   );

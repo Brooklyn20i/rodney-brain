@@ -7,7 +7,7 @@
 // Decimal + ROUND_HALF_UP. Every function here is pure: it takes raw rows
 // and returns numbers, never storing a derived figure back onto a row.
 
-import type { InvestmentTransaction, MonthlyMetric } from './types';
+import type { BudgetFxRate, InvestmentHolding, InvestmentTransaction, MonthlyMetric } from './types';
 import { formatMoney } from './util';
 
 const CENTS_PER_DOLLAR = 100;
@@ -315,5 +315,203 @@ export function investmentBuysSummary(
     btc: centsToDollars(btcC),
     total: centsToDollars(sharesC + btcC),
     activeMonths,
+  };
+}
+
+export type InvestmentBucket = 'shares' | 'crypto' | 'other';
+
+export interface FxConversionResult {
+  value: number;
+  missingCurrency: string | null;
+}
+
+export interface InvestmentBucketSummary {
+  bucket: InvestmentBucket | 'total';
+  label: string;
+  invested: number;
+  currentValue: number;
+  totalGain: number;
+  totalReturn: number | null;
+  fyOpeningValue: number | null;
+  fyNetBuys: number;
+  fyGain: number | null;
+  fyReturn: number | null;
+  holdings: number;
+  asOfDate: string | null;
+  missingCurrencies: string[];
+}
+
+export interface InvestmentPerformanceSummary {
+  fyLabel: string;
+  fyStart: string;
+  fyOpeningPeriod: string | null;
+  latestMetricPeriod: string | null;
+  buckets: Record<InvestmentBucket, InvestmentBucketSummary>;
+  total: InvestmentBucketSummary;
+}
+
+export function investmentBucketForHolding(h: Pick<InvestmentHolding, 'ticker' | 'market'>): InvestmentBucket {
+  const ticker = h.ticker.toUpperCase();
+  const market = h.market.toUpperCase();
+  if (ticker === 'BTC' || ticker === 'VBTC' || ticker.includes('BTC') || market.includes('LEDGER')) return 'crypto';
+  if (ticker.includes('GOLD') || ticker === 'PMGOLD') return 'other';
+  return 'shares';
+}
+
+export function investmentBucketForTransaction(t: Pick<InvestmentTransaction, 'ticker'>): InvestmentBucket {
+  const ticker = t.ticker.toUpperCase();
+  if (ticker === 'BTC' || ticker === 'VBTC' || ticker.includes('BTC')) return 'crypto';
+  if (ticker.includes('GOLD') || ticker === 'PMGOLD') return 'other';
+  return 'shares';
+}
+
+export function financialYearForPeriod(period: string): { label: string; start: string; openingPeriod: string } {
+  const [year, month] = period.split('-').map(Number);
+  const fyEndYear = month >= 7 ? year + 1 : year;
+  const fyStartYear = fyEndYear - 1;
+  return {
+    label: `FY${fyEndYear} YTD`,
+    start: `${fyStartYear}-07`,
+    openingPeriod: `${fyStartYear}-06`,
+  };
+}
+
+export function fxRateMap(rates: BudgetFxRate[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rates) {
+    if (!r.deleted_at && Number(r.rate_to_aud) > 0) m.set(r.currency.toUpperCase(), Number(r.rate_to_aud));
+  }
+  m.set('AUD', 1);
+  return m;
+}
+
+export function toAudWithFx(amount: number, currency: string, rates: Map<string, number>): FxConversionResult {
+  const c = (currency || 'AUD').toUpperCase();
+  const rate = rates.get(c);
+  if (rate === undefined) return { value: amount, missingCurrency: c === 'AUD' ? null : c };
+  return { value: amount * rate, missingCurrency: null };
+}
+
+function latestMetricOrNull(months: MonthlyMetric[]): MonthlyMetric | null {
+  if (months.length === 0) return null;
+  return [...months].sort((a, b) => a.period.localeCompare(b.period))[months.length - 1];
+}
+
+function metricForPeriod(months: MonthlyMetric[], period: string): MonthlyMetric | null {
+  return months.find((m) => m.period === period) ?? null;
+}
+
+function openingValueForBucket(bucket: InvestmentBucket, opening: MonthlyMetric | null): number | null {
+  if (!opening) return null;
+  if (bucket === 'shares') return opening.shares;
+  if (bucket === 'crypto') return opening.btc_crypto;
+  return null;
+}
+
+function buildBucketSummary(
+  bucket: InvestmentBucket,
+  holdings: InvestmentHolding[],
+  transactions: InvestmentTransaction[],
+  months: MonthlyMetric[],
+  rates: Map<string, number>
+): InvestmentBucketSummary {
+  const latest = latestMetricOrNull(months);
+  const fy = financialYearForPeriod(latest?.period ?? new Date().toISOString().slice(0, 7));
+  const opening = metricForPeriod(months, fy.openingPeriod);
+  const bucketHoldings = holdings.filter((h) => investmentBucketForHolding(h) === bucket && !h.deleted_at);
+  const missing = new Set<string>();
+  let investedC = 0;
+  let currentC = 0;
+  let maxAsOf: string | null = null;
+
+  for (const h of bucketHoldings) {
+    const current = toAudWithFx(h.native_value, h.currency, rates);
+    const cost = toAudWithFx(h.cost_basis, h.currency, rates);
+    if (current.missingCurrency) missing.add(current.missingCurrency);
+    if (cost.missingCurrency) missing.add(cost.missingCurrency);
+    currentC += toCents(current.value);
+    investedC += toCents(cost.value);
+    if (h.as_of_date && (!maxAsOf || h.as_of_date > maxAsOf)) maxAsOf = h.as_of_date;
+  }
+
+  const fyBuys = transactions.filter(
+    (t) =>
+      !t.deleted_at &&
+      t.side === 'buy' &&
+      t.date.slice(0, 7) >= fy.start &&
+      (!latest || t.date.slice(0, 7) <= latest.period) &&
+      investmentBucketForTransaction(t) === bucket
+  );
+  const fyNetBuysC = fyBuys.reduce((sum, t) => sum + toCents(t.amount_aud), 0);
+  const openingValue = openingValueForBucket(bucket, opening);
+  const currentValue = centsToDollars(currentC);
+  const invested = centsToDollars(investedC);
+  const totalGain = currentValue - invested;
+  const fyGain = openingValue === null ? null : currentValue - openingValue - centsToDollars(fyNetBuysC);
+  const fyDenominator = openingValue === null ? null : openingValue + Math.max(centsToDollars(fyNetBuysC), 0);
+
+  return {
+    bucket,
+    label: bucket === 'shares' ? 'Shares' : bucket === 'crypto' ? 'Crypto / BTC' : 'Other',
+    invested,
+    currentValue,
+    totalGain,
+    totalReturn: invested > 0 ? totalGain / invested : null,
+    fyOpeningValue: openingValue,
+    fyNetBuys: centsToDollars(fyNetBuysC),
+    fyGain,
+    fyReturn: fyGain === null || !fyDenominator ? null : fyGain / fyDenominator,
+    holdings: bucketHoldings.length,
+    asOfDate: maxAsOf,
+    missingCurrencies: [...missing].sort(),
+  };
+}
+
+export function investmentPerformanceSummary(
+  holdings: InvestmentHolding[],
+  transactions: InvestmentTransaction[],
+  months: MonthlyMetric[],
+  fxRates: BudgetFxRate[]
+): InvestmentPerformanceSummary {
+  const latest = latestMetricOrNull(months);
+  const fy = financialYearForPeriod(latest?.period ?? new Date().toISOString().slice(0, 7));
+  const rates = fxRateMap(fxRates);
+  const shares = buildBucketSummary('shares', holdings, transactions, months, rates);
+  const crypto = buildBucketSummary('crypto', holdings, transactions, months, rates);
+  const other = buildBucketSummary('other', holdings, transactions, months, rates);
+  const buckets = { shares, crypto, other };
+  const allMissing = new Set<string>([...shares.missingCurrencies, ...crypto.missingCurrencies, ...other.missingCurrencies]);
+  const totalInvested = shares.invested + crypto.invested + other.invested;
+  const totalCurrent = shares.currentValue + crypto.currentValue + other.currentValue;
+  const fyParts = [shares.fyGain, crypto.fyGain, other.fyGain].filter((v): v is number => v !== null);
+  const fyOpenParts = [shares.fyOpeningValue, crypto.fyOpeningValue, other.fyOpeningValue].filter((v): v is number => v !== null);
+  const totalFyBuys = shares.fyNetBuys + crypto.fyNetBuys + other.fyNetBuys;
+  const totalFyGain = fyParts.length > 0 ? fyParts.reduce((sum, v) => sum + v, 0) : null;
+  const totalFyDenominator = fyOpenParts.reduce((sum, v) => sum + v, 0) + Math.max(totalFyBuys, 0);
+
+  return {
+    fyLabel: fy.label,
+    fyStart: fy.start,
+    fyOpeningPeriod: metricForPeriod(months, fy.openingPeriod) ? fy.openingPeriod : null,
+    latestMetricPeriod: latest?.period ?? null,
+    buckets,
+    total: {
+      bucket: 'total',
+      label: 'Total investments',
+      invested: totalInvested,
+      currentValue: totalCurrent,
+      totalGain: totalCurrent - totalInvested,
+      totalReturn: totalInvested > 0 ? (totalCurrent - totalInvested) / totalInvested : null,
+      fyOpeningValue: fyOpenParts.length > 0 ? fyOpenParts.reduce((sum, v) => sum + v, 0) : null,
+      fyNetBuys: totalFyBuys,
+      fyGain: totalFyGain,
+      fyReturn: totalFyGain === null || !totalFyDenominator ? null : totalFyGain / totalFyDenominator,
+      holdings: shares.holdings + crypto.holdings + other.holdings,
+      asOfDate: (() => {
+        const dates = [shares.asOfDate, crypto.asOfDate, other.asOfDate].filter((v): v is string => Boolean(v)).sort();
+        return dates.length ? dates[dates.length - 1] : null;
+      })(),
+      missingCurrencies: [...allMissing].sort(),
+    },
   };
 }
