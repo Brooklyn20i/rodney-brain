@@ -47,14 +47,15 @@ test('home shows my open work with lanes and an agent-created item in a normal l
 });
 
 // ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ─
-test('creates a capture via Quick Add and it lands in the Inbox and triage tray', async ({ page }) => {
+test('a capture via Quick Add lands only in the Inbox, not on Home', async ({ page }) => {
   await navTo(page, 'Home');
   await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
-  // Capture-first: it waits in the triage tray on Home and the Inbox.
-  await expect(page.getByTestId('triage-tray').getByText('Zebra checkpoint')).toBeVisible();
+  // Home shows only committed work — the fresh capture is NOT duplicated here.
+  await expect(page.getByText('Zebra checkpoint')).toHaveCount(0);
+  // It waits in the Inbox triage queue.
   await navTo(page, 'Inbox');
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });

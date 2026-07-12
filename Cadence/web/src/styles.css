@@ -1132,19 +1132,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .capture-fab { right: 14px; bottom: calc(14px + var(--safe-bottom)); padding: 13px 17px; }
 }
 
-/* ── Triage tray (Today) ── */
-.triage-tray { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 14px 14px; }
-.triage-tray .cockpit-empty { padding-bottom: 0; }
-.triage-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--surface); flex-wrap: wrap; }
-.triage-row-main { flex: 1 1 220px; min-width: 0; cursor: pointer; }
-.triage-row-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
-.triage-row-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
-.triage-actions { display: flex; gap: 2px; align-items: center; flex-wrap: wrap; margin-left: auto; }
-.triage-actions .btn { white-space: nowrap; }
-.triage-dismiss { color: var(--text3); }
-.triage-dismiss:hover { color: var(--red); }
-
 /* ── Login ── */
 .login-wrap { height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--app-bg); padding: 24px; }
 .login-card { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-md); padding: 32px; width: 380px; max-width: 100%; }
