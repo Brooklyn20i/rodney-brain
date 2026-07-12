@@ -515,5 +515,6 @@ export function loadDemoData(): CadenceFinancialData {
     budget_categories: budgetCategories,
     budget_fx_rates: budgetFxRates,
     investment_theses: investmentTheses,
+    thesis_notes: [],
   };
 }
