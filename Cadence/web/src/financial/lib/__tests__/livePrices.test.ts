@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLiveQuotes, liveNativeValue, yahooSymbol } from '../livePrices';
+import { fetchLiveQuotes, liveNativeValue, quoteCurrencyMatchesHolding, yahooSymbol } from '../livePrices';
 
 describe('yahooSymbol', () => {
   it('maps BTC to the AUD spot pair regardless of market label', () => {
@@ -12,9 +12,31 @@ describe('yahooSymbol', () => {
     expect(yahooSymbol({ ticker: 'ivv', market: 'asx listed' })).toBe('IVV.AX');
   });
 
+  it('maps Stake Aus holdings to ASX Yahoo symbols', () => {
+    expect(yahooSymbol({ ticker: 'WIRE', market: 'Stake Aus' })).toBe('WIRE.AX');
+    expect(yahooSymbol({ ticker: 'PGA1', market: 'Stake Aus' })).toBe('PGA1.AX');
+    expect(yahooSymbol({ ticker: 'VBTC', market: 'Stake Aus' })).toBe('VBTC.AX');
+    expect(yahooSymbol({ ticker: 'PMGOLD', market: 'Stake Aus' })).toBe('PMGOLD.AX');
+  });
+
   it('passes US listings through unchanged', () => {
     expect(yahooSymbol({ ticker: 'MSFT', market: 'US listed' })).toBe('MSFT');
     expect(yahooSymbol({ ticker: 'VOO', market: 'US listed' })).toBe('VOO');
+    expect(yahooSymbol({ ticker: 'GOOG', market: 'Stake Wall St larger' })).toBe('GOOG');
+    expect(yahooSymbol({ ticker: 'TSLA', market: 'Stake Wall St smaller' })).toBe('TSLA');
+  });
+});
+
+describe('quoteCurrencyMatchesHolding', () => {
+  it('requires quote and holding currencies to match before repricing', () => {
+    expect(quoteCurrencyMatchesHolding('GOOG', 'USD', 'USD')).toBe(true);
+    expect(quoteCurrencyMatchesHolding('GOOG', 'USD', 'AUD')).toBe(false);
+  });
+
+  it('treats blank ASX quote currency as AUD only for AUD holdings', () => {
+    expect(quoteCurrencyMatchesHolding('PMGOLD.AX', '', 'AUD')).toBe(true);
+    expect(quoteCurrencyMatchesHolding('PMGOLD.AX', '', 'USD')).toBe(false);
+    expect(quoteCurrencyMatchesHolding('GOOG', '', 'USD')).toBe(false);
   });
 });
 
