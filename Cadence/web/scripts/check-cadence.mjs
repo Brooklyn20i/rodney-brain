@@ -84,11 +84,11 @@ const inviteMigration = read('../backend/migrations/0015_workspace_invites.sql')
 assert(!inviteMigration.includes('for select using (true)'), 'workspace_invites SELECT must not publicly expose invite tokens.');
 assert(inviteMigration.includes("cadence_workspace_access(workspace_id, 'admin')"), 'workspace_invites SELECT must be admin-scoped.');
 
-// Screens currently wired into the app. Decisions/Outbox were consolidated into
-// other surfaces; Horizon was deliberately retired from the product navigation.
+// Screens currently wired into the app — the seven-screen Work IA (plus
+// Search/Settings in the footer). Today/Board/Review/Calendar were retired
+// with the agent UI; Home lives in src/screens/taskScreens/.
 const SCREENS = [
-  'Dashboard', 'Today', 'Board', 'Tasks', 'Inbox',
-  'Projects', 'People', 'Meetings', 'Notes', 'Review',
+  'Home', 'Dashboard', 'Inbox', 'Projects', 'People', 'Meetings', 'Notes',
 ];
 
 const app = read('src/App.tsx');
@@ -96,9 +96,18 @@ for (const screen of SCREENS) {
   assert(app.includes(`<${screen}`), `App must route to ${screen}, not a placeholder.`);
 }
 
-for (const screen of SCREENS) {
-  const file = `src/screens/${screen}.tsx`;
+const SCREEN_FILES = [
+  'src/screens/taskScreens/index.tsx', 'src/screens/Dashboard.tsx',
+  'src/screens/Inbox.tsx', 'src/screens/projectScreens/index.tsx',
+  'src/screens/People.tsx', 'src/screens/Meetings.tsx', 'src/screens/Notes.tsx',
+];
+for (const file of SCREEN_FILES) {
   assert(existsSync(join(root, file)), `${file} must exist.`);
 }
+
+// The agent surfaces must never quietly return to the Work UI.
+assert(!app.includes('AceUiProvider') && !app.includes("case 'ace'"), 'Work app must not route to Ace.');
+assert(!existsSync(join(root, 'src/screens/Ace.tsx')), 'Work Ace screen must stay deleted.');
+assert(!existsSync(join(root, 'src/screens/Kobe.tsx')), 'Work Kobe screen must stay deleted.');
 
 console.log('Cadence checks passed');
