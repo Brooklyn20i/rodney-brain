@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { investmentBuysSummary } from '../lib/financeCalc';
 import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
 import { formatMoney, formatPercent, periodRange } from '../lib/util';
+import { Chip, CONVICTION_TONE, ThesisDossier, priceSignal } from '../components/ThesisDossier';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -13,6 +14,8 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const [form, setForm] = useState<'holding' | 'buy' | null>(null);
   // Per-row reprice state: holding id -> { value, date }
   const [reprice, setReprice] = useState<Record<string, { value: string; date: string }>>({});
+  // Per-row thesis dossier expander: holding id | null
+  const [thesisFor, setThesisFor] = useState<string | null>(null);
 
   // ── Live quotes: display + reprice-assist. Nothing persists until Apply,
   // which stamps as_of_date and (for Apply-all) logs a market_repriced
@@ -247,9 +250,29 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   const editing = reprice[h.id];
                   const live = liveFor(h);
                   const liveDelta = live !== null ? live - h.native_value : null;
+                  const thesis = (data.investment_theses ?? []).find((t) => t.target_id === h.id && !t.deleted_at);
+                  const perUnit = quotes[yahooSymbol(h)]?.price ?? (h.units > 0 ? h.native_value / h.units : null);
+                  const sig = thesis && !thesis.is_structural ? priceSignal(thesis, perUnit) : null;
                   return (
-                    <tr key={h.id}>
-                      <td>{h.ticker}</td>
+                    <Fragment key={h.id}>
+                    <tr>
+                      <td>
+                        <button
+                          onClick={() => setThesisFor(thesisFor === h.id ? null : h.id)}
+                          title={thesis ? 'Open investment thesis' : 'Start an investment thesis'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                            font: 'inherit', color: 'var(--accent)', fontWeight: 600,
+                            display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10 }}>{thesisFor === h.id ? '▾' : '▸'}</span>
+                          {h.ticker}
+                          {sig && <span title={sig.label} style={{ width: 8, height: 8, borderRadius: 4, background: sig.fg, display: 'inline-block' }} />}
+                          {thesis && !sig && (
+                            <Chip bg={CONVICTION_TONE[thesis.conviction].bg} fg={CONVICTION_TONE[thesis.conviction].fg}>
+                              {CONVICTION_TONE[thesis.conviction].label}
+                            </Chip>
+                          )}
+                        </button>
+                      </td>
                       <td>{h.market}</td>
                       <td>{entityName(h.entity_id)}</td>
                       <td>{h.units}</td>
@@ -315,6 +338,15 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                         )}
                       </td>
                     </tr>
+                    {thesisFor === h.id && (
+                      <tr key={h.id + '-thesis'}>
+                        <td colSpan={10} style={{ textAlign: 'left', background: 'var(--surface)', padding: '12px 14px' }}>
+                          <ThesisDossier targetKind="holding" targetId={h.id}
+                            targetLabel={`${h.ticker} · ${h.market}`} currentPrice={perUnit} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
