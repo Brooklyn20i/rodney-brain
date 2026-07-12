@@ -233,6 +233,37 @@ export interface InvestmentThesis {
   review_frequency_months: number; // property 6, others 3
   last_reviewed: string | null;
   next_review_date: string | null;
+  // ── Dossier fields (migration 0040). Optional for column-drift safety. ──
+  // Price levels are per-unit in the asset's native currency so they compare
+  // 1:1 with live quotes (property: whole-asset AUD value).
+  entry_price?: number | null;   // what I paid / where I'd start
+  entry_date?: string | null;
+  add_below?: number | null;     // accumulation level — add when price is below
+  target_price?: number | null;  // take-profit / fair-value level
+  stop_price?: number | null;    // thesis-invalidated exit level
+  price_currency?: string;
+  bull_case?: string;
+  bear_case?: string;
+  catalysts?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+// Dated journal entry attached to a thesis — freeform notes, review minutes,
+// logged decisions, and saved articles/links (kind 'article' + url).
+export type ThesisNoteKind = 'note' | 'review' | 'article' | 'decision';
+
+export interface ThesisNote {
+  id: string;
+  owner_id: string;
+  thesis_id: string;
+  note_date: string;
+  kind: ThesisNoteKind;
+  title: string;
+  body: string;
+  url: string;
+  source: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -527,6 +558,7 @@ export interface CadenceFinancialData {
   budget_categories: BudgetCategory[];
   budget_fx_rates: BudgetFxRate[];
   investment_theses: InvestmentThesis[];
+  thesis_notes: ThesisNote[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -550,6 +582,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'budget_categories',
   'budget_fx_rates',
   'investment_theses',
+  'thesis_notes',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -573,4 +606,5 @@ export const emptyData = (): CadenceFinancialData => ({
   budget_categories: [],
   budget_fx_rates: [],
   investment_theses: [],
+  thesis_notes: [],
 });
