@@ -2010,9 +2010,12 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 /* rest timer */
 .rest-timer { position: sticky; top: 0; z-index: 5; background: var(--sidebar-bg); color: #fff; border-radius: 14px; padding: 12px 14px 10px; margin-bottom: 14px; box-shadow: var(--shadow-md); }
-.rest-timer-main { display: flex; align-items: center; gap: 12px; }
+.rest-timer-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .rest-timer-label { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; opacity: 0.7; text-transform: uppercase; }
-.rest-timer-time { flex: 1; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.rest-timer-time { flex: 1 1 auto; min-width: 58px; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.rest-timer-state { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.14); }
+.rest-timer-state.warn { background: rgba(251,191,36,0.22); color: #FEF3C7; }
+.rest-timer-state.saved { background: rgba(74,222,128,0.18); color: #DCFCE7; }
 .rest-timer-skip { background: rgba(255,255,255,0.14); color: #fff; border: none; border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
 .rest-timer-track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.14); margin-top: 10px; overflow: hidden; }
 .rest-timer-fill { height: 100%; border-radius: 3px; background: var(--accent-lt); transition: width 1s linear; }

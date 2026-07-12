@@ -10,11 +10,14 @@ export interface RestTimerSnapshot {
   endsAt: number;
   /** Original span in seconds, for the progress bar after a restore. */
   total: number;
+  /** Set that started this rest block, so an expired timer can expose its save/reset state. */
+  completedSetId?: string;
 }
 
 const KEY = 'cadence-fitness:rest-timer';
-// Match the in-component auto-clear: a timer more than 30s past its deadline is
-// stale — don't resurrect a "Rest complete" bar the user never dismissed.
+// Historical auto-expiry threshold. Completed timers now restore beyond this so
+// mobile/PWA resume can show the set's save/reset state instead of silently
+// hiding a stranded draft.
 export const REST_EXPIRE_GRACE_MS = 30_000;
 
 export function saveRestTimer(storage: Storage | undefined, snap: RestTimerSnapshot): void {
@@ -38,7 +41,7 @@ export function clearRestTimer(storage: Storage | undefined): void {
 export function loadRestTimer(
   storage: Storage | undefined,
   workoutId: string,
-  now: number
+  _now: number
 ): RestTimerSnapshot | null {
   if (!storage) return null;
   try {
@@ -51,15 +54,14 @@ export function loadRestTimer(
       typeof snap.endsAt !== 'number' ||
       typeof snap.total !== 'number' ||
       !Number.isFinite(snap.endsAt) ||
-      !Number.isFinite(snap.total)
+      !Number.isFinite(snap.total) ||
+      (snap.completedSetId !== undefined && typeof snap.completedSetId !== 'string')
     ) {
       return null;
     }
-    // Expire safely — well past the deadline means the rest is long over.
-    if (now - snap.endsAt > REST_EXPIRE_GRACE_MS) {
-      clearRestTimer(storage);
-      return null;
-    }
+    // Keep completed timers instead of expiring them in storage. On mobile/PWA
+    // resume, this preserves the explicit save/reset state until the user
+    // dismisses the completed rest banner.
     return snap;
   } catch {
     return null;
