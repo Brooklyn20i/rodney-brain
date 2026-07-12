@@ -48,11 +48,12 @@ describe('rest timer persistence', () => {
     expect(loadRestTimer(storage, 'w2', now)).toBeNull();
   });
 
-  it('expires and clears a timer well past its deadline', () => {
+  it('restores a completed timer well past the old grace window so save/reset state is visible after mobile resume', () => {
     const now = 1_000_000;
-    saveRestTimer(storage, { workoutId: 'w1', endsAt: now, total: 180 });
-    expect(loadRestTimer(storage, 'w1', now + REST_EXPIRE_GRACE_MS + 1)).toBeNull();
-    expect(storage.getItem('cadence-fitness:rest-timer')).toBeNull();
+    saveRestTimer(storage, { workoutId: 'w1', endsAt: now, total: 180, completedSetId: 's1' });
+    const snap = loadRestTimer(storage, 'w1', now + REST_EXPIRE_GRACE_MS + 1);
+    expect(snap).toEqual({ workoutId: 'w1', endsAt: now, total: 180, completedSetId: 's1' });
+    expect(storage.getItem('cadence-fitness:rest-timer')).not.toBeNull();
   });
 
   it('still restores a just-finished timer within the grace window', () => {

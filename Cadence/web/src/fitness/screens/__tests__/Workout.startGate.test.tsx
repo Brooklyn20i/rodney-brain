@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CadenceFitnessCtx, type Ctx } from '../../lib/store';
 import { emptyData, type CadenceFitnessData } from '../../lib/types';
 import { loadRestTimer } from '../../lib/restTimerPersistence';
@@ -39,7 +39,10 @@ beforeEach(() => {
     latest: null,
   });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const control = {
   deferInsert: false,
@@ -313,5 +316,57 @@ describe('rest timer +30s persistence', () => {
     await waitFor(() => expect(document.querySelector('.rest-timer-time')).toBeTruthy());
     const [m, s] = (document.querySelector('.rest-timer-time')!.textContent || '0:0').split(':').map(Number);
     expect(m * 60 + s).toBeGreaterThan(120); // the +30 survived the remount
+  });
+});
+
+describe('set persistence state', () => {
+  it('clears typed set drafts once ticking the set saves them', async () => {
+    render(<Harness seed={seedActive} />);
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('spinbutton', { name: /Bench, set 1, reps/i }), { target: { value: '8' } });
+      fireEvent.click(screen.getByRole('button', { name: /Bench, set 1, mark done/i }));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(control.latest?.workout_sets[0].reps).toBe(8));
+    await waitFor(() => expect(localStorage.getItem('cadence-fitness:workout-drafts')).toBeNull());
+  });
+
+  it('makes expired rest show whether the previous set has unsaved edits', async () => {
+    vi.useFakeTimers();
+    render(<Harness seed={seedActive} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Bench, set 1, mark done/i }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByRole('spinbutton', { name: /Bench, set 1, reps/i }), { target: { value: '9' } });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(121_000);
+    });
+
+    expect(screen.getByText(/Set has unsaved edits/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Save set/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Discard edits/i })).toBeTruthy();
+  });
+
+  it('restores long-expired rest state after mobile resume instead of hiding stranded set edits', async () => {
+    const now = Date.now();
+    localStorage.setItem(
+      'cadence-fitness:rest-timer',
+      JSON.stringify({ workoutId: 'wk', endsAt: now - 31_000, total: 120, completedSetId: 's1' })
+    );
+    localStorage.setItem(
+      'cadence-fitness:workout-drafts',
+      JSON.stringify({ workoutId: 'wk', drafts: { s1: { reps: '9' } } })
+    );
+
+    render(<Harness seed={seedActive} />);
+
+    await waitFor(() => expect(screen.getByText(/Set has unsaved edits/i)).toBeTruthy());
+    expect(screen.getByText('GO')).toBeTruthy();
   });
 });

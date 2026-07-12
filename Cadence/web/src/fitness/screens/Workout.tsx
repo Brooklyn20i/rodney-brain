@@ -48,6 +48,8 @@ const localStore = (): Storage | undefined => (typeof localStorage === 'undefine
 const REST_DEFAULT_KEY = 'cadence-fitness:rest-default';
 const REST_PRESETS = [60, 90, 120, 180, 300];
 const fmtRest = (s: number) => (s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+const hasDraftValue = (d: { weight?: string; reps?: string; dur?: string } | undefined): boolean =>
+  Boolean(d && (['weight', 'reps', 'dur'] as const).some((k) => d[k] !== undefined && d[k] !== ''));
 
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
   const { data, insert, insertMany, update, remove, saving, syncError } = useCadenceFitness();
@@ -125,6 +127,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const [restLeft, setRestLeft] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(0);
   const restEndsAt = useRef<number | null>(null);
+  const restSetIdRef = useRef<string | null>(null);
   const chimedRef = useRef(false);
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -138,11 +141,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
           chime();
           if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([120, 60, 120]);
         }
-        if (left <= -30) {
-          restEndsAt.current = null;
-          setRestLeft(null);
-          clearRestTimer(localStore());
-        }
       }
     }, 1000);
     return () => clearInterval(t);
@@ -155,23 +153,26 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const snap = loadRestTimer(localStore(), active.id, Date.now());
     if (!snap) return;
     restEndsAt.current = snap.endsAt;
+    restSetIdRef.current = snap.completedSetId ?? null;
     const left = Math.round((snap.endsAt - Date.now()) / 1000);
     chimedRef.current = left <= 0; // already elapsed → don't re-chime on restore
     setRestTotal(snap.total);
     setRestLeft(left);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
-  const startRest = (seconds: number) => {
+  const startRest = (seconds: number, completedSetId?: string) => {
     if (seconds <= 0) return; // zero/disabled rest → no countdown, no cue
     const endsAt = Date.now() + seconds * 1000;
     restEndsAt.current = endsAt;
+    restSetIdRef.current = completedSetId ?? null;
     chimedRef.current = false;
     setRestTotal(seconds);
     setRestLeft(seconds);
-    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total: seconds });
+    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total: seconds, completedSetId });
   };
   const stopRest = () => {
     restEndsAt.current = null;
+    restSetIdRef.current = null;
     chimedRef.current = false;
     setRestLeft(null);
     clearRestTimer(localStore());
@@ -184,7 +185,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const total = restTotal + seconds;
     setRestTotal(total);
     setRestLeft((l) => (l ?? 0) + seconds);
-    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total });
+    if (active) saveRestTimer(localStore(), { workoutId: active.id, endsAt, total, completedSetId: restSetIdRef.current ?? undefined });
   };
 
   // Local input drafts so typing doesn't hit Supabase per keystroke.
@@ -379,6 +380,17 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts, active?.id]);
 
+  const clearSetDraft = (setId: string) => {
+    setDrafts((prev) => {
+      if (!prev[setId]) return prev;
+      const next = { ...prev };
+      delete next[setId];
+      return next;
+    });
+  };
+
+  const setHasDraft = (setId: string) => hasDraftValue(drafts[setId]);
+
   const daySlots = useMemo(
     () =>
       active?.program_day_id
@@ -497,6 +509,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   const commitSet = async (set: WorkoutSet, extra?: Partial<WorkoutSet>) => {
     const d = drafts[set.id] || {};
+    const hadDraft = hasDraftValue(d);
     const patch: Partial<WorkoutSet> = { ...extra };
     const prevWeight = Number(set.weight_kg) || 0;
     if (d.weight !== undefined) patch.weight_kg = Number(d.weight) || 0;
@@ -507,6 +520,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       pendingStepRef.current.set(stepKey(set.id, 'weight'), patch.weight_kg);
       await carryForwardWeight(set, prevWeight, patch.weight_kg);
     }
+    if (hadDraft) clearSetDraft(set.id);
   };
 
   // One-handed steppers: read the LIVE value (pending overlay → draft → stored),
@@ -545,7 +559,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       if (done) {
         const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
         const plan = planRestOnComplete(slot?.rest_seconds, restDefault);
-        if (plan.start) startRest(plan.seconds);
+        if (plan.start) startRest(plan.seconds, set.id);
         else stopRest();
       } else {
         // Un-ticked by mistake → the rest you started for it no longer applies.
@@ -1231,6 +1245,24 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const idx = Math.min(focusIndex, Math.max(0, exerciseIds.length - 1));
 
   const restPct = restTotal > 0 ? Math.max(0, Math.min(100, (restLeft! / restTotal) * 100)) : 0;
+  const restSet = restSetIdRef.current ? sessionSets.find((s) => s.id === restSetIdRef.current) : null;
+  const restSetHasUnsavedDraft = restSet ? setHasDraft(restSet.id) : false;
+  const saveRestSet = () =>
+    restSet
+      ? runLocked(`rest-save:${restSet.id}`, async () => {
+          await commitSet(restSet);
+        })
+      : Promise.resolve();
+  const discardRestSetDraft = () => {
+    if (restSet) clearSetDraft(restSet.id);
+  };
+  const completeRest = () =>
+    restSet && restSetHasUnsavedDraft
+      ? runLocked(`rest-done:${restSet.id}`, async () => {
+          await commitSet(restSet);
+          stopRest();
+        })
+      : stopRest();
   const restBar = restLeft !== null && (
     <div className={`rest-timer ${restLeft <= 0 ? 'done' : ''}`}>
       <div className="rest-timer-main">
@@ -1238,12 +1270,27 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         <span className="rest-timer-time">
           {restLeft <= 0 ? 'GO' : `${Math.floor(restLeft / 60)}:${String(restLeft % 60).padStart(2, '0')}`}
         </span>
+        {restLeft <= 0 && restSet && (
+          <span className={`rest-timer-state ${restSetHasUnsavedDraft ? 'warn' : 'saved'}`}>
+            {restSetHasUnsavedDraft ? 'Set has unsaved edits' : 'Set saved'}
+          </span>
+        )}
         {restLeft > 0 && (
           <button className="rest-timer-skip" onClick={() => extendRest(30)}>
             +30s
           </button>
         )}
-        <button className="rest-timer-skip" onClick={stopRest}>
+        {restLeft <= 0 && restSetHasUnsavedDraft && (
+          <>
+            <button className="rest-timer-skip" onClick={saveRestSet}>
+              Save set
+            </button>
+            <button className="rest-timer-skip" onClick={discardRestSetDraft}>
+              Discard edits
+            </button>
+          </>
+        )}
+        <button className="rest-timer-skip" onClick={completeRest}>
           {restLeft <= 0 ? 'Done' : 'Skip'}
         </button>
       </div>
