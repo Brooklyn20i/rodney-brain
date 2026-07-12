@@ -113,7 +113,7 @@ export interface PortfolioMonth {
   totalIncome: number;
   totalExpenses: number;
   netCashflow: number;
-  // Portfolio-wide expense total per category -- "where the costs come from".
+  // Portfolio-wide logged expense totals by category for the selected month.
   byCategory: Partial<Record<PropertyLedgerCategory, number>>;
 }
 

@@ -26,6 +26,12 @@ const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 const pct = (v: number | null) => (v === null ? '—' : formatPercent(v));
 const FORM_CATEGORIES: PropertyLedgerCategory[] = ['rent', 'other_income', ...EXPENSE_CATEGORIES];
+export const PROPERTY_EXPENSE_BREAKDOWN_HELP =
+  'Logged property expenses for the selected month. Excludes rent, other income, loan principal and offset transfers; loan interest is included in the interest-only cashflow view.';
+
+export function propertyExpenseBreakdownTitle(period: string): string {
+  return `Monthly expense breakdown — ${monthLabel(period)}`;
+}
 
 // Compact label/value row for detail cards.
 function KV({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'bad' }) {
@@ -155,7 +161,8 @@ function PortfolioOverview({
             </div>
 
             {Object.keys(pm.byCategory).length > 0 && (
-              <Card title={`Where the costs come from — ${monthLabel(period)}`}>
+              <Card title={propertyExpenseBreakdownTitle(period)}>
+                <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 0, marginBottom: 12 }}>{PROPERTY_EXPENSE_BREAKDOWN_HELP}</p>
                 {EXPENSE_CATEGORIES.filter((c) => pm.byCategory[c] !== undefined).map((c) => {
                   const amt = pm.byCategory[c]!;
                   return (
