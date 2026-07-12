@@ -71,12 +71,12 @@ export const FITNESS_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'fitness:programs', label: 'Programs', icon: '▦' },
     { id: 'fitness:history', label: 'History', icon: '↺' },
     { id: 'fitness:exercises', label: 'Exercises', icon: '≣' },
-    { id: 'fitness:cardio', label: 'Cardio & Sauna', icon: '≋' },
   ]},
   { section: 'Body & Fuel', items: [
     { id: 'fitness:nutrition', label: 'Nutrition', icon: '◔' },
     { id: 'fitness:body', label: 'Body', icon: '⚖' },
     { id: 'fitness:recovery', label: 'Recovery', icon: '♥' },
+    { id: 'fitness:cardio', label: 'Recovery Activities', icon: '♨' },
     { id: 'fitness:sync', label: 'Sync', icon: '⇅' },
   ]},
   { section: 'Agents', items: [

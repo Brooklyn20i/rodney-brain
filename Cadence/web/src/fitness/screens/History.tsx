@@ -51,7 +51,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
           <Metric label="Sessions this week" value={String(weekWorkouts.length)} />
           <Metric label="Hard sets this week" value={String(weekSets)} />
           <Metric label="Cardio this week" value={`${fmtNum(weekCardioMin)} min`} delta={`${fmtNum(weekCardioKm, 1)} km · ${fmtNum(weekCardioCals)} kcal · ${weekCardio} sessions`} />
-          <Metric label="Sauna this week" value={String(weekSauna)} />
+          <Metric label="Recovery activities" value={String(weekSauna)} delta="sauna" />
         </div>
 
         {weekMuscle.size > 0 && (

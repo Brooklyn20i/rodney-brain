@@ -170,8 +170,8 @@ export function Exercises({ onMenu }: { onMenu: () => void }) {
           </div>
           {looksLikeCardio(newName) && (
             <p className="cf-callout cf-callout-warn" style={{ fontSize: 12, marginTop: 4 }}>
-              🏃 Running, rowing, cycling and swimming are tracked as <strong>Cardio</strong> (time +
-              distance) — log those on the Cardio screen or in a session's Cardio block, not here.
+              🏃 Running, rowing, cycling and swimming are tracked as <strong>cardio inside Workout</strong>{' '}
+              (time + distance) — log those in a session's Cardio block, not here.
             </p>
           )}
           <button className="btn btn-primary" onClick={addExercise} disabled={!newName.trim()}>

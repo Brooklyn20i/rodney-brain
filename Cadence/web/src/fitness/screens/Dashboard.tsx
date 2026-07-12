@@ -185,7 +185,7 @@ export function Dashboard({ onMenu, onNavigate }: { onMenu: () => void; onNaviga
           <div className="dash-strip-cell"><div className="dash-strip-num">{weekWorkouts.length}</div><div className="dash-strip-lbl">Lifts</div></div>
           <div className="dash-strip-cell"><div className="dash-strip-num">{weekSets}</div><div className="dash-strip-lbl">Sets</div></div>
           <div className="dash-strip-cell"><div className="dash-strip-num">{fmtNum(weekCardioKm, 1)}</div><div className="dash-strip-lbl">Cardio km</div></div>
-          <div className="dash-strip-cell"><div className="dash-strip-num">{weekSauna.length}</div><div className="dash-strip-lbl">Sauna</div></div>
+          <div className="dash-strip-cell"><div className="dash-strip-num">{weekSauna.length}</div><div className="dash-strip-lbl">Recovery</div></div>
         </div>
 
         {prs.length > 0 && (
