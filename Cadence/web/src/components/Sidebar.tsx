@@ -42,6 +42,7 @@ export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'financial:property', label: 'Property Portfolio', icon: '⌂' },
     { id: 'financial:allocation', label: 'Asset Allocation', icon: '◔' },
     { id: 'financial:performance', label: 'Performance', icon: '↗' },
+    { id: 'financial:conviction', label: 'Conviction', icon: '◈' },
   ]},
   { section: 'Risk', items: [
     { id: 'financial:risk', label: 'Risk Dashboard', icon: '▣' },

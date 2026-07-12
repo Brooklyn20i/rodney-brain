@@ -12,6 +12,7 @@ import type {
   AllocationPolicy,
   BudgetCategory,
   BudgetFxRate,
+  InvestmentThesis,
   BudgetLine,
   CadenceFinancialData,
   Decision,
@@ -475,6 +476,23 @@ const budgetFxRates: BudgetFxRate[] = [
   { ...base, id: 'fx-eur', currency: 'EUR', rate_to_aud: 1.64 },
 ];
 
+const investmentTheses: InvestmentThesis[] = [
+  { ...base, id: 'th-anchor', target_kind: 'property', target_id: 'prop-anchor', target_label: 'Anchor PPOR',
+    driver: 'AU property', role: 'Ballast / future home', thesis: 'Inner-city land scarcity; future primary residence.',
+    kill_criteria: 'Structural shift in city fundamentals or a forced-sale liquidity need.', conviction: 'core',
+    status: 'intact', conviction_score: 8, is_structural: false, review_frequency_months: 6,
+    last_reviewed: '2026-07-01', next_review_date: '2027-01-01' },
+  { ...base, id: 'th-btc', target_kind: 'holding', target_id: 'inv-btc', target_label: 'BTC (self-custody)',
+    driver: 'Crypto / digital gold', role: 'Convex growth', thesis: 'Asymmetric store-of-value; sized small.',
+    kill_criteria: 'Position exceeds 10% of net worth (trim) or thesis-level regulatory break.', conviction: 'hold',
+    status: 'intact', conviction_score: 7, is_structural: false, review_frequency_months: 3,
+    last_reviewed: '2026-07-01', next_review_date: '2026-10-01' },
+  { ...base, id: 'th-family', target_kind: 'property', target_id: 'prop-family', target_label: 'Family home (parents)',
+    driver: 'Family commitment', role: 'Not an investment', thesis: 'Housing for family — a commitment, not a return.',
+    kill_criteria: 'N/A — never for sale.', conviction: 'hold', status: 'intact', conviction_score: null,
+    is_structural: true, review_frequency_months: 12, last_reviewed: null, next_review_date: null },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -496,5 +514,6 @@ export function loadDemoData(): CadenceFinancialData {
     budget_lines: budgetLines,
     budget_categories: budgetCategories,
     budget_fx_rates: budgetFxRates,
+    investment_theses: investmentTheses,
   };
 }

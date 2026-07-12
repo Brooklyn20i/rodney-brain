@@ -34,6 +34,7 @@ const FinInvestmentDeployment = lazy(() => import('./financial/screens/Investmen
 const FinPropertyPortfolio = lazy(() => import('./financial/screens/PropertyPortfolio').then((m) => ({ default: m.PropertyPortfolio })));
 const FinAssetAllocation = lazy(() => import('./financial/screens/AssetAllocation').then((m) => ({ default: m.AssetAllocation })));
 const FinPerformance = lazy(() => import('./financial/screens/Performance').then((m) => ({ default: m.Performance })));
+const FinConviction = lazy(() => import('./financial/screens/Conviction').then((m) => ({ default: m.Conviction })));
 const FinRiskDashboard = lazy(() => import('./financial/screens/RiskDashboard').then((m) => ({ default: m.RiskDashboard })));
 const FinStressTests = lazy(() => import('./financial/screens/StressTests').then((m) => ({ default: m.StressTests })));
 const FinProtection = lazy(() => import('./financial/screens/Protection').then((m) => ({ default: m.Protection })));
@@ -223,6 +224,7 @@ export function App() {
         case 'property': return <FinPropertyPortfolio onMenu={onMenu} />;
         case 'allocation': return <FinAssetAllocation onMenu={onMenu} />;
         case 'performance': return <FinPerformance onMenu={onMenu} />;
+        case 'conviction': return <FinConviction onMenu={onMenu} />;
         case 'risk': return <FinRiskDashboard onMenu={onMenu} />;
         case 'stress': return <FinStressTests onMenu={onMenu} />;
         case 'protection': return <FinProtection onMenu={onMenu} />;
