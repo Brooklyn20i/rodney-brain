@@ -318,7 +318,8 @@ export function investmentBuysSummary(
   };
 }
 
-export type InvestmentBucket = 'shares' | 'crypto' | 'other';
+export type InvestmentBucket = 'shares' | 'crypto';
+export type InvestmentExposureBucket = 'shares' | 'crypto' | 'commodities';
 
 export interface FxConversionResult {
   value: number;
@@ -353,15 +354,31 @@ export interface InvestmentPerformanceSummary {
 export function investmentBucketForHolding(h: Pick<InvestmentHolding, 'ticker' | 'market'>): InvestmentBucket {
   const ticker = h.ticker.toUpperCase();
   const market = h.market.toUpperCase();
+  // Ledger/direct BTC is the crypto ledger bucket because it reconciles to the
+  // monthly_metrics.btc_crypto line. Broker-listed instruments (including VBTC
+  // and PMGOLD) stay in the shares ledger bucket because they reconcile to
+  // monthly_metrics.shares / the Stake portfolio, even when their exposure is
+  // crypto or commodities.
+  if (ticker === 'BTC' || market.includes('LEDGER')) return 'crypto';
+  return 'shares';
+}
+
+export function investmentExposureBucketForHolding(
+  h: Pick<InvestmentHolding, 'ticker' | 'market'>
+): InvestmentExposureBucket {
+  const ticker = h.ticker.toUpperCase();
+  const market = h.market.toUpperCase();
   if (ticker === 'BTC' || ticker === 'VBTC' || ticker.includes('BTC') || market.includes('LEDGER')) return 'crypto';
-  if (ticker.includes('GOLD') || ticker === 'PMGOLD') return 'other';
+  if (ticker === 'PMGOLD' || ticker.includes('GOLD')) return 'commodities';
   return 'shares';
 }
 
 export function investmentBucketForTransaction(t: Pick<InvestmentTransaction, 'ticker'>): InvestmentBucket {
   const ticker = t.ticker.toUpperCase();
-  if (ticker === 'BTC' || ticker === 'VBTC' || ticker.includes('BTC')) return 'crypto';
-  if (ticker.includes('GOLD') || ticker === 'PMGOLD') return 'other';
+  // Transactions do not carry the market/account, so keep only direct BTC in
+  // the crypto ledger. VBTC/PMGOLD are broker-listed buys and belong to the
+  // shares/share_buys ledger line.
+  if (ticker === 'BTC') return 'crypto';
   return 'shares';
 }
 
@@ -452,7 +469,7 @@ function buildBucketSummary(
 
   return {
     bucket,
-    label: bucket === 'shares' ? 'Shares' : bucket === 'crypto' ? 'Crypto / BTC' : 'Other',
+    label: bucket === 'shares' ? 'Shares & ETFs' : 'BTC / crypto custody',
     invested,
     currentValue,
     totalGain,
@@ -478,14 +495,13 @@ export function investmentPerformanceSummary(
   const rates = fxRateMap(fxRates);
   const shares = buildBucketSummary('shares', holdings, transactions, months, rates);
   const crypto = buildBucketSummary('crypto', holdings, transactions, months, rates);
-  const other = buildBucketSummary('other', holdings, transactions, months, rates);
-  const buckets = { shares, crypto, other };
-  const allMissing = new Set<string>([...shares.missingCurrencies, ...crypto.missingCurrencies, ...other.missingCurrencies]);
-  const totalInvested = shares.invested + crypto.invested + other.invested;
-  const totalCurrent = shares.currentValue + crypto.currentValue + other.currentValue;
-  const fyParts = [shares.fyGain, crypto.fyGain, other.fyGain].filter((v): v is number => v !== null);
-  const fyOpenParts = [shares.fyOpeningValue, crypto.fyOpeningValue, other.fyOpeningValue].filter((v): v is number => v !== null);
-  const totalFyBuys = shares.fyNetBuys + crypto.fyNetBuys + other.fyNetBuys;
+  const buckets = { shares, crypto };
+  const allMissing = new Set<string>([...shares.missingCurrencies, ...crypto.missingCurrencies]);
+  const totalInvested = shares.invested + crypto.invested;
+  const totalCurrent = shares.currentValue + crypto.currentValue;
+  const fyParts = [shares.fyGain, crypto.fyGain].filter((v): v is number => v !== null);
+  const fyOpenParts = [shares.fyOpeningValue, crypto.fyOpeningValue].filter((v): v is number => v !== null);
+  const totalFyBuys = shares.fyNetBuys + crypto.fyNetBuys;
   const totalFyGain = fyParts.length > 0 ? fyParts.reduce((sum, v) => sum + v, 0) : null;
   const totalFyDenominator = fyOpenParts.reduce((sum, v) => sum + v, 0) + Math.max(totalFyBuys, 0);
 
@@ -506,9 +522,9 @@ export function investmentPerformanceSummary(
       fyNetBuys: totalFyBuys,
       fyGain: totalFyGain,
       fyReturn: totalFyGain === null || !totalFyDenominator ? null : totalFyGain / totalFyDenominator,
-      holdings: shares.holdings + crypto.holdings + other.holdings,
+      holdings: shares.holdings + crypto.holdings,
       asOfDate: (() => {
-        const dates = [shares.asOfDate, crypto.asOfDate, other.asOfDate].filter((v): v is string => Boolean(v)).sort();
+        const dates = [shares.asOfDate, crypto.asOfDate].filter((v): v is string => Boolean(v)).sort();
         return dates.length ? dates[dates.length - 1] : null;
       })(),
       missingCurrencies: [...allMissing].sort(),

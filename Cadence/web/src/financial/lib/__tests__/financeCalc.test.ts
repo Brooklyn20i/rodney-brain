@@ -3,6 +3,7 @@ import {
   deriveNewMonth,
   financialYearForPeriod,
   investmentBucketForHolding,
+  investmentExposureBucketForHolding,
   investmentBuysSummary,
   investmentPerformanceSummary,
   latestMonth,
@@ -278,34 +279,46 @@ describe('investment performance summary', () => {
     expect(financialYearForPeriod('2026-06')).toEqual({ label: 'FY2026 YTD', start: '2025-07', openingPeriod: '2025-06' });
   });
 
-  it('classifies BTC/VBTC separately from shares and gold', () => {
+  it('keeps broker-listed holdings in the shares ledger bucket and separates exposure labels', () => {
     expect(investmentBucketForHolding(holding({ ticker: 'BTC', market: 'Ledger' }))).toBe('crypto');
-    expect(investmentBucketForHolding(holding({ ticker: 'VBTC', market: 'Stake Aus' }))).toBe('crypto');
-    expect(investmentBucketForHolding(holding({ ticker: 'PMGOLD', market: 'Stake Aus' }))).toBe('other');
+    expect(investmentBucketForHolding(holding({ ticker: 'VBTC', market: 'Stake Aus' }))).toBe('shares');
+    expect(investmentBucketForHolding(holding({ ticker: 'PMGOLD', market: 'Stake Aus' }))).toBe('shares');
+    expect(investmentBucketForHolding(holding({ ticker: 'WIRE', market: 'Stake Aus' }))).toBe('shares');
     expect(investmentBucketForHolding(holding({ ticker: 'GOOG', market: 'Stake Wall St' }))).toBe('shares');
+
+    expect(investmentExposureBucketForHolding(holding({ ticker: 'BTC', market: 'Ledger' }))).toBe('crypto');
+    expect(investmentExposureBucketForHolding(holding({ ticker: 'VBTC', market: 'Stake Aus' }))).toBe('crypto');
+    expect(investmentExposureBucketForHolding(holding({ ticker: 'PMGOLD', market: 'Stake Aus' }))).toBe('commodities');
+    // WIRE is a copper-miners equity ETF, not direct commodity exposure.
+    expect(investmentExposureBucketForHolding(holding({ ticker: 'WIRE', market: 'Stake Aus' }))).toBe('shares');
   });
 
-  it('summarises invested/current/total and FY YTD gain by bucket in AUD', () => {
+  it('summarises invested/current/total and FY YTD gain by ledger bucket in AUD', () => {
     const perf = investmentPerformanceSummary(
       [
         holding({ ticker: 'GOOG', currency: 'USD', native_value: 110, cost_basis: 100 }), // A$165 / A$150
         holding({ ticker: 'WIRE', currency: 'AUD', native_value: 80, cost_basis: 90 }),
         holding({ ticker: 'BTC', market: 'Ledger', currency: 'AUD', native_value: 300, cost_basis: 100 }),
-        holding({ ticker: 'PMGOLD', currency: 'AUD', native_value: 40, cost_basis: 50 }),
+        holding({ ticker: 'PMGOLD', market: 'Stake Aus', currency: 'AUD', native_value: 40, cost_basis: 50 }),
+        holding({ ticker: 'VBTC', market: 'Stake Aus', currency: 'AUD', native_value: 30, cost_basis: 20 }),
       ],
-      [tx({ date: '2026-07-03', ticker: 'GOOG', side: 'buy', currency: 'USD', amount: 10, amount_aud: 15 })],
-      [month({ period: '2026-06', shares: 210, btc_crypto: 250 }), month({ period: '2026-07', shares: 245, btc_crypto: 300 })],
+      [
+        tx({ date: '2026-07-03', ticker: 'GOOG', side: 'buy', currency: 'USD', amount: 10, amount_aud: 15 }),
+        tx({ date: '2026-07-04', ticker: 'VBTC', side: 'buy', currency: 'AUD', amount: 20, amount_aud: 20 }),
+      ],
+      [month({ period: '2026-06', shares: 290, btc_crypto: 250 }), month({ period: '2026-07', shares: 315, btc_crypto: 300 })],
       [fx('USD', 1.5)]
     );
 
     expect(perf.fyLabel).toBe('FY2027 YTD');
-    expect(perf.buckets.shares.invested).toBeCloseTo(240, 2);
-    expect(perf.buckets.shares.currentValue).toBeCloseTo(245, 2);
+    expect(perf.buckets.shares.label).toBe('Shares & ETFs');
+    expect(perf.buckets.shares.invested).toBeCloseTo(310, 2);
+    expect(perf.buckets.shares.currentValue).toBeCloseTo(315, 2);
     expect(perf.buckets.shares.totalGain).toBeCloseTo(5, 2);
-    expect(perf.buckets.shares.fyGain).toBeCloseTo(20, 2); // 245 current - 210 opening - 15 buys
+    expect(perf.buckets.shares.fyGain).toBeCloseTo(-10, 2); // 315 current - 290 opening - 35 broker buys
+    expect(perf.buckets.crypto.label).toBe('BTC / crypto custody');
     expect(perf.buckets.crypto.currentValue).toBeCloseTo(300, 2);
     expect(perf.buckets.crypto.fyGain).toBeCloseTo(50, 2);
-    expect(perf.buckets.other.fyGain).toBeNull();
-    expect(perf.total.currentValue).toBeCloseTo(585, 2);
+    expect(perf.total.currentValue).toBeCloseTo(615, 2);
   });
 });

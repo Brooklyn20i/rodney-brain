@@ -3,20 +3,24 @@ import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card } from '../components/bits';
 import {
   fxRateMap,
-  investmentBucketForHolding,
   investmentBucketForTransaction,
   investmentBuysSummary,
+  investmentExposureBucketForHolding,
   investmentPerformanceSummary,
   toAudWithFx,
   type InvestmentBucket,
   type InvestmentBucketSummary,
+  type InvestmentExposureBucket,
 } from '../lib/financeCalc';
 import { fetchLiveQuotes, liveNativeValue, yahooSymbol, type QuoteMap } from '../lib/livePrices';
 import { formatMoney, formatPercent, monthLabel, periodRange } from '../lib/util';
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const today = () => new Date().toISOString().slice(0, 10);
-const BUCKETS: InvestmentBucket[] = ['shares', 'crypto', 'other'];
+const LEDGER_BUCKETS: InvestmentBucket[] = ['shares', 'crypto'];
+const EXPOSURE_BUCKETS: InvestmentExposureBucket[] = ['shares', 'crypto', 'commodities'];
+const exposureLabel = (bucket: InvestmentExposureBucket): string =>
+  bucket === 'shares' ? 'Listed equities & ETFs' : bucket === 'crypto' ? 'Crypto exposure' : 'Commodity ETPs';
 
 function signedMoney(value: number | null, compact = true): string {
   if (value === null) return 'TBC';
@@ -160,21 +164,34 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   );
   const fxRates = useMemo(() => fxRateMap(budgetFxRates), [budgetFxRates]);
   const entityName = (id: string | null) => entities.find((e) => e.id === id)?.name ?? 'Unassigned';
-  const holdingsByBucket = useMemo(
+  const holdingsByExposure = useMemo(
     () =>
       Object.fromEntries(
-        BUCKETS.map((bucket) => [
+        EXPOSURE_BUCKETS.map((bucket) => [
           bucket,
           [...investmentHoldings]
-            .filter((h) => !h.deleted_at && investmentBucketForHolding(h) === bucket)
+            .filter((h) => !h.deleted_at && investmentExposureBucketForHolding(h) === bucket)
             .sort((a, b) => {
               const av = toAudWithFx(a.native_value, a.currency, fxRates).value;
               const bv = toAudWithFx(b.native_value, b.currency, fxRates).value;
               return bv - av;
             }),
         ])
-      ) as Record<InvestmentBucket, typeof investmentHoldings>,
+      ) as Record<InvestmentExposureBucket, typeof investmentHoldings>,
     [investmentHoldings, fxRates]
+  );
+
+  const exposureTotals = useMemo(
+    () =>
+      Object.fromEntries(
+        EXPOSURE_BUCKETS.map((bucket) => {
+          const rows = holdingsByExposure[bucket];
+          const currentValue = rows.reduce((sum, h) => sum + toAudWithFx(h.native_value, h.currency, fxRates).value, 0);
+          const invested = rows.reduce((sum, h) => sum + toAudWithFx(h.cost_basis, h.currency, fxRates).value, 0);
+          return [bucket, { currentValue, invested }];
+        })
+      ) as Record<InvestmentExposureBucket, { currentValue: number; invested: number }>,
+    [holdingsByExposure, fxRates]
   );
 
   const addHolding = async () => {
@@ -225,7 +242,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Investments" subtitle="Shares vs crypto: invested, current, total and FY YTD." onMenu={onMenu}>
+      <ScreenHeader title="Investments" subtitle="Broker-listed holdings vs BTC custody: invested, current, total and FY YTD." onMenu={onMenu}>
         <button className="btn btn-secondary btn-sm" onClick={() => setForm(form === 'holding' ? null : 'holding')}>
           {form === 'holding' ? 'Cancel' : '+ Holding'}
         </button>
@@ -286,9 +303,9 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
         )}
 
         <div className="inv-hero">
-          <PerformanceCard summary={perf.buckets.shares} />
-          <PerformanceCard summary={perf.buckets.crypto} />
-          <PerformanceCard summary={perf.buckets.other} />
+          {LEDGER_BUCKETS.map((bucket) => (
+            <PerformanceCard key={bucket} summary={perf.buckets[bucket]} />
+          ))}
           <PerformanceCard summary={perf.total} />
         </div>
 
@@ -330,17 +347,20 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
             {quotesState === 'error' && <span className="inv-warning">Live prices unavailable right now — stored values shown.</span>}
           </div>
 
-          {BUCKETS.map((bucket) => (
-            <section className="inv-section" key={bucket}>
-              <div className="inv-section-head">
-                <div>
-                  <h3>{perf.buckets[bucket].label}</h3>
-                  <p>{formatMoney(perf.buckets[bucket].currentValue, true)} current · {formatMoney(perf.buckets[bucket].invested, true)} invested</p>
+          {EXPOSURE_BUCKETS.map((bucket) => {
+            const totals = exposureTotals[bucket];
+            const rows = holdingsByExposure[bucket];
+            return (
+              <section className="inv-section" key={bucket}>
+                <div className="inv-section-head">
+                  <div>
+                    <h3>{exposureLabel(bucket)}</h3>
+                    <p>{formatMoney(totals.currentValue, true)} current · {formatMoney(totals.invested, true)} invested</p>
+                  </div>
+                  <span className="grade-tag">{rows.length} holdings</span>
                 </div>
-                <span className="grade-tag">{holdingsByBucket[bucket].length} holdings</span>
-              </div>
-              <div className="inv-holding-grid">
-                {holdingsByBucket[bucket].map((h) => {
+                <div className="inv-holding-grid">
+                  {rows.map((h) => {
                   const editing = reprice[h.id];
                   const live = liveFor(h);
                   const liveDelta = live !== null ? live - h.native_value : null;
@@ -421,11 +441,12 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                       </div>
                     </article>
                   );
-                })}
-                {holdingsByBucket[bucket].length === 0 && <p className="inv-note">No {perf.buckets[bucket].label.toLowerCase()} holdings recorded.</p>}
-              </div>
-            </section>
-          ))}
+                  })}
+                  {rows.length === 0 && <p className="inv-note">No {exposureLabel(bucket).toLowerCase()} holdings recorded.</p>}
+                </div>
+              </section>
+            );
+          })}
         </Card>
 
         {summary && (
