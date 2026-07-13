@@ -13,6 +13,7 @@ import type {
   BudgetCategory,
   BudgetFxRate,
   InvestmentThesis,
+  StrategyItem,
   BudgetLine,
   CadenceFinancialData,
   Decision,
@@ -493,6 +494,17 @@ const investmentTheses: InvestmentThesis[] = [
     is_structural: true, review_frequency_months: 12, last_reviewed: null, next_review_date: null },
 ];
 
+
+const strategyItems: StrategyItem[] = [
+  { ...base, id: 'st-1', section: 'now', title: 'Confirm insurance schedule with broker', detail: 'Landlord policy for the second Coastal Bay unit | Confirm home policy is landlord-rated', due_date: '2026-06-28', done: false, done_at: null },
+  { ...base, id: 'st-2', section: 'now', title: 'Open savings ladder + notify bank', detail: 'At-call + TDs, maturities before the move date', due_date: '2026-07-31', done: false, done_at: null },
+  { ...base, id: 'st-3', section: 'tranche', title: 'Tranche 1: index fund + gold', detail: 'Placed by the trustee from vehicle cash', due_date: '2026-08-05', done: false, done_at: null },
+  { ...base, id: 'st-buy', section: 'monthly', title: 'Monthly buys — this month ($8k)', detail: '$4,000 -> global index fund | $2,000 -> gold ETC | $2,000 -> savings ladder | Do NOT draw on the offset', due_date: '2026-07-03', done: false, done_at: null },
+  { ...base, id: 'st-buy2', section: 'monthly', title: 'Monthly buys — next month ($8k)', detail: '$4,000 -> global index fund | $2,000 -> gold ETC | $2,000 -> savings ladder', due_date: '2026-08-03', done: false, done_at: null },
+  { ...base, id: 'st-cal1', section: 'calendar', title: 'QUARTERLY CHECK — automated', detail: 'Fires itself: drift vs bands, decisions, personal-risk checklist.', due_date: '2026-08-15', done: false, done_at: null },
+  { ...base, id: 'st-cal2', section: 'calendar', title: 'Refinance review before restructure', detail: 'Shop both investment loans while fully offset.', due_date: '2027-10-15', done: false, done_at: null },
+];
+
 export function loadDemoData(): CadenceFinancialData {
   return {
     entities,
@@ -516,6 +528,6 @@ export function loadDemoData(): CadenceFinancialData {
     budget_fx_rates: budgetFxRates,
     investment_theses: investmentTheses,
     thesis_notes: [],
-    strategy_items: [],
+    strategy_items: strategyItems,
   };
 }
