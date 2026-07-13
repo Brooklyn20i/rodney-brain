@@ -537,6 +537,27 @@ export interface BudgetFxRate {
   deleted_at: string | null;
 }
 
+
+// One row of the wealth-strategy execution plan (migration 0041). Lives in
+// the Financial domain (Rodney: personal wealth tasks don't belong in Work).
+// Sections: 'now' = one-off actions, 'tranche' = trust deployment orders,
+// 'monthly' = the monthly buy list, 'calendar' = review/diary dates.
+export type StrategySection = 'now' | 'tranche' | 'monthly' | 'calendar';
+
+export interface StrategyItem {
+  id: string;
+  owner_id: string;
+  section: StrategySection;
+  title: string;
+  detail: string;
+  due_date: string | null;
+  done: boolean;
+  done_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -559,6 +580,7 @@ export interface CadenceFinancialData {
   budget_fx_rates: BudgetFxRate[];
   investment_theses: InvestmentThesis[];
   thesis_notes: ThesisNote[];
+  strategy_items: StrategyItem[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -583,6 +605,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'budget_fx_rates',
   'investment_theses',
   'thesis_notes',
+  'strategy_items',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -607,4 +630,5 @@ export const emptyData = (): CadenceFinancialData => ({
   budget_fx_rates: [],
   investment_theses: [],
   thesis_notes: [],
+  strategy_items: [],
 });

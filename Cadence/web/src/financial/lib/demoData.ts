@@ -516,5 +516,6 @@ export function loadDemoData(): CadenceFinancialData {
     budget_fx_rates: budgetFxRates,
     investment_theses: investmentTheses,
     thesis_notes: [],
+    strategy_items: [],
   };
 }
