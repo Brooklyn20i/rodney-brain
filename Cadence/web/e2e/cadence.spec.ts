@@ -46,17 +46,19 @@ test('home shows my open work with lanes and an agent-created item in a normal l
   await expect(page.getByText('Awaiting legal sign-off')).toBeVisible(); // Waiting lane
 });
 
-// ── Quick Add is capture-first: an untagged note lands in the Inbox to triage ─
-test('a capture via Quick Add lands only in the Inbox, not on Home', async ({ page }) => {
+// ── Quick Add is capture-first: a capture surfaces on Home's triage tray AND
+//    the full Inbox — one queue, two views of the combined cockpit ────────────
+test('a capture shows on the Home triage tray and in the Inbox', async ({ page }) => {
   await navTo(page, 'Home');
   await page.getByRole('button', { name: 'Capture task' }).click();
   const input = page.getByPlaceholder(/Try "Follow up/);
   await input.fill('Zebra checkpoint');
   await input.press('Enter');
-  // Home shows only committed work — the fresh capture is NOT duplicated here.
-  await expect(page.getByText('Zebra checkpoint')).toHaveCount(0);
-  // It waits in the Inbox triage queue.
-  await navTo(page, 'Inbox');
+  // The combined cockpit: it's right there on Home, ready to shape.
+  await expect(page.getByTestId('triage-tray').getByText('Zebra checkpoint')).toBeVisible();
+  // "Open Inbox →" leads to the same queue, full-screen.
+  await page.getByTestId('triage-tray').getByRole('button', { name: 'Open Inbox →' }).click();
+  await expect(page.getByRole('heading', { name: 'Inbox' })).toBeVisible();
   await expect(page.getByText('Zebra checkpoint')).toBeVisible();
 });
 

@@ -8,6 +8,7 @@ import { TaskList } from './TaskList';
 import type { TaskGroup } from './TaskList';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TodayStrip } from '../../components/TodayStrip';
+import { TriageTray } from '../../components/TriageTray';
 import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
 import { bucketForDue } from '../../lib/dateBuckets';
 import { isFiledTask } from '../../lib/tasks';
@@ -204,8 +205,11 @@ export function Home({ onMenu, onNavigate }: {
             {/* Do I have meetings today? Answered before anything else. */}
             <TodayStrip onNavigate={onNavigate} />
 
-            {/* Home shows only committed work. Fresh captures live in the Inbox
-                until triaged — Home never duplicates that queue. */}
+            {/* The combined cockpit: fresh captures to shape sit right here, one
+                tap from filing. It's the same queue as the Inbox screen — a
+                preview of it — so "Open Inbox →" leads to the full triage view. */}
+            <TriageTray onEdit={(w) => setSelectedId(w.id)} onOpenInbox={() => onNavigate?.('inbox')} />
+
             {pinnedItems.length > 0 && (
               <div className="detail-section day-plan" aria-label="Today's focus">
                 <h3>★ Today's focus
