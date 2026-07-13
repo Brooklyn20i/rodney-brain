@@ -3,8 +3,11 @@ import { useCadence } from '../../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../../lib/types';
 import { EntityLinkPicker } from '../../components/EntityLinkPicker';
 import { RaiseAt1on1Button } from '../../components/RaiseAt1on1Button';
+import { LedgerDirectionToggle, type LedgerDirection } from '../../components/LedgerDirectionToggle';
+import { TaskUpdates } from '../../components/TaskUpdates';
 import { TypeTag, PriTag } from '../../components/bits';
 import { todayStr, addDaysStr, fmtDMY, TYPE_LABEL } from '../../lib/util';
+import type { Comment } from '../../lib/types';
 
 const TYPES: { v: ItemType; label: string }[] = [
   { v: 'task', label: 'Task' },
@@ -18,7 +21,7 @@ const PRIORITIES: Priority[] = ['high', 'medium', 'low'];
 // writes through the optimistic store on change/blur, mirroring the People
 // screen's click-to-edit convention.
 export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: () => void }) {
-  const { data, update, remove, logActivity } = useCadence();
+  const { data, update, remove, insert, logActivity } = useCadence();
 
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes || '');
@@ -63,6 +66,21 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
     completed_at: !task.done ? new Date().toISOString() : null,
   });
 
+  // The person this task sits with, if any — drives the ledger direction swap.
+  const personLink = links.find((l) => l.type === 'person') || null;
+  const direction: LedgerDirection = task.type === 'waitingFor' ? 'theyOwe' : 'iOwe';
+
+  // Swap the ledger direction in place (task ↔ waitingFor), keeping the same
+  // record, and drop a system entry into the updates thread so the change is
+  // part of the task's history.
+  const swapDirection = (d: LedgerDirection) => {
+    if (d === direction || !personLink) return;
+    patch({ type: d === 'theyOwe' ? 'waitingFor' : 'task' });
+    const text = d === 'theyOwe' ? `→ ${personLink.name} owes me` : `→ I owe ${personLink.name}`;
+    insert('comments', { work_item_id: task.id, text, author: 'system' } as Partial<Comment>);
+    logActivity('swap_direction', text);
+  };
+
   const del = () => {
     if (!window.confirm('Delete this task?')) return;
     remove('work_items', task.id);
@@ -96,6 +114,13 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <TypeTag type={task.type} /><PriTag priority={task.priority} />
           {task.source && task.source !== 'you' && <span className="tag">via {task.source}</span>}
         </div>
+
+        {personLink && (
+          <div className="form-group">
+            <label>Ledger — who owes whom</label>
+            <LedgerDirectionToggle personName={personLink.name} direction={direction} onChange={swapDirection} />
+          </div>
+        )}
 
         <div className="form-row">
           <div className="form-group"><label>Type</label>
@@ -132,6 +157,8 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
             onChange={(e) => setNotes(e.target.value)}
             onBlur={() => { if (notes !== (task.notes || '')) patch({ notes }); }} />
         </div>
+
+        <TaskUpdates workItemId={task.id} createdAt={task.created_at} />
 
         <div className="task-detail-meta">
           {task.created_at && <>Created {fmtDMY(task.created_at)}</>}
