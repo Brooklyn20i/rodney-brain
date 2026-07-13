@@ -12,6 +12,7 @@ import type {
   ProgramExercise,
   Workout,
   WorkoutSet,
+  CardioSession,
 } from './types';
 import { emptyData } from './types';
 import { addDays, todayISO } from './util';
@@ -246,6 +247,40 @@ export function loadDemoData(): CadenceFitnessData {
   }
 
   // ── Cardio + sauna ─────────────────────────────────────────────────────
+  const demoRunWorkout: Workout = stamp(
+    {
+      id: id('wo'),
+      date: today,
+      program_id: program.id,
+      program_day_id: null,
+      week_number: 2,
+      name: '5km Run',
+      status: 'completed' as const,
+      started_at: `${today}T05:44:00.000Z`,
+      completed_at: `${today}T05:44:00.000Z`, // import-style row: cardio duration is the source of truth
+      notes: 'Run details logged from morning screenshots.',
+    },
+    today
+  );
+  data.workouts.push(demoRunWorkout);
+  data.cardio_sessions.push(
+    stamp(
+      {
+        id: id('cardio'),
+        date: today,
+        kind: 'run' as const,
+        duration_min: 30,
+        distance_km: 4.95,
+        avg_hr: 160,
+        calories: 437,
+        workout_id: demoRunWorkout.id,
+        notes:
+          'Morning run, 5:44am–6:14am. Pace 6:00/km. Elevation gain 133 m. Max HR 193 bpm. Activity strain 13.4. Steps 4,986. HR zones: Z5 179+ bpm 3:40 / 12%; Z4 166–178 bpm 13:21 / 47%; Z3 153–165 bpm 8:28 / 28%; Z2 139–152 bpm 1:48 / 6%; Z1 112–138 bpm 1:29 / 4%; Z0 <112 bpm 0:58 / 3%.',
+      } satisfies Omit<CardioSession, 'owner_id' | 'created_at' | 'updated_at' | 'deleted_at'>,
+      today
+    )
+  );
+
   for (const daysAgo of [2, 5, 9, 12, 16, 19]) {
     const date = addDays(today, -daysAgo);
     data.cardio_sessions.push(
