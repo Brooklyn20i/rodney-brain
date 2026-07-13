@@ -4,6 +4,13 @@ import { ScreenHeader, Card, Metric, Tag } from '../components/bits';
 import { weeklySetsByMuscle, weeklyHardSets, weekOf, workoutTonnage } from '../lib/fitnessCalc';
 import { fmtDayShort, fmtKg, fmtNum, MUSCLE_GROUP_LABEL, stripDayPrefix, todayISO } from '../lib/util';
 import { fmtDuration, parseDuration, setDuration, isBodyweightTracking, isTimedTracking, slotTracking } from '../lib/tracking';
+import {
+  cardioDetailMetrics,
+  compactCardioNote,
+  CARDIO_KIND_LABEL,
+  formatSessionSubtitle,
+  parseCardioNoteMetrics,
+} from '../lib/historySummary';
 import type { CardioSession, ExerciseTracking, Workout, WorkoutSet } from '../lib/types';
 
 // Session log + weekly volume: what actually happened, week by week.
@@ -81,10 +88,17 @@ export function History({ onMenu }: { onMenu: () => void }) {
             const sets = data.workout_sets.filter((s) => s.workout_id === w.id && s.done);
             const cardio = data.cardio_sessions.filter((c) => c.workout_id === w.id);
             const openNow = openId === w.id;
-            const mins =
+            const workoutDurationMin =
               w.started_at && w.completed_at
-                ? Math.round((new Date(w.completed_at).getTime() - new Date(w.started_at).getTime()) / 60000)
+                ? Math.max(0, Math.round((new Date(w.completed_at).getTime() - new Date(w.started_at).getTime()) / 60000))
                 : null;
+            const subtitle = formatSessionSubtitle({
+              dateLabel: fmtDayShort(w.date),
+              doneSetCount: sets.length,
+              tonnageKg: workoutTonnage(data.workout_sets, w.id),
+              cardio,
+              workoutDurationMin,
+            });
             return (
               <div key={w.id}>
                 <div className="pick-row" style={{ cursor: 'pointer' }} onClick={() => setOpenId(openNow ? null : w.id)}>
@@ -92,11 +106,7 @@ export function History({ onMenu }: { onMenu: () => void }) {
                     <div className="pick-title">
                       {stripDayPrefix(w.name || 'Session')} {w.week_number ? <Tag label={`Wk ${w.week_number}`} tone="info" /> : null}
                     </div>
-                    <div className="pick-sub">
-                      {fmtDayShort(w.date)} · {sets.length} sets · {fmtNum(workoutTonnage(data.workout_sets, w.id))}kg total
-                      {cardio.length ? ` · ${fmtNum(cardio.reduce((sum, c) => sum + Number(c.duration_min || 0), 0))} min cardio · ${fmtNum(cardio.reduce((sum, c) => sum + Number(c.distance_km || 0), 0), 1)} km` : ''}
-                      {mins !== null ? ` · ${mins} min` : ''}
-                    </div>
+                    <div className="pick-sub">{subtitle}</div>
                   </div>
                   <span style={{ color: 'var(--text3)' }}>{openNow ? '▾' : '▸'}</span>
                 </div>
@@ -296,31 +306,51 @@ function SessionDetail({
         );
       })}
       {cardio.length > 0 && (
-        <div style={{ fontSize: 13, padding: '6px 0' }}>
+        <div className="hist-cardio-block">
           <strong>Cardio</strong>
-          {cardio.map((c) => (
-            <div key={c.id} style={{ marginTop: 6 }}>
-              {!editing ? (
-                <span style={{ color: 'var(--text2)' }}>
-                  {[
-                    `${c.kind} · ${fmtNum(Number(c.duration_min || 0))} min`,
-                    Number(c.distance_km) > 0 ? `${fmtNum(Number(c.distance_km), 2)} km` : '',
-                    c.avg_hr > 0 ? `${c.avg_hr} avg HR` : '',
-                    c.calories > 0 ? `${c.calories} kcal` : '',
-                    c.notes || '',
-                  ].filter(Boolean).join(' · ')}
-                </span>
-              ) : (
-                <div className="form-grid" style={{ marginTop: 4 }}>
-                  <input type="number" inputMode="numeric" defaultValue={Number(c.duration_min) || ''} placeholder="min" onBlur={(e) => onUpdateCardio(c.id, { duration_min: Math.max(0, Number(e.target.value) || 0) })} />
-                  <input type="number" inputMode="decimal" step="0.1" defaultValue={Number(c.distance_km) || ''} placeholder="km" onBlur={(e) => onUpdateCardio(c.id, { distance_km: Math.max(0, Number(e.target.value) || 0) })} />
-                  <input type="number" inputMode="numeric" defaultValue={c.calories || ''} placeholder="kcal" onBlur={(e) => onUpdateCardio(c.id, { calories: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
-                  <input type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} placeholder="avg HR" onBlur={(e) => onUpdateCardio(c.id, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
-                  <input type="text" defaultValue={c.notes || ''} placeholder="pace / speed / incline / intervals" onBlur={(e) => onUpdateCardio(c.id, { notes: e.target.value })} />
-                </div>
-              )}
-            </div>
-          ))}
+          {cardio.map((c) => {
+            const metrics = cardioDetailMetrics(c);
+            const parsed = parseCardioNoteMetrics(c.notes || '');
+            const compactNote = compactCardioNote(c.notes || '');
+            return (
+              <div key={c.id} className="hist-cardio-session">
+                {!editing ? (
+                  <>
+                    <div className="hist-cardio-head">
+                      <span>{CARDIO_KIND_LABEL[c.kind] || 'Cardio'}</span>
+                      {c.avg_hr > 0 ? <Tag label={`${fmtNum(Number(c.avg_hr))} avg HR`} tone="info" /> : null}
+                    </div>
+                    <div className="hist-cardio-metrics">
+                      {metrics.map((metric) => (
+                        <div key={metric.label} className="hist-cardio-metric">
+                          <span>{metric.label}</span>
+                          <strong>{metric.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    {parsed.zones.length > 0 && (
+                      <div className="hist-zone-list" aria-label="Heart-rate zones">
+                        {parsed.zones.map((zone) => (
+                          <span key={zone.zone}>
+                            <strong>{zone.zone}</strong> {zone.duration} · {zone.percent}%
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {compactNote && <div className="hist-cardio-note">Note: {compactNote}</div>}
+                  </>
+                ) : (
+                  <div className="form-grid" style={{ marginTop: 4 }}>
+                    <input type="number" inputMode="numeric" defaultValue={Number(c.duration_min) || ''} placeholder="min" onBlur={(e) => onUpdateCardio(c.id, { duration_min: Math.max(0, Number(e.target.value) || 0) })} />
+                    <input type="number" inputMode="decimal" step="0.1" defaultValue={Number(c.distance_km) || ''} placeholder="km" onBlur={(e) => onUpdateCardio(c.id, { distance_km: Math.max(0, Number(e.target.value) || 0) })} />
+                    <input type="number" inputMode="numeric" defaultValue={c.calories || ''} placeholder="kcal" onBlur={(e) => onUpdateCardio(c.id, { calories: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                    <input type="number" inputMode="numeric" defaultValue={c.avg_hr || ''} placeholder="avg HR" onBlur={(e) => onUpdateCardio(c.id, { avg_hr: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+                    <input type="text" defaultValue={c.notes || ''} placeholder="pace / speed / incline / intervals" onBlur={(e) => onUpdateCardio(c.id, { notes: e.target.value })} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {editing ? (

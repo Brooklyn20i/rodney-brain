@@ -2066,6 +2066,17 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .hist-set-edit input { width: 84px; padding: 9px 6px; font-size: 16px; font-weight: 600; text-align: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; }
 .hist-set-edit input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(27,94,158,0.12); }
 .hist-set-x { color: var(--text3); font-weight: 600; }
+.hist-cardio-block { font-size: 13px; padding: 8px 0; }
+.hist-cardio-session { margin-top: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface2); }
+.hist-cardio-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-weight: 700; }
+.hist-cardio-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hist-cardio-metric { min-width: 0; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); }
+.hist-cardio-metric span { display: block; color: var(--text3); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.35px; }
+.hist-cardio-metric strong { display: block; color: var(--text); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-zone-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hist-zone-list > span { padding: 4px 7px; border-radius: 999px; background: var(--green-bg); color: var(--text2); font-size: 11px; }
+.hist-zone-list strong { color: var(--green); }
+.hist-cardio-note { color: var(--text2); font-size: 12px; line-height: 1.4; margin-top: 8px; }
 
 /* ── Recovery activity quick log ── */
 .cd-flash { background: var(--green-bg); color: var(--green); border: 1px solid rgba(26,127,55,0.25); border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 700; margin-bottom: 12px; }
@@ -2391,6 +2402,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .inv-holding-live { align-items: stretch; flex-direction: column; }
   .inv-holding-live .btn { width: 100%; justify-content: center; }
   .wo-set-row input { font-size: 16px; } /* keep >=16px so iOS doesn't zoom */
+  .hist-cardio-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hist-cardio-metric { padding: 7px; }
 }
 
 /* ── Health dashboard (workout-first redesign) ── */
