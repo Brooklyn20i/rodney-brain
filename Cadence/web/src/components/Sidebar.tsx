@@ -29,6 +29,7 @@ export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
   { section: '', items: [
     { id: 'financial:overview', label: 'Overview', icon: '◎' },
     { id: 'financial:goals', label: 'Goals & Runway', icon: '⚑' },
+    { id: 'financial:strategy', label: 'Strategy', icon: '✦' },
   ]},
   { section: 'Operate', items: [
     { id: 'financial:budget', label: 'Budget', icon: '▤' },
