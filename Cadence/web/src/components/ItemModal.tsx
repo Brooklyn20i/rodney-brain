@@ -3,6 +3,8 @@ import { useCadence } from '../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../lib/types';
 import { Modal } from './bits';
 import { EntityLinkPicker } from './EntityLinkPicker';
+import { LedgerDirectionToggle, type LedgerDirection } from './LedgerDirectionToggle';
+import { TaskUpdates } from './TaskUpdates';
 
 const TYPES: { v: ItemType; label: string }[] = [
   { v: 'task', label: 'Task' },
@@ -78,6 +80,18 @@ export function ItemModal({ existing, defaults, onClose }: {
         <input type="text" autoFocus value={title} placeholder="What needs to happen?"
           onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} />
       </div>
+      {links.some((l) => l.type === 'person') && (() => {
+        const person = links.find((l) => l.type === 'person')!;
+        const direction: LedgerDirection = type === 'waitingFor' ? 'theyOwe' : 'iOwe';
+        return (
+          <div className="form-group">
+            <label>Ledger — who owes whom</label>
+            <LedgerDirectionToggle personName={person.name} direction={direction}
+              onChange={(d) => setType(d === 'theyOwe' ? 'waitingFor' : 'task')} />
+          </div>
+        );
+      })()}
+
       <div className="form-row">
         <div className="form-group"><label>Type</label>
           <select value={type} onChange={(e) => setType(e.target.value as ItemType)}>
@@ -104,6 +118,8 @@ export function ItemModal({ existing, defaults, onClose }: {
       <div className="form-group"><label>Notes</label>
         <textarea value={notes} placeholder="Context, links, details…" onChange={(e) => setNotes(e.target.value)} />
       </div>
+
+      {existing && <TaskUpdates workItemId={existing.id} createdAt={existing.created_at} />}
     </Modal>
   );
 }

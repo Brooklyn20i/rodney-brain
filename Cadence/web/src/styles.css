@@ -1661,6 +1661,33 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .task-detail-defer { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .task-detail-meta { margin-top: 14px; font-size: 11px; color: var(--text3); }
 .task-hub-empty { align-items: center; justify-content: center; }
+
+/* ── Ledger direction toggle (I owe ↔ they owe) ── */
+.ledger-dir { display: flex; gap: 6px; }
+.ledger-dir-btn { flex: 1; padding: 9px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+.ledger-dir-btn:hover { border-color: var(--accent); }
+.ledger-dir-btn.active { background: var(--blue-bg); border-color: var(--accent); color: var(--accent); }
+
+/* ── Task updates & history thread ── */
+.task-updates { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.task-updates-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2);
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+.task-updates-compose { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.task-updates-input { width: 100%; resize: vertical; min-height: 44px; }
+.task-updates-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.task-update { border-left: 2px solid var(--border); padding: 2px 0 2px 10px; }
+.task-update-system { border-left-color: var(--accent); }
+.task-update-origin { border-left-style: dashed; }
+.task-update-head { display: flex; align-items: center; gap: 8px; }
+.task-update-author { font-size: 12px; font-weight: 700; color: var(--text2); }
+.task-update-when { font-size: 11px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.task-update-del { margin-left: auto; background: none; border: none; color: var(--text3); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; opacity: 0; transition: opacity 0.12s; }
+.task-update:hover .task-update-del { opacity: 1; }
+.task-update-del:hover { color: var(--red); }
+.task-update-text { font-size: 13px; color: var(--text); line-height: 1.45; margin-top: 2px; white-space: pre-wrap; }
 @media (max-width: 768px) {
   .task-hub-left { width: 100%; min-width: 0; }
   .task-hub .split-left { max-height: 45vh; }
