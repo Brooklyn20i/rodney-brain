@@ -14,6 +14,8 @@ import type { Note } from './types';
 import { todayStr } from './util';
 
 export const MEETING_DATES_NOTE_TITLE = '__meeting_dates__';
+// Meeting notes live in a per-person/series folder `__mtg__<id>`.
+export const MTG_FOLDER_PREFIX = '__mtg__';
 export type MeetingDates = Record<string, string>;
 
 export function readMeetingDates(
@@ -46,7 +48,7 @@ export function getUpcomingNoteId(
   dateMap: MeetingDates,
 ): string | null {
   const today = todayStr();
-  const folder = `__mtg__${personId}`;
+  const folder = `${MTG_FOLDER_PREFIX}${personId}`;
   let best: { date: string; id: string } | null = null;
 
   for (const note of allNotes) {
@@ -67,7 +69,7 @@ export function getNextMeeting(
   dateMap: MeetingDates,
 ): string | null {
   const today = todayStr();
-  const folder = `__mtg__${personId}`;
+  const folder = `${MTG_FOLDER_PREFIX}${personId}`;
   const candidates: string[] = [];
 
   for (const note of allNotes) {

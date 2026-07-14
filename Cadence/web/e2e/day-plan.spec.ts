@@ -49,24 +49,27 @@ test('pin tasks, reorder, navigate away and back, complete to prune', async ({ p
   await expect(page.getByText("★ Today's focus")).toBeHidden();
 });
 
-test('the Next-meetings strip surfaces upcoming 1:1s and deep-opens the person', async ({ page }) => {
+test('the strip shows all of a day\'s meetings, plus upcoming days, and deep-opens', async ({ page }) => {
   const seed = makeSeed();
-  // Anna's 1:1 is today; Bob's is upcoming — both must surface (not just today's).
-  const mdates = seed.notes.find((n) => n.id === 'mdates')!;
-  mdates.body = JSON.stringify({ 'note-anna': today() });
+  // TWO meetings today (Anna + Bob) and one upcoming (Cara) — all must show,
+  // grouped by day. The old strip only showed the single next meeting.
   seed.notes.push({ id: 'note-bob', title: '1:1 · Bob Ng', folder: '__mtg__pBob', body: '{}', updated_at: today() } as any);
-  const md = JSON.parse(mdates.body); md['note-bob'] = addDays(3); mdates.body = JSON.stringify(md);
+  seed.notes.push({ id: 'note-cara', title: '1:1 · Cara Diaz', folder: '__mtg__pCara', body: '{}', updated_at: today() } as any);
+  const mdates = seed.notes.find((n) => n.id === 'mdates')!;
+  mdates.body = JSON.stringify({ 'note-anna': today(), 'note-bob': today(), 'note-cara': addDays(3) });
   await page.addInitScript((s) => { (window as any).__CADENCE_E2E__ = s; }, seed);
   await page.goto('/work.html');
 
-  await expect(page.getByText('Next meetings')).toBeVisible();
-  const anna = page.locator('.today-strip-card', { hasText: 'Anna Lee' });
-  await expect(anna).toBeVisible();
-  await expect(anna.getByText('Today')).toBeVisible();
-  // Bob's meeting is days away but still shows — the fix for "meetings don't come up".
-  await expect(page.locator('.today-strip-card', { hasText: 'Bob Ng' })).toBeVisible();
+  await expect(page.getByText('Upcoming meetings')).toBeVisible();
+  // One "Today" header with both of today's meetings under it.
+  const todayGroup = page.locator('.today-strip-day', { has: page.locator('.today-strip-daylabel.now') });
+  await expect(todayGroup.locator('.today-strip-card')).toHaveCount(2);
+  await expect(todayGroup.locator('.today-strip-card', { hasText: 'Anna Lee' })).toBeVisible();
+  await expect(todayGroup.locator('.today-strip-card', { hasText: 'Bob Ng' })).toBeVisible();
+  // Cara's meeting is days away but still listed.
+  await expect(page.locator('.today-strip-card', { hasText: 'Cara Diaz' })).toBeVisible();
 
   // Tap → straight into Anna's detail (ledger first) to prep.
-  await anna.click();
+  await todayGroup.locator('.today-strip-card', { hasText: 'Anna Lee' }).click();
   await expect(page.getByText('📤 Anna owes me')).toBeVisible();
 });
