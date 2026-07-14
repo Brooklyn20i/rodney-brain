@@ -1,17 +1,18 @@
 import { useMemo } from 'react';
 import { useCadence } from '../lib/store';
-import { useMeetingDates, getNextMeeting, getUpcomingNoteId } from '../lib/meetings';
+import { useMeetingDates, getUpcomingNoteId, MTG_FOLDER_PREFIX } from '../lib/meetings';
 import { readAgendaQueue } from '../lib/agendaQueue';
 import { readPrepTopics } from '../lib/prepTopics';
 import { parseMeeting } from '../lib/meetingData';
 import { initials, todayStr, addDaysStr, fmtWeekDM } from '../lib/util';
 
-// The first thing Home answers: "what are my next meetings?" One card per
-// person / series with an upcoming date — soonest first, today highlighted —
-// each showing when it is and how ready the prep is. Tap to deep-open and prep.
-const MAX_CARDS = 8;
+// The first thing Home answers: "what's my meeting schedule?" Every scheduled
+// meeting occurrence (a dated note in a person/series folder), grouped by day —
+// so a day with three 1:1s shows all three, not just the next one. Today first,
+// each card showing prep readiness. Tap to deep-open and prep.
+const MAX_MEETINGS = 12;
 
-function dateLabel(date: string, today: string): string {
+function dayLabel(date: string, today: string): string {
   if (date === today) return 'Today';
   if (date === addDaysStr(1)) return 'Tomorrow';
   return fmtWeekDM(date); // e.g. "Tue 16/07"
@@ -21,63 +22,81 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
   const { data } = useCadence();
   const { dates } = useMeetingDates();
 
-  const cards = useMemo(() => {
+  const days = useMemo(() => {
     const today = todayStr();
-    return data.people
-      .filter((p) => !p.deleted_at)
-      .map((p) => ({ p, date: getNextMeeting(p.id, data.notes, dates) }))
-      .filter((x): x is { p: typeof x.p; date: string } => !!x.date)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.p.name.localeCompare(b.p.name))
-      .slice(0, MAX_CARDS)
-      .map(({ p, date }) => {
-        const isGroup = p.type === 'meeting_group';
-        let chip: string;
-        if (isGroup) {
-          const topics = readPrepTopics(data.notes, p.id).filter((t) => t.status !== 'covered');
-          const ready = topics.filter((t) => t.status === 'ready').length;
-          chip = topics.length ? `${ready} ready / ${topics.length} topics` : 'No topics yet';
-        } else {
-          const noteId = getUpcomingNoteId(p.id, data.notes, dates);
-          const note = noteId ? data.notes.find((n) => n.id === noteId) : undefined;
-          const agenda = note ? parseMeeting(note.body || '').data.agenda.filter((a) => a.status !== 'covered').length : 0;
-          const queued = readAgendaQueue(data.notes, p.id).length;
-          chip = agenda + queued ? `${agenda} agenda + ${queued} queued` : 'No agenda yet';
-        }
-        return { person: p, isGroup, chip, date, label: dateLabel(date, today), isToday: date === today };
-      });
-  }, [data.people, data.notes, dates]);
 
-  // Only worth a section once there are people/series to schedule against.
+    // Every upcoming meeting occurrence — one per dated meeting note, so
+    // multiple meetings on the same day (or with the same person) all appear.
+    const occurrences = data.notes
+      .filter((n) => !n.deleted_at && (n.folder || '').startsWith(MTG_FOLDER_PREFIX))
+      .map((note) => {
+        const date = dates[note.id];
+        const personId = (note.folder || '').slice(MTG_FOLDER_PREFIX.length);
+        const person = data.people.find((p) => p.id === personId && !p.deleted_at);
+        return { note, date, person };
+      })
+      .filter((o): o is { note: typeof o.note; date: string; person: NonNullable<typeof o.person> } =>
+        !!o.date && o.date >= today && !!o.person)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.person.name.localeCompare(b.person.name))
+      .slice(0, MAX_MEETINGS);
+
+    const cards = occurrences.map(({ note, date, person }) => {
+      const isGroup = person.type === 'meeting_group';
+      let chip: string;
+      if (isGroup) {
+        const topics = readPrepTopics(data.notes, person.id).filter((t) => t.status !== 'covered');
+        const ready = topics.filter((t) => t.status === 'ready').length;
+        chip = topics.length ? `${ready} ready / ${topics.length} topics` : 'No topics yet';
+      } else {
+        const agenda = parseMeeting(note.body || '').data.agenda.filter((a) => a.status !== 'covered').length;
+        // Queued items merge into the person's soonest 1:1 — only badge that one.
+        const isUpcoming = getUpcomingNoteId(person.id, data.notes, dates) === note.id;
+        const queued = isUpcoming ? readAgendaQueue(data.notes, person.id).length : 0;
+        chip = agenda + queued ? `${agenda} agenda${queued ? ` + ${queued} queued` : ''}` : 'No agenda yet';
+      }
+      return { note, person, isGroup, date, chip };
+    });
+
+    // Group into day buckets, preserving date order.
+    const buckets: { date: string; label: string; isToday: boolean; cards: typeof cards }[] = [];
+    for (const c of cards) {
+      let g = buckets.find((b) => b.date === c.date);
+      if (!g) { g = { date: c.date, label: dayLabel(c.date, today), isToday: c.date === today, cards: [] }; buckets.push(g); }
+      g.cards.push(c);
+    }
+    return buckets;
+  }, [data.notes, data.people, dates]);
+
   const hasPeople = data.people.some((p) => !p.deleted_at);
-  if (!hasPeople && cards.length === 0) return null;
+  if (!hasPeople && days.length === 0) return null;
 
   return (
-    <div className="today-strip" aria-label="Next meetings">
-      <div className="today-strip-label">Next meetings</div>
-      {cards.length === 0 ? (
+    <div className="today-strip" aria-label="Upcoming meetings">
+      <div className="today-strip-label">Upcoming meetings</div>
+      {days.length === 0 ? (
         <div className="today-strip-empty">
           No upcoming meetings. Set a date on a 1:1 in People or Meetings and it shows here.
         </div>
-      ) : (
-        <div className="today-strip-cards">
-          {cards.map(({ person: p, isGroup, chip, label, isToday }) => (
-            <button
-              key={p.id}
-              className={`today-strip-card${isToday ? ' today-strip-card-now' : ''}`}
-              onClick={() => onNavigate?.(isGroup ? 'meetings' : 'people', p.id)}
-            >
-              <span className="avatar avatar-sm" style={{ background: p.color || '#3A7CA5' }}>
-                {isGroup ? '▣' : initials(p.name)}
-              </span>
-              <span className="today-strip-main">
-                <span className="today-strip-name">{p.name}</span>
-                <span className={`today-strip-date${isToday ? ' now' : ''}`}>{label}</span>
-              </span>
-              <span className="today-strip-chip">{chip}</span>
-            </button>
-          ))}
+      ) : days.map((day) => (
+        <div key={day.date} className="today-strip-day">
+          <div className={`today-strip-daylabel${day.isToday ? ' now' : ''}`}>{day.label}</div>
+          <div className="today-strip-cards">
+            {day.cards.map((c) => (
+              <button
+                key={c.note.id}
+                className={`today-strip-card${day.isToday ? ' today-strip-card-now' : ''}`}
+                onClick={() => onNavigate?.(c.isGroup ? 'meetings' : 'people', c.person.id)}
+              >
+                <span className="avatar avatar-sm" style={{ background: c.person.color || '#3A7CA5' }}>
+                  {c.isGroup ? '▣' : initials(c.person.name)}
+                </span>
+                <span className="today-strip-name">{c.person.name}</span>
+                <span className="today-strip-chip">{c.chip}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

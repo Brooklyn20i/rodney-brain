@@ -155,35 +155,55 @@ describe('Home workflow', () => {
     });
   });
 
-  it('shows the next meetings — today and upcoming — soonest first, and deep-opens them', () => {
+  it('shows ALL of a day\'s meetings grouped by day, today and upcoming', () => {
     const onNavigate = vi.fn();
-    // Anna meets today; Bob meets in three days. Both must show (the old strip
-    // only surfaced today's, which is the bug being fixed).
-    h.dates = { nA: '2026-06-20', nB: '2026-06-23' }; // fake clock is 2026-06-20
+    // Two meetings TODAY (Anna + Bob) and one in three days (Cara). The old
+    // strip collapsed to one-per-person / today-only — the bug being fixed.
+    h.dates = { nA: '2026-06-20', nB: '2026-06-20', nC: '2026-06-23' }; // clock is 2026-06-20
     setStore({ data: {
       people: [
         person({ id: 'pA', name: 'Anna' }),
         person({ id: 'pB', name: 'Bob' }),
+        person({ id: 'pC', name: 'Cara' }),
       ],
       notes: [
         { id: 'nA', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
         { id: 'nB', title: '1:1 · Bob', folder: '__mtg__pB', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        { id: 'nC', title: '1:1 · Cara', folder: '__mtg__pC', body: '{}', created_at: '', updated_at: '', deleted_at: null },
       ],
     }});
     render(<Home onMenu={() => {}} onNavigate={onNavigate} />);
-    expect(screen.getByText('Next meetings')).toBeInTheDocument();
-    // The strip's own "Today" date chip (distinct from the stat-tile label).
-    expect(document.querySelector('.today-strip-date.now')?.textContent).toBe('Today');
+    expect(screen.getByText('Upcoming meetings')).toBeInTheDocument();
+    // A single "Today" day header, with BOTH of today's meetings under it.
+    const todayHdr = document.querySelector('.today-strip-daylabel.now');
+    expect(todayHdr?.textContent).toBe('Today');
+    const todayCards = todayHdr?.nextElementSibling?.querySelectorAll('.today-strip-card');
+    expect(todayCards?.length).toBe(2);
     expect(screen.getByText('Anna')).toBeInTheDocument();
-    expect(screen.getByText('Bob')).toBeInTheDocument();        // upcoming, not today — still shown
-    fireEvent.click(screen.getByRole('button', { name: /Bob/ }));
-    expect(onNavigate).toHaveBeenCalledWith('people', 'pB');
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    // Cara's is days away but still listed under its own day.
+    expect(screen.getByText('Cara')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Cara/ }));
+    expect(onNavigate).toHaveBeenCalledWith('people', 'pC');
+  });
+
+  it('lists two meetings with the SAME person on the same day as two cards', () => {
+    h.dates = { m1: '2026-06-20', m2: '2026-06-20' };
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' })],
+      notes: [
+        { id: 'm1', title: 'Standup', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        { id: 'm2', title: 'Review', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+      ],
+    }});
+    render(<Home onMenu={() => {}} />);
+    expect(document.querySelectorAll('.today-strip-card').length).toBe(2);
   });
 
   it('shows a discoverable empty hint when there are people but no scheduled meetings', () => {
     setStore({ data: { people: [person({ id: 'pA', name: 'Anna' })] } });
     render(<Home onMenu={() => {}} />);
-    expect(screen.getByText('Next meetings')).toBeInTheDocument();
+    expect(screen.getByText('Upcoming meetings')).toBeInTheDocument();
     expect(screen.getByText(/No upcoming meetings/)).toBeInTheDocument();
   });
 });
