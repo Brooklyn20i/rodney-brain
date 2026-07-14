@@ -1,15 +1,18 @@
 import { useMemo } from 'react';
 import { useCadence } from '../lib/store';
-import { useMeetingDates, getUpcomingNoteId, MTG_FOLDER_PREFIX } from '../lib/meetings';
+import { getUpcomingNoteId, readMergedMeetingDates, MTG_FOLDER_PREFIX } from '../lib/meetings';
 import { readAgendaQueue } from '../lib/agendaQueue';
 import { readPrepTopics } from '../lib/prepTopics';
 import { parseMeeting } from '../lib/meetingData';
+import type { Note, Person } from '../lib/types';
 import { initials, todayStr, addDaysStr, fmtWeekDM } from '../lib/util';
 
 // The first thing Home answers: "what's my meeting schedule?" Every scheduled
-// meeting occurrence (a dated note in a person/series folder), grouped by day —
-// so a day with three 1:1s shows all three, not just the next one. Today first,
-// each card showing prep readiness. Tap to deep-open and prep.
+// meeting occurrence, grouped by day — today first — so a day with three 1:1s
+// shows all three. Robust about where the date is stored: a date filed against
+// the meeting note (current) OR against the person (older format) both surface,
+// and dates split across duplicate date-records are merged back in. Tap a card
+// to deep-open and prep.
 const MAX_MEETINGS = 12;
 
 function dayLabel(date: string, today: string): string {
@@ -20,27 +23,47 @@ function dayLabel(date: string, today: string): string {
 
 export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: string | null) => void }) {
   const { data } = useCadence();
-  const { dates } = useMeetingDates();
 
   const days = useMemo(() => {
     const today = todayStr();
+    // Merge every copy of the meeting-dates record so nothing is dropped.
+    const dates = readMergedMeetingDates(data.notes);
+    const peopleById = new Map(data.people.filter((p) => !p.deleted_at).map((p) => [p.id, p] as const));
 
-    // Every upcoming meeting occurrence — one per dated meeting note, so
-    // multiple meetings on the same day (or with the same person) all appear.
-    const occurrences = data.notes
-      .filter((n) => !n.deleted_at && (n.folder || '').startsWith(MTG_FOLDER_PREFIX))
-      .map((note) => {
-        const date = dates[note.id];
-        const personId = (note.folder || '').slice(MTG_FOLDER_PREFIX.length);
-        const person = data.people.find((p) => p.id === personId && !p.deleted_at);
-        return { note, date, person };
-      })
-      .filter((o): o is { note: typeof o.note; date: string; person: NonNullable<typeof o.person> } =>
-        !!o.date && o.date >= today && !!o.person)
+    type Occ = { key: string; person: Person; note?: Note; date: string };
+    const occs: Occ[] = [];
+    // Person+date pairs covered by a real meeting note — so a legacy
+    // person-filed date for the SAME meeting isn't shown twice. Two distinct
+    // notes for one person on one day are two real meetings and both stay.
+    const noteCovered = new Set<string>();
+
+    // 1. Dates filed against a specific meeting note (current format).
+    for (const note of data.notes) {
+      if (note.deleted_at || !(note.folder || '').startsWith(MTG_FOLDER_PREFIX)) continue;
+      const date = dates[note.id];
+      if (!date || date < today) continue;
+      const person = peopleById.get((note.folder || '').slice(MTG_FOLDER_PREFIX.length));
+      if (!person) continue;
+      noteCovered.add(`${person.id}|${date}`);
+      occs.push({ key: note.id, person, note, date });
+    }
+
+    // 2. Dates filed against the person directly (older format the reader used
+    //    to ignore). This is the most likely reason established meetings went
+    //    missing while only a freshly-dated one survived. Skip if a note already
+    //    represents that person's meeting on that day.
+    for (const [personId, person] of peopleById) {
+      const date = dates[personId];
+      if (!date || date < today) continue;
+      if (noteCovered.has(`${personId}|${date}`)) continue;
+      occs.push({ key: `${personId}@${date}`, person, date });
+    }
+
+    const ordered = occs
       .sort((a, b) => a.date.localeCompare(b.date) || a.person.name.localeCompare(b.person.name))
       .slice(0, MAX_MEETINGS);
 
-    const cards = occurrences.map(({ note, date, person }) => {
+    const cards = ordered.map(({ key, person, note, date }) => {
       const isGroup = person.type === 'meeting_group';
       let chip: string;
       if (isGroup) {
@@ -48,16 +71,14 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
         const ready = topics.filter((t) => t.status === 'ready').length;
         chip = topics.length ? `${ready} ready / ${topics.length} topics` : 'No topics yet';
       } else {
-        const agenda = parseMeeting(note.body || '').data.agenda.filter((a) => a.status !== 'covered').length;
-        // Queued items merge into the person's soonest 1:1 — only badge that one.
-        const isUpcoming = getUpcomingNoteId(person.id, data.notes, dates) === note.id;
-        const queued = isUpcoming ? readAgendaQueue(data.notes, person.id).length : 0;
+        const agenda = note ? parseMeeting(note.body || '').data.agenda.filter((a) => a.status !== 'covered').length : 0;
+        const isUpcoming = getUpcomingNoteId(person.id, data.notes, dates) === note?.id;
+        const queued = (!note || isUpcoming) ? readAgendaQueue(data.notes, person.id).length : 0;
         chip = agenda + queued ? `${agenda} agenda${queued ? ` + ${queued} queued` : ''}` : 'No agenda yet';
       }
-      return { note, person, isGroup, date, chip };
+      return { key, person, isGroup, date, chip };
     });
 
-    // Group into day buckets, preserving date order.
     const buckets: { date: string; label: string; isToday: boolean; cards: typeof cards }[] = [];
     for (const c of cards) {
       let g = buckets.find((b) => b.date === c.date);
@@ -65,7 +86,7 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
       g.cards.push(c);
     }
     return buckets;
-  }, [data.notes, data.people, dates]);
+  }, [data.notes, data.people]);
 
   const hasPeople = data.people.some((p) => !p.deleted_at);
   if (!hasPeople && days.length === 0) return null;
@@ -83,7 +104,7 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
           <div className="today-strip-cards">
             {day.cards.map((c) => (
               <button
-                key={c.note.id}
+                key={c.key}
                 className={`today-strip-card${day.isToday ? ' today-strip-card-now' : ''}`}
                 onClick={() => onNavigate?.(c.isGroup ? 'meetings' : 'people', c.person.id)}
               >

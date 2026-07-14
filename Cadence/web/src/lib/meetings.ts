@@ -38,6 +38,32 @@ export function readMeetingDates(
   return {};
 }
 
+// Recovery-oriented read: merge EVERY `__meeting_dates__` record (oldest →
+// newest, newest value wins per key) instead of only the newest one. A second
+// copy of the record — created by an offline save or a two-device race — would
+// otherwise hide every meeting date it doesn't itself contain. Used by the
+// Home strip so no scheduled meeting silently disappears; the write path
+// (useMeetingDates) still targets the single newest record.
+export function readMergedMeetingDates(
+  notes: { title: string; body: string; updated_at?: string; deleted_at?: string | null }[],
+): MeetingDates {
+  const records = notes
+    .filter((n) => n.title === MEETING_DATES_NOTE_TITLE && !n.deleted_at)
+    .sort((a, b) => (a.updated_at || '').localeCompare(b.updated_at || '')); // oldest first
+  const out: MeetingDates = {};
+  for (const note of records) {
+    try {
+      const parsed = JSON.parse(note.body || '{}');
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string' && v) out[k] = v; // newer record overwrites
+        }
+      }
+    } catch { /* skip unparseable copy */ }
+  }
+  return out;
+}
+
 // Returns the note ID of the nearest upcoming meeting for a person, i.e. the
 // note whose meeting date is the smallest date >= today. This is the correct
 // target for task routing — tasks/agenda items meant for "the next 1:1" should

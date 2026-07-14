@@ -155,11 +155,16 @@ describe('Home workflow', () => {
     });
   });
 
+  // The strip reads meeting dates from the `__meeting_dates__` note(s), so seed
+  // one (or more, to exercise the merge/recovery path).
+  const mdatesNote = (map: Record<string, string>, over: any = {}) =>
+    ({ id: 'mdates', title: '__meeting_dates__', body: JSON.stringify(map), folder: '',
+       created_at: '', updated_at: '2026-06-01', deleted_at: null, ...over });
+
   it('shows ALL of a day\'s meetings grouped by day, today and upcoming', () => {
     const onNavigate = vi.fn();
     // Two meetings TODAY (Anna + Bob) and one in three days (Cara). The old
     // strip collapsed to one-per-person / today-only — the bug being fixed.
-    h.dates = { nA: '2026-06-20', nB: '2026-06-20', nC: '2026-06-23' }; // clock is 2026-06-20
     setStore({ data: {
       people: [
         person({ id: 'pA', name: 'Anna' }),
@@ -170,6 +175,7 @@ describe('Home workflow', () => {
         { id: 'nA', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
         { id: 'nB', title: '1:1 · Bob', folder: '__mtg__pB', body: '{}', created_at: '', updated_at: '', deleted_at: null },
         { id: 'nC', title: '1:1 · Cara', folder: '__mtg__pC', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        mdatesNote({ nA: '2026-06-20', nB: '2026-06-20', nC: '2026-06-23' }), // clock is 2026-06-20
       ],
     }});
     render(<Home onMenu={() => {}} onNavigate={onNavigate} />);
@@ -188,16 +194,45 @@ describe('Home workflow', () => {
   });
 
   it('lists two meetings with the SAME person on the same day as two cards', () => {
-    h.dates = { m1: '2026-06-20', m2: '2026-06-20' };
     setStore({ data: {
       people: [person({ id: 'pA', name: 'Anna' })],
       notes: [
         { id: 'm1', title: 'Standup', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
         { id: 'm2', title: 'Review', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        mdatesNote({ m1: '2026-06-20', m2: '2026-06-20' }),
       ],
     }});
     render(<Home onMenu={() => {}} />);
     expect(document.querySelectorAll('.today-strip-card').length).toBe(2);
+  });
+
+  it('RECOVERS a meeting whose date is filed against the person (older format)', () => {
+    // No meeting note is dated; the date sits under the person id directly.
+    // The old reader ignored this, hiding the meeting — now it shows.
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' })],
+      notes: [ mdatesNote({ pA: '2026-06-20' }) ],
+    }});
+    render(<Home onMenu={() => {}} />);
+    expect(screen.getByText('Anna')).toBeInTheDocument();
+    expect(document.querySelector('.today-strip-daylabel.now')?.textContent).toBe('Today');
+  });
+
+  it('RECOVERS dates split across two date-records (merge, newest wins)', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' }), person({ id: 'pB', name: 'Bob' })],
+      notes: [
+        { id: 'nA', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        { id: 'nB', title: '1:1 · Bob', folder: '__mtg__pB', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        // Older record has Anna; a newer duplicate has only Bob. The old reader
+        // took only the newest and lost Anna. Merge keeps both.
+        mdatesNote({ nA: '2026-06-20' }, { id: 'old', updated_at: '2026-05-01' }),
+        mdatesNote({ nB: '2026-06-20' }, { id: 'new', updated_at: '2026-06-05' }),
+      ],
+    }});
+    render(<Home onMenu={() => {}} />);
+    expect(screen.getByText('Anna')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
   });
 
   it('shows a discoverable empty hint when there are people but no scheduled meetings', () => {
