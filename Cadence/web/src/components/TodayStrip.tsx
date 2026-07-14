@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
 import { useCadence } from '../lib/store';
-import { getUpcomingNoteId, readMergedMeetingDates, MTG_FOLDER_PREFIX } from '../lib/meetings';
+import type { CadenceData } from '../lib/types';
+import { readMergedMeetingDates, MTG_FOLDER_PREFIX } from '../lib/meetings';
 import { readAgendaQueue } from '../lib/agendaQueue';
 import { readPrepTopics } from '../lib/prepTopics';
-import { parseMeeting } from '../lib/meetingData';
+import { getPersonLedger } from '../lib/selectors';
 import type { Note, Person } from '../lib/types';
 import { initials, todayStr, addDaysStr, fmtWeekDM } from '../lib/util';
 
@@ -21,10 +21,9 @@ function dayLabel(date: string, today: string): string {
   return fmtWeekDM(date); // e.g. "Tue 16/07"
 }
 
-export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: string | null) => void }) {
-  const { data } = useCadence();
-
-  const days = useMemo(() => {
+// Pure: build the day buckets from store data (the React Compiler memoizes the
+// component render, so no manual useMemo is needed here).
+function buildDays(data: Pick<CadenceData, 'notes' | 'people' | 'work_items'>) {
     const today = todayStr();
     // Merge every copy of the meeting-dates record so nothing is dropped.
     const dates = readMergedMeetingDates(data.notes);
@@ -63,7 +62,7 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
       .sort((a, b) => a.date.localeCompare(b.date) || a.person.name.localeCompare(b.person.name))
       .slice(0, MAX_MEETINGS);
 
-    const cards = ordered.map(({ key, person, note, date }) => {
+    const cards = ordered.map(({ key, person, date }) => {
       const isGroup = person.type === 'meeting_group';
       let chip: string;
       if (isGroup) {
@@ -71,10 +70,13 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
         const ready = topics.filter((t) => t.status === 'ready').length;
         chip = topics.length ? `${ready} ready / ${topics.length} topics` : 'No topics yet';
       } else {
-        const agenda = note ? parseMeeting(note.body || '').data.agenda.filter((a) => a.status !== 'covered').length : 0;
-        const isUpcoming = getUpcomingNoteId(person.id, data.notes, dates) === note?.id;
-        const queued = (!note || isUpcoming) ? readAgendaQueue(data.notes, person.id).length : 0;
-        chip = agenda + queued ? `${agenda} agenda${queued ? ` + ${queued} queued` : ''}` : 'No agenda yet';
+        // 1:1 prep = the ledger + the to-raise list; the meeting itself is a doc.
+        const ledger = getPersonLedger(data.work_items, person.id);
+        const open = ledger.iOwe.length + ledger.theyOwe.length;
+        const toRaise = readAgendaQueue(data.notes, person.id).length;
+        chip = open + toRaise
+          ? `${open} open${toRaise ? ` · ${toRaise} to raise` : ''}`
+          : 'All square';
       }
       return { key, person, isGroup, date, chip };
     });
@@ -86,8 +88,11 @@ export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: 
       g.cards.push(c);
     }
     return buckets;
-  }, [data.notes, data.people]);
+}
 
+export function TodayStrip({ onNavigate }: { onNavigate?: (screen: string, id?: string | null) => void }) {
+  const { data } = useCadence();
+  const days = buildDays(data);
   const hasPeople = data.people.some((p) => !p.deleted_at);
   if (!hasPeople && days.length === 0) return null;
 

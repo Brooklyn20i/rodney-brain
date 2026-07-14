@@ -3,9 +3,7 @@
 // meeting action into a work_item always carries its due date and owner, and
 // that the "filed vs needs-triage" rule is applied consistently everywhere.
 
-import type { Note, WorkItem, RelatedEntity } from './types';
-import type { ActionItem } from './meetingData';
-import { parseMeeting } from './meetingData';
+import type { WorkItem, RelatedEntity } from './types';
 
 export const MTG_FOLDER_PREFIX = '__mtg__';
 
@@ -98,76 +96,3 @@ export const isUserTask = (w: Pick<WorkItem, 'done' | 'source'>): boolean =>
 // person/project no longer yanks the note straight into that folder.
 export const isFiledTask = (w: Pick<WorkItem, 'done' | 'source' | 'inboxed'>): boolean =>
   isUserTask(w) && !w.inboxed;
-
-// Build the work_item payload for a meeting action — the auto-split rule of
-// the ledger model:
-//   owner 'me'   → type 'task' (something I owe; person-linked when the
-//                  meeting/target names one, so it shows in their I-owe ledger)
-//   owner 'them' → type 'waitingFor' (they owe me → their owes-me ledger);
-//                  with no resolvable person it lands in the triage Inbox,
-//                  where the wizard can create the person.
-// An explicit target wins over the action's own owner_person_id. The action's
-// due date is always preserved. Pass `noteId` to record structured provenance
-// via a related_entities note link (the existing note↔work_item idiom).
-export function buildTaskFromAction(
-  action: ActionItem,
-  meetingTitle: string,
-  target?: PushTarget | null,
-  noteId?: string | null,
-): Partial<WorkItem> {
-  const theirs = action.owner === 'them';
-  const personId =
-    target?.type === 'person' ? target.id : action.owner_person_id || null;
-  const personName =
-    target?.type === 'person' ? target.name : action.owner_label || '';
-  const projectId = target?.type === 'project' ? target.id : null;
-
-  const related: RelatedEntity[] = [];
-  if (personId) related.push({ type: 'person', id: personId, name: personName });
-  if (projectId && target) related.push({ type: 'project', id: projectId, name: target.name });
-  if (noteId) related.push({ type: 'note', id: noteId, name: meetingTitle });
-
-  const payload: Partial<WorkItem> = {
-    title: action.title,
-    type: theirs ? 'waitingFor' : 'task',
-    priority: 'medium',
-    due_date: action.due || null,
-    person_id: personId,
-    project_id: projectId,
-    notes: `Action from: ${meetingTitle}`,
-    // Mine go straight to my task list. Theirs need a person for the ledger —
-    // without one they wait in the Inbox for triage (unless a project claims
-    // them, which files them like before).
-    inboxed: theirs ? !personId : !(personId || projectId) && !noteId,
-    source: 'meeting',
-    ...(related.length ? { related_entities: related } : {}),
-  };
-  return payload;
-}
-
-export type OpenMeetingAction = ActionItem & {
-  noteId: string;
-  noteTitle: string;
-  folderOwnerId: string; // the person/group id the meeting belongs to
-};
-
-// Every open (not done, not yet pushed) action across all meeting notes — the
-// raw material for the "From meetings — needs filing" group in the Tasks hub.
-export function collectOpenMeetingActions(notes: Note[]): OpenMeetingAction[] {
-  const out: OpenMeetingAction[] = [];
-  for (const note of notes) {
-    if (!note.folder || !note.folder.startsWith(MTG_FOLDER_PREFIX)) continue;
-    const { data } = parseMeeting(note.body);
-    for (const a of data.actions) {
-      if (!a.done && !a.pushed && a.title.trim()) {
-        out.push({
-          ...a,
-          noteId: note.id,
-          noteTitle: note.title,
-          folderOwnerId: note.folder.slice(MTG_FOLDER_PREFIX.length),
-        });
-      }
-    }
-  }
-  return out;
-}

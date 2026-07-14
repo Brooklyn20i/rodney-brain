@@ -1,10 +1,9 @@
 import { test, expect, type Page } from './fixtures';
 import { makeSeed } from './seed';
 
-// Big-meeting topics with a work trail: create a topic on the CLT series, add
-// a prep task (a REAL task that appears on Home), mark the topic ready, put it
-// on a new occurrence's agenda, cover it in the meeting — the series topic
-// resolves itself to covered.
+// Big-meeting topics with a work trail, decoupled from any agenda machinery:
+// build a topic on the CLT series, give it a prep task (a REAL task on Home),
+// mark it ready, and cover it from inside the meeting document's Topics panel.
 
 test.beforeEach(async ({ page }) => {
   const seed = makeSeed();
@@ -16,7 +15,7 @@ async function navTo(page: Page, label: string) {
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
 }
 
-test('topic → prep task on Home → agenda → covered sync', async ({ page }) => {
+test('topic → prep task on Home → ready → covered from the meeting doc', async ({ page }) => {
   // 1. Create a topic on the CLT series.
   await navTo(page, 'Meetings');
   await page.locator('.person-item', { hasText: 'CLT' }).click();
@@ -41,18 +40,19 @@ test('topic → prep task on Home → agenda → covered sync', async ({ page })
   await page.locator('.topic-status-chip').click(); // building → ready
   await expect(page.locator('.topic-status-chip')).toHaveText('Ready');
 
-  // 4. Create today's occurrence and put the ready topic on its agenda.
+  // 4. Create today's occurrence — a document, with the series topics one
+  //    toggle away for prep and covering.
   await page.getByRole('button', { name: /^Meetings/ }).click();
   await page.getByRole('button', { name: '+ New Meeting' }).click();
+  await expect(page.locator('.mtg-modal-doc')).toBeVisible();
   await page.getByRole('button', { name: 'Topics ↓' }).click();
-  await page.getByRole('button', { name: '+ Agenda' }).click();
-  await expect(page.locator('.agenda-topic-input[value="Pricing strategy update"]')).toBeVisible();
-  // Hide the topics panel again so it can't intercept the status buttons.
-  await page.getByRole('button', { name: 'Topics ↓' }).click();
+  await expect(page.locator('.mtg-import-panel .prep-topic-title')).toHaveValue('Pricing strategy update');
 
-  // 5. Cover it in the meeting and close — the series topic syncs to covered.
-  await page.getByRole('button', { name: '✅ Covered' }).first().click();
+  // 5. Cover it in the meeting: ready → covered on the topic's own status chip.
+  await page.locator('.mtg-import-panel .topic-status-chip').click();
   await page.getByRole('button', { name: 'Save & Close' }).first().click();
+
+  // The series page shows it resolved.
   await page.getByRole('button', { name: /^Topics/ }).click();
   await expect(page.getByText('✓ Covered (1)')).toBeVisible();
 });

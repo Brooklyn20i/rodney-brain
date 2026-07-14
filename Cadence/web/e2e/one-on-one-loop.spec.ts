@@ -1,9 +1,10 @@
 import { test, expect, type Page } from './fixtures';
 import { makeSeed } from './seed';
 
-// The full 1:1 loop: raise a task at the next 1:1 from Home → it queues on the
-// person → opens onto the upcoming meeting's agenda → actions agreed in the
-// meeting auto-split on close (mine → Home, theirs → their owes-me ledger).
+// The v3 1:1 loop — the ledger IS the meeting system:
+// raise a task from Home → it appears on the person's "To raise" list →
+// in the 1:1 you work the two-way ledger, flipping who owes whom in place
+// (one tap, logged to the task's history) → tick raised items as covered.
 
 test.beforeEach(async ({ page }) => {
   const seed = makeSeed();
@@ -15,36 +16,38 @@ async function navTo(page: Page, label: string) {
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
 }
 
-test('raise → queue → agenda merge → auto-split into ledger and Home', async ({ page }) => {
+test('raise → to-raise list → ledger flip in the 1:1 → Home Waiting', async ({ page }) => {
   // 1. Raise Anna's overdue task at her next 1:1, straight from Home's detail panel.
   await page.getByText('Overdue review').click();
   await page.locator('.task-detail').getByRole('button', { name: /1:1/ }).click();
   await expect(page.locator('.task-detail').getByText('✓ Queued')).toBeVisible();
 
-  // 2. It waits in Anna's "Queued for next 1:1".
+  // 2. It waits on Anna's "To raise at next 1:1" prep list, above her ledger.
   await navTo(page, 'People');
   await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
-  await expect(page.getByText('Queued for next 1:1')).toBeVisible();
+  await expect(page.getByText('To raise at next 1:1')).toBeVisible();
+  await expect(page.locator('.work-item-row', { hasText: 'Overdue review' })).toBeVisible();
 
-  // 3. The Meetings tab auto-opens the upcoming 1:1 — the queue merges into
-  //    its agenda on open.
-  await page.getByRole('button', { name: /^Meetings/ }).click();
-  await expect(page.locator('.mtg-agenda-section input[value="Overdue review"]')).toBeVisible();
+  // 3. In the 1:1: the task sits on my side of the ledger ("I owe Anna").
+  const iOwe = page.locator('.ledger-section', { hasText: 'I owe Anna' });
+  await expect(iOwe.locator('.topic-card', { hasText: 'Overdue review' })).toBeVisible();
 
-  // 4. …agree two actions in the meeting: one mine, one Anna's.
-  await page.getByRole('button', { name: '+ For me' }).click();
-  await page.locator('.action-title-input').last().fill('Draft the summary');
-  await page.getByRole('button', { name: '+ For Anna' }).click();
-  await page.locator('.action-title-input').last().fill('Send corrected numbers');
+  // 4. We agree Anna now owes me the correction — one tap ⇄ flips it in place.
+  await iOwe.locator('.topic-card', { hasText: 'Overdue review' }).locator('.topic-flip').click();
+  const owesMe = page.locator('.ledger-section', { hasText: 'Anna owes me' });
+  await expect(owesMe.locator('.topic-card', { hasText: 'Overdue review' })).toBeVisible();
 
-  // 5. Save & Close auto-splits with zero filing.
-  await page.getByRole('button', { name: 'Save & Close' }).first().click();
+  // The handoff is on the task's history.
+  await owesMe.locator('.topic-card', { hasText: 'Overdue review' }).locator('.topic-body').click();
+  await expect(page.locator('.task-update-text', { hasText: '→ Anna Lee owes me' })).toBeVisible();
+  await page.locator('.modal-close').click();
 
-  // Anna's action landed in her owes-me ledger…
-  await page.getByRole('button', { name: /^Ledger/ }).click();
-  await expect(page.getByText('📤 Anna owes me')).toBeVisible();
-  await expect(page.locator('.topic-card', { hasText: 'Send corrected numbers' })).toBeVisible();
-  // …and mine is in my Home list.
+  // 5. Raised item covered — tick it off the prep list.
+  await page.locator('.work-item-row', { hasText: 'Overdue review' }).getByRole('checkbox').click();
+  await expect(page.getByText('To raise at next 1:1')).toBeHidden();
+
+  // 6. Same record now sits in Home's Waiting lane — no new task was created.
   await navTo(page, 'Home');
-  await expect(page.getByText('Draft the summary')).toBeVisible();
+  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
+  await expect(page.getByText('Overdue review')).toBeVisible();
 });
