@@ -155,31 +155,36 @@ describe('Home workflow', () => {
     });
   });
 
-  it('the Today strip shows meetings happening today and deep-opens them', () => {
+  it('shows the next meetings — today and upcoming — soonest first, and deep-opens them', () => {
     const onNavigate = vi.fn();
-    h.dates = { n1: '2026-06-20' }; // fake clock is 2026-06-20
+    // Anna meets today; Bob meets in three days. Both must show (the old strip
+    // only surfaced today's, which is the bug being fixed).
+    h.dates = { nA: '2026-06-20', nB: '2026-06-23' }; // fake clock is 2026-06-20
     setStore({ data: {
       people: [
         person({ id: 'pA', name: 'Anna' }),
-        person({ id: 'gC', name: 'CLT', type: 'meeting_group' }),
+        person({ id: 'pB', name: 'Bob' }),
       ],
       notes: [
-        { id: 'n1', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        { id: 'nA', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        { id: 'nB', title: '1:1 · Bob', folder: '__mtg__pB', body: '{}', created_at: '', updated_at: '', deleted_at: null },
       ],
     }});
     render(<Home onMenu={() => {}} onNavigate={onNavigate} />);
-    expect(screen.getByText('Meetings today')).toBeInTheDocument();
-    // Anna meets today; CLT (no dated note) does not.
-    expect(screen.getByText('No agenda yet')).toBeInTheDocument();
-    expect(screen.queryByText('CLT')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Anna/ }));
-    expect(onNavigate).toHaveBeenCalledWith('people', 'pA');
+    expect(screen.getByText('Next meetings')).toBeInTheDocument();
+    // The strip's own "Today" date chip (distinct from the stat-tile label).
+    expect(document.querySelector('.today-strip-date.now')?.textContent).toBe('Today');
+    expect(screen.getByText('Anna')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();        // upcoming, not today — still shown
+    fireEvent.click(screen.getByRole('button', { name: /Bob/ }));
+    expect(onNavigate).toHaveBeenCalledWith('people', 'pB');
   });
 
-  it('hides the Today strip when nothing meets today', () => {
+  it('shows a discoverable empty hint when there are people but no scheduled meetings', () => {
     setStore({ data: { people: [person({ id: 'pA', name: 'Anna' })] } });
     render(<Home onMenu={() => {}} />);
-    expect(screen.queryByText('Meetings today')).not.toBeInTheDocument();
+    expect(screen.getByText('Next meetings')).toBeInTheDocument();
+    expect(screen.getByText(/No upcoming meetings/)).toBeInTheDocument();
   });
 });
 

@@ -1643,9 +1643,14 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
   cursor: pointer; font-family: inherit; font-size: 13px; color: var(--text); transition: border-color 0.12s; }
 .today-strip-card:hover { border-color: var(--accent); }
+.today-strip-card-now { border-color: var(--accent); background: var(--blue-bg); }
+.today-strip-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .today-strip-name { font-weight: 600; white-space: nowrap; }
+.today-strip-date { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.today-strip-date.now { color: var(--accent); font-weight: 700; }
 .today-strip-chip { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--blue-bg);
   border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
+.today-strip-empty { font-size: 12px; color: var(--text3); padding: 2px 0; }
 .day-plan { margin-bottom: 14px; }
 .day-plan-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--radius-sm);
   border: 1px solid transparent; }
