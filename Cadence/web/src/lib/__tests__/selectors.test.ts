@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  getWaitingOnOthers, getHotThisWeek, getPersonLedger,
+  getWaitingOnOthers, getHotThisWeek, getPersonLedger, getPersonInvolved,
   getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
@@ -58,11 +58,19 @@ describe('getPersonLedger', () => {
     expect(l.theyOwe.map((w) => w.id)).toEqual(['theirs']);
   });
 
-  it('matches related_entities person links, not just person_id', () => {
+  it('the ball model: only the current counterparty (person_id) carries the debt', () => {
+    // Multi-person task: linked to Anna AND Bob, ball with Bob. It is a debt
+    // only on Bob's ledger; Anna sees it under "involved".
     const items = [
-      wi({ id: 're', person_id: null, related_entities: [{ type: 'person', id: 'anna', name: 'Anna' }], type: 'waitingFor' }),
+      wi({ id: 'multi', person_id: 'bob', type: 'waitingFor', related_entities: [
+        { type: 'person', id: 'anna', name: 'Anna' }, { type: 'person', id: 'bob', name: 'Bob' },
+      ]}),
     ];
-    expect(getPersonLedger(items, 'anna').theyOwe.map((w) => w.id)).toEqual(['re']);
+    expect(getPersonLedger(items, 'bob').theyOwe.map((w) => w.id)).toEqual(['multi']);
+    expect(getPersonLedger(items, 'anna').theyOwe).toEqual([]);
+    expect(getPersonLedger(items, 'anna').iOwe).toEqual([]);
+    expect(getPersonInvolved(items, 'anna').map((w) => w.id)).toEqual(['multi']);
+    expect(getPersonInvolved(items, 'bob')).toEqual([]);
   });
 
   it('excludes inboxed captures, done items and delegated tasks; counts overdue per side', () => {

@@ -40,15 +40,26 @@ export interface PersonLedger {
 }
 
 export function getPersonLedger(items: WorkItem[], personId: string): PersonLedger {
-  const linked = items.filter((w) => isFiledTask(w) && isLinkedToPerson(w, personId));
-  const iOwe = linked.filter((w) => w.type !== 'waitingFor').sort(byDueThenPri);
-  const theyOwe = linked.filter((w) => w.type === 'waitingFor').sort(byDueThenPri);
+  // The ball model: a task sits between me and ONE counterparty at a time
+  // (person_id), even when several people are linked. Only the current holder
+  // sees it as a debt — everyone else linked sees it under "involved".
+  const withThem = items.filter((w) => isFiledTask(w) && w.person_id === personId);
+  const iOwe = withThem.filter((w) => w.type !== 'waitingFor').sort(byDueThenPri);
+  const theyOwe = withThem.filter((w) => w.type === 'waitingFor').sort(byDueThenPri);
   return {
     iOwe,
     theyOwe,
     iOweOverdue: iOwe.filter((w) => isOverdue(w.due_date)).length,
     theyOweOverdue: theyOwe.filter((w) => isOverdue(w.due_date)).length,
   };
+}
+
+// Open filed tasks this person is LINKED to while the ball is with someone
+// else (or with me and no counterparty) — visible context, not a debt.
+export function getPersonInvolved(items: WorkItem[], personId: string): WorkItem[] {
+  return items
+    .filter((w) => isFiledTask(w) && w.person_id !== personId && isLinkedToPerson(w, personId))
+    .sort(byDueThenPri);
 }
 
 // ── Hot this week ─────────────────────────────────────────────────────────────

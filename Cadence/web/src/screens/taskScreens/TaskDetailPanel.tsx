@@ -3,7 +3,10 @@ import { useCadence } from '../../lib/store';
 import type { ItemType, Priority, WorkItem, RelatedEntity } from '../../lib/types';
 import { EntityLinkPicker } from '../../components/EntityLinkPicker';
 import { RaiseAt1on1Button } from '../../components/RaiseAt1on1Button';
-import { LedgerDirectionToggle, type LedgerDirection } from '../../components/LedgerDirectionToggle';
+import { BallControl } from '../../components/BallControl';
+import type { BallState } from '../../components/BallControl';
+import type { LedgerDirection } from '../../components/LedgerDirectionToggle';
+import { TaskNotesEditor } from '../../components/TaskNotesEditor';
 import { TaskUpdates } from '../../components/TaskUpdates';
 import { TypeTag, PriTag } from '../../components/bits';
 import { todayStr, addDaysStr, fmtDMY, TYPE_LABEL } from '../../lib/util';
@@ -24,8 +27,7 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
   const { data, update, remove, insert, logActivity } = useCadence();
 
   const [title, setTitle] = useState(task.title);
-  const [notes, setNotes] = useState(task.notes || '');
-  useEffect(() => { setTitle(task.title); setNotes(task.notes || ''); }, [task.id, task.title, task.notes]);
+  useEffect(() => { setTitle(task.title); }, [task.id, task.title]);
 
   // Links seed from related_entities, falling back to the denormalised ids —
   // same convention as ItemModal.
@@ -52,11 +54,13 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
   };
 
   const setLinks = (next: RelatedEntity[]) => {
-    // Keep the denormalised columns in sync with the first person/project link,
-    // exactly as ItemModal.save does.
+    // Keep person_id anchored to the ball holder if they're still linked;
+    // otherwise fall back to the first linked person, as ItemModal.save does.
+    const people = next.filter((l) => l.type === 'person');
+    const keepCurrent = people.some((l) => l.id === task.person_id);
     patch({
       related_entities: next,
-      person_id: next.find((l) => l.type === 'person')?.id || null,
+      person_id: keepCurrent ? task.person_id : people[0]?.id || null,
       project_id: next.find((l) => l.type === 'project')?.id || null,
     });
   };
@@ -66,17 +70,18 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
     completed_at: !task.done ? new Date().toISOString() : null,
   });
 
-  // The person this task sits with, if any — drives the ledger direction swap.
-  const personLink = links.find((l) => l.type === 'person') || null;
+  // "Who has the ball": the task's linked people are the counterparty options;
+  // person_id + type say who currently owes whom. Handoffs keep the same
+  // record and log themselves into the updates thread.
+  const linkedPeople = links.filter((l) => l.type === 'person');
   const direction: LedgerDirection = task.type === 'waitingFor' ? 'theyOwe' : 'iOwe';
 
-  // Swap the ledger direction in place (task ↔ waitingFor), keeping the same
-  // record, and drop a system entry into the updates thread so the change is
-  // part of the task's history.
-  const swapDirection = (d: LedgerDirection) => {
-    if (d === direction || !personLink) return;
-    patch({ type: d === 'theyOwe' ? 'waitingFor' : 'task' });
-    const text = d === 'theyOwe' ? `→ ${personLink.name} owes me` : `→ I owe ${personLink.name}`;
+  const applyBall = ({ counterpartyId, direction: d }: BallState) => {
+    const p = linkedPeople.find((l) => l.id === counterpartyId);
+    if (!p) return;
+    if (counterpartyId === task.person_id && d === direction) return;
+    patch({ person_id: counterpartyId, type: d === 'theyOwe' ? 'waitingFor' : 'task' });
+    const text = d === 'theyOwe' ? `→ ${p.name} owes me` : `→ I owe ${p.name}`;
     insert('comments', { work_item_id: task.id, text, author: 'system' } as Partial<Comment>);
     logActivity('swap_direction', text);
   };
@@ -115,10 +120,15 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           {task.source && task.source !== 'you' && <span className="tag">via {task.source}</span>}
         </div>
 
-        {personLink && (
+        {linkedPeople.length > 0 && (
           <div className="form-group">
-            <label>Ledger — who owes whom</label>
-            <LedgerDirectionToggle personName={personLink.name} direction={direction} onChange={swapDirection} />
+            <label>Ledger — who has the ball</label>
+            <BallControl
+              people={linkedPeople.map((l) => ({ id: l.id, name: l.name }))}
+              counterpartyId={task.person_id}
+              direction={direction}
+              onChange={applyBall}
+            />
           </div>
         )}
 
@@ -151,12 +161,11 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <EntityLinkPicker links={links} onChange={setLinks} />
         </div>
 
-        <div className="form-group">
-          <label>Notes</label>
-          <textarea value={notes} placeholder="Context, links, details…"
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => { if (notes !== (task.notes || '')) patch({ notes }); }} />
-        </div>
+        {/* The panel remounts per task (key above), so the editor seeds once. */}
+        <TaskNotesEditor
+          initial={task.notes || ''}
+          onAutosave={(html) => { if (html !== (task.notes || '')) patch({ notes: html }); }}
+        />
 
         <TaskUpdates workItemId={task.id} createdAt={task.created_at} />
 

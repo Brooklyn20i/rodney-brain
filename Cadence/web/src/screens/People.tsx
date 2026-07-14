@@ -3,13 +3,16 @@ import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
 import { ItemModal } from '../components/ItemModal';
-import { MeetingNoteModal } from '../components/MeetingNoteModal';
+import { MeetingDocModal } from '../components/MeetingDocModal';
+import { meetingPreviewText } from '../lib/meetingDoc';
 import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, fmtWeekDM, todayStr, addDaysStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isAgentTask } from '../lib/tasks';
-import { getPersonLedger } from '../lib/selectors';
+import { getPersonLedger, getPersonInvolved } from '../lib/selectors';
 import { readAgendaQueue, useAgendaQueue } from '../lib/agendaQueue';
 import { RaiseAt1on1Button } from '../components/RaiseAt1on1Button';
+import { htmlToPlain } from '../lib/richText';
+import type { Comment } from '../lib/types';
 
 // A work item belongs to a person if it's their primary person or links to them
 // via related_entities. Used identically by the list rail and the detail panel
@@ -17,7 +20,6 @@ import { RaiseAt1on1Button } from '../components/RaiseAt1on1Button';
 const isPersonLinked = (w: WorkItem, id: string) =>
   w.person_id === id || (w.related_entities || []).some((re) => re.type === 'person' && re.id === id);
 
-const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const colorOf = (p: Person) => p.color || autoColor(p.id || p.name);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
 const mtgFolder = (personId: string) => `__mtg__${personId}`;
@@ -209,9 +211,7 @@ function MeetingNotes({ person }: { person: Person }) {
       ) : (
         <div className="mtg-list">
           {meetings.map((n) => {
-            const preview = n.body.startsWith('{')
-              ? (() => { try { const p = JSON.parse(n.body); return (p.agenda?.[0]?.title || '') + (p.notes ? ' · ' + stripHtml(p.notes) : ''); } catch { return ''; } })()
-              : stripHtml(n.body);
+            const preview = meetingPreviewText(n.body);
             const isNext = n.id === nextId;
             return (
               <button key={n.id} className={`mtg-card${isNext ? ' mtg-card-next' : ''}`} onClick={() => setOpenId(n.id)}>
@@ -227,7 +227,7 @@ function MeetingNotes({ person }: { person: Person }) {
         </div>
       )}
       {openNote && (
-        <MeetingNoteModal
+        <MeetingDocModal
           note={openNote}
           person={person}
           allMeetings={meetings}
@@ -240,10 +240,26 @@ function MeetingNotes({ person }: { person: Person }) {
 }
 
 // ── Single topic (work_item) card ──────────────────────────────────────────────
-function TopicCard({ w, onEdit, raisable }: { w: WorkItem; onEdit: (w: WorkItem) => void; raisable?: boolean }) {
-  const { data, update } = useCadence();
+function TopicCard({ w, onEdit, raisable, flipFor }: {
+  w: WorkItem; onEdit: (w: WorkItem) => void; raisable?: boolean;
+  // When set (the ledger rows), show the one-tap ⇄ handoff: flip who owes whom
+  // with this person, in place, logged into the task's history.
+  flipFor?: Person;
+}) {
+  const { data, update, insert, logActivity } = useCadence();
   const proj = data.projects.find((p) => p.id === w.project_id);
   const toggle = () => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
+  const notesPreview = w.notes ? htmlToPlain(w.notes) : '';
+
+  const flip = () => {
+    if (!flipFor) return;
+    const nowTheirs = w.type !== 'waitingFor';
+    update('work_items', w.id, { type: nowTheirs ? 'waitingFor' : 'task' } as Partial<WorkItem>);
+    const text = nowTheirs ? `→ ${flipFor.name} owes me` : `→ I owe ${flipFor.name}`;
+    insert('comments', { work_item_id: w.id, text, author: 'system' } as Partial<Comment>);
+    logActivity('swap_direction', text);
+  };
+
   return (
     <div className="topic-card">
       <input type="checkbox" checked={w.done} onChange={toggle} />
@@ -254,8 +270,12 @@ function TopicCard({ w, onEdit, raisable }: { w: WorkItem; onEdit: (w: WorkItem)
           {proj && <span className="tag tag-info">{proj.name}</span>}
           <Due date={w.due_date} />
         </div>
-        {w.notes && <div className="topic-notes">{w.notes.slice(0, 140)}{w.notes.length > 140 ? '…' : ''}</div>}
+        {notesPreview && <div className="topic-notes">{notesPreview.slice(0, 140)}{notesPreview.length > 140 ? '…' : ''}</div>}
       </div>
+      {flipFor && (
+        <button className="btn-icon topic-flip" onClick={flip}
+          title={w.type === 'waitingFor' ? `Now I owe ${flipFor.name.split(' ')[0]}` : `Now ${flipFor.name.split(' ')[0]} owes me`}>⇄</button>
+      )}
       {raisable && <RaiseAt1on1Button task={w} compact />}
       <button className="btn-icon" onClick={() => onEdit(w)}>✎</button>
     </div>
@@ -358,7 +378,7 @@ function LedgerSection({ person, title, items, overdue, accent, addType, addPlac
         {items.length > 0 && <span className="section-count" style={{ background: accent }}>{items.length}</span>}
         {overdue > 0 && <span className="ledger-overdue-chip">{overdue} overdue</span>}
       </h3>
-      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} raisable />)}
+      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} raisable flipFor={person} />)}
       {items.length === 0 && <p className="ledger-empty">Nothing here — all square.</p>}
       <div className="topic-add">
         <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
@@ -383,6 +403,11 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   // are excluded until triaged (getPersonLedger builds on isFiledTask).
   const ledger = useMemo(() => getPersonLedger(data.work_items, person.id), [data.work_items, person.id]);
   const openCount = ledger.iOwe.length + ledger.theyOwe.length;
+  // Multi-person tasks where the ball is currently with someone else.
+  const involved = useMemo(
+    () => getPersonInvolved(data.work_items, person.id).filter((w) => !w.done),
+    [data.work_items, person.id],
+  );
 
   const mine = data.work_items.filter((w) => !isAgentTask(w) && !w.inboxed && isPersonLinked(w, person.id));
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
@@ -391,7 +416,8 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const meetingCount = data.notes.filter((n) => n.folder === mtgFolder(person.id)).length;
   const first = person.name.trim().split(/\s+/)[0] || person.name;
 
-  // Items queued for the next 1:1 (merged into the meeting agenda on open).
+  // Items raised for the next 1:1 — the prep list you work through in the
+  // meeting (tick off = clear), alongside the ledger itself.
   const queued = useMemo(() => readAgendaQueue(data.notes, person.id), [data.notes, person.id]);
   const { clear: clearQueue } = useAgendaQueue();
 
@@ -456,17 +482,38 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
             />
             {queued.length > 0 && (
               <div className="detail-section">
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>🗓 Queued for next 1:1
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>🗓 To raise at next 1:1
                   <span className="section-count" style={{ background: 'var(--purple)' }}>{queued.length}</span>
                 </h3>
                 {queued.map((q) => (
                   <div key={q.id} className="work-item-row">
-                    <span style={{ color: 'var(--purple)', fontSize: 13 }}>▸</span>
+                    <input type="checkbox" checked={false} title="Raised — tick to clear"
+                      onChange={() => void clearQueue(person.id, [q.id])}
+                      style={{ width: 15, height: 15, accentColor: 'var(--purple)' }} />
                     <span className="wi-title" style={{ flex: 1 }}>{q.title}</span>
-                    <button className="btn-icon" title="Remove from the next agenda"
+                    <button className="btn-icon" title="Remove without raising"
                       onClick={() => void clearQueue(person.id, [q.id])}>✕</button>
                   </div>
                 ))}
+              </div>
+            )}
+            {involved.length > 0 && (
+              <div className="detail-section">
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>↔ Involved — ball elsewhere
+                  <span className="section-count" style={{ background: 'var(--text3)' }}>{involved.length}</span>
+                </h3>
+                {involved.map((w) => {
+                  const holder = data.people.find((p) => p.id === w.person_id);
+                  return (
+                    <div key={w.id} className="work-item-row" style={{ cursor: 'pointer' }} onClick={() => setEditing(w)}>
+                      <span style={{ color: 'var(--text3)', fontSize: 13 }}>↔</span>
+                      <span className="wi-title" style={{ flex: 1 }}>{w.title}</span>
+                      <span className="tag" style={{ fontSize: 11 }}>
+                        with {holder ? holder.name.split(' ')[0] : 'me'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
             <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={() => setAdding(true)}>

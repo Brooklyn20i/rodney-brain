@@ -1257,6 +1257,20 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .mtg-date { font-size: 12px; color: var(--text2); }
 .mtg-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
+/* ── Meeting DOCUMENT modal — one big writing surface + task capture bar ── */
+.mtg-modal-doc .mtg-doc-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.mtg-modal-doc .mtg-doc-body .re-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; border: none; border-radius: 0; }
+.mtg-modal-doc .mtg-doc-body .re-body { flex: 1; overflow-y: auto; }
+.mtg-capture-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-top: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+.mtg-capture-icon { color: var(--accent); font-size: 15px; flex-shrink: 0; }
+.mtg-capture-input { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 12px; font-size: 13px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; }
+.mtg-capture-input:focus { border-color: var(--accent); }
+.mtg-captured-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 14px; background: var(--surface2); flex-shrink: 0; }
+.mtg-captured-chip { font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-bg, #E8F5EC);
+  border-radius: 10px; padding: 2px 8px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .mtg-extract { padding: 24px; overflow-y: auto; }
 .mtg-extract h3 { font-size: 16px; margin-bottom: 6px; }
 .mtg-task-list { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; background: var(--surface2); }
@@ -1684,6 +1698,31 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .task-detail-defer { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .task-detail-meta { margin-top: 14px; font-size: 11px; color: var(--text3); }
 .task-hub-empty { align-items: center; justify-content: center; }
+
+/* ── "Who has the ball" — counterparty picker + direction ── */
+.ball-control { display: flex; flex-direction: column; gap: 6px; }
+.ball-people { display: flex; gap: 6px; flex-wrap: wrap; }
+.ball-person { padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text2); font-family: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.12s; }
+.ball-person:hover { border-color: var(--accent); }
+.ball-person.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.topic-flip { font-size: 15px; }
+.topic-flip:hover { color: var(--accent); }
+
+/* ── Task notes — the big writing surface on every task ── */
+.task-notes { margin-bottom: 14px; }
+.task-notes-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.task-notes-hdr label { display: block; font-size: 12px; font-weight: 600; color: var(--text2);
+  text-transform: uppercase; letter-spacing: 0.4px; margin: 0; }
+.task-notes-expand { background: none; border: none; color: var(--accent); cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600; padding: 2px 4px; border-radius: 4px; }
+.task-notes-expand:hover { background: var(--blue-bg); }
+.task-notes-editor { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.task-notes-editor .re-wrap { border: none; display: flex; flex-direction: column; }
+.task-notes-editor .re-body { min-height: 160px; max-height: 320px; overflow-y: auto; }
+.task-notes.compact .task-notes-editor .re-body { min-height: 110px; max-height: 240px; }
+.task-notes.expanded .task-notes-editor .re-body { min-height: 380px; max-height: 65vh; }
 
 /* ── Ledger direction toggle (I owe ↔ they owe) ── */
 .ledger-dir { display: flex; gap: 6px; }

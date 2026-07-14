@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
 import { TypeTag, PriTag, Due } from '../../components/bits';
-import { fmtDM, initials, isOverdue } from '../../lib/util';
 import { isAgentCreated } from '../../lib/tasks';
-import type { OpenMeetingAction, PushTarget } from '../../lib/tasks';
 
 export interface TaskGroup { key: string; label: string; color: string; items: WorkItem[]; }
 
@@ -117,63 +115,5 @@ export function TaskList({ groups, selectedId, onSelect, quickAddDueFor, onQuick
         );
       })}
     </>
-  );
-}
-
-// ── Unfiled meeting-action row with a one-tap assign picker ────────────────────
-export function MeetingActionRow({ action, people, projects, onFile }: {
-  action: OpenMeetingAction;
-  people: { id: string; name: string; color?: string }[];
-  projects: { id: string; name: string; color?: string }[];
-  onFile: (action: OpenMeetingAction, target: PushTarget | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const overdue = !!action.due && isOverdue(action.due);
-
-  return (
-    <div className="card card-compact">
-      <div className="card-row" style={{ alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="card-title">{action.title}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="tag tag-info" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🗓 {action.noteTitle}</span>
-            {action.due && <span className={overdue ? 'due-overdue' : 'due-normal'} style={{ fontSize: 12 }}>{overdue ? 'Overdue · ' : 'Due '}{fmtDM(action.due)}</span>}
-          </div>
-        </div>
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button className="action-send-btn" onClick={() => setOpen((s) => !s)}>File →</button>
-          {open && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
-              <div className="action-send-picker">
-                <div className="send-picker-section">Assign to a person</div>
-                {people.map((p) => (
-                  <button key={p.id} className="send-picker-option"
-                    onClick={() => { onFile(action, { id: p.id, type: 'person', name: p.name }); setOpen(false); }}>
-                    <span className="avatar avatar-sm" style={{ background: p.color || '#3A7CA5' }}>
-                      {initials(p.name)}
-                    </span>
-                    {p.name}
-                  </button>
-                ))}
-                {projects.length > 0 && <div className="send-picker-section">Add to a project</div>}
-                {projects.map((p) => (
-                  <button key={p.id} className="send-picker-option"
-                    onClick={() => { onFile(action, { id: p.id, type: 'project', name: p.name }); setOpen(false); }}>
-                    <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
-                    {p.name}
-                  </button>
-                ))}
-                <div className="send-picker-section">Or</div>
-                <button className="send-picker-option"
-                  onClick={() => { onFile(action, null); setOpen(false); }}>
-                  ↓ Send to Tasks
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

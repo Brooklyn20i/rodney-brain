@@ -11,8 +11,8 @@ async function navTo(page: Page, label: string) {
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
 }
 
-// ── Meeting notes: typing persists (regression: edits/bullets were vanishing) ────
-test('meeting note edits persist after closing and reopening', async ({ page }) => {
+// ── Meeting documents: typing persists, and inline task capture → Inbox ────────
+test('meeting doc edits persist and captured tasks land in the Inbox', async ({ page }) => {
   await navTo(page, 'People');
   await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
   await page.locator('.people-tab', { hasText: 'Meetings' }).click();
@@ -28,10 +28,17 @@ test('meeting note edits persist after closing and reopening', async ({ page }) 
     await page.locator('.mtg-card', { hasText: '1:1 · Anna Lee' }).click();
   }
   await expect(overlay).toBeVisible();
+  await expect(page.locator('.mtg-modal-doc')).toBeVisible();
 
-  // Add an agenda item and type into it.
-  await page.getByText('+ Add agenda item').click();
-  await page.locator('.agenda-topic-input').last().fill('Discuss Q3 roadmap');
+  // Write like a page — straight into the document.
+  await page.locator('.mtg-modal-doc .ProseMirror').click();
+  await page.keyboard.type('Q3 roadmap needs a second pass before CLT.');
+
+  // Capture a task mid-meeting — it goes to the Inbox, not into some agenda.
+  const capture = page.getByPlaceholder(/Capture a task/);
+  await capture.fill('Chase the Q3 roadmap owners');
+  await capture.press('Enter');
+  await expect(page.locator('.mtg-captured-chip', { hasText: 'Chase the Q3 roadmap owners' })).toBeVisible();
 
   // Save & Close flushes the edit; the modal closes.
   await page.getByRole('button', { name: /Save & Close/ }).first().click();
@@ -40,7 +47,12 @@ test('meeting note edits persist after closing and reopening', async ({ page }) 
   // Reopen the same meeting — the typed content must still be there.
   await page.locator('.mtg-card', { hasText: '1:1 · Anna Lee' }).click();
   await expect(overlay).toBeVisible();
-  await expect(page.locator('.agenda-topic-input').first()).toHaveValue('Discuss Q3 roadmap');
+  await expect(page.locator('.mtg-modal-doc .ProseMirror')).toContainText('Q3 roadmap needs a second pass');
+  await page.getByRole('button', { name: /Save & Close/ }).first().click();
+
+  // The captured task waits in the Inbox for triage.
+  await navTo(page, 'Inbox');
+  await expect(page.getByText('Chase the Q3 roadmap owners')).toBeVisible();
 });
 
 // ── Quick Add captures to the Inbox, even when tagged with a person/project ──

@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { Note, Person, WorkItem } from '../lib/types';
+import type { Note, Person } from '../lib/types';
 import { ScreenHeader, Modal } from '../components/bits';
-import { MeetingNoteModal, parseMeeting } from '../components/MeetingNoteModal';
-import { serializeMeeting } from '../lib/meetingData';
-import type { ActionItem } from '../components/MeetingNoteModal';
+import { MeetingDocModal } from '../components/MeetingDocModal';
+import { meetingPreviewText } from '../lib/meetingDoc';
 import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, todayStr } from '../lib/util';
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
-import { buildTaskFromAction } from '../lib/tasks';
-import type { PushTarget } from '../lib/tasks';
 import { readPrepTopics } from '../lib/prepTopics';
 import { TopicsPanel } from '../components/TopicsPanel';
 
@@ -77,227 +74,6 @@ function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person;
   );
 }
 
-// ── Group action row (open action with send picker) ───────────────────────────
-function GroupActionRow({ action, noteTitle, people, projects, onSend, onMarkDone }: {
-  action: ActionItem;
-  noteTitle: string;
-  people: Person[];
-  projects: import('../lib/types').Project[];
-  onSend: (targets: PushTarget[]) => Promise<void> | void;
-  onMarkDone: () => void;
-}) {
-  const [showSend, setShowSend] = useState(false);
-  const [selectedTargets, setSelectedTargets] = useState<PushTarget[]>([]);
-  const [sending, setSending] = useState(false);
-  const [sendErr, setSendErr] = useState('');
-  const [done, setDone] = useState(false);
-  const isLate = !!action.due && !done && action.due < todayStr();
-  const ownerPerson = action.owner_person_id ? people.find((p) => p.id === action.owner_person_id) ?? null : null;
-  const ownerLabel = action.owner === 'me' ? 'Me' : (ownerPerson?.name || action.owner_label || 'Them');
-
-  const toggleTarget = (t: PushTarget) =>
-    setSelectedTargets(prev =>
-      prev.some(x => x.id === t.id) ? prev.filter(x => x.id !== t.id) : [...prev, t]
-    );
-  const openSendPicker = (preselect?: PushTarget) => {
-    setSelectedTargets(preselect ? [preselect] : []);
-    setShowSend(true);
-  };
-  const confirmSend = async () => {
-    if (selectedTargets.length === 0 || sending) return;
-    setSending(true);
-    setSendErr('');
-    try {
-      // Await so an insert failure keeps the picker open with an error, instead
-      // of silently closing and clearing the selection as if the send worked.
-      await onSend(selectedTargets);
-      setShowSend(false);
-      setSelectedTargets([]);
-    } catch {
-      setSendErr('Could not send — check your connection and try again.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleDone = () => {
-    setDone(true);
-    onMarkDone();
-  };
-
-  return (
-    <div className={`group-action-row${done ? ' done' : ''}`}>
-      <input type="checkbox" className="action-check" checked={done} onChange={handleDone}
-        style={{ flexShrink: 0, marginTop: 2 }} />
-      <div className="group-action-main" style={{ position: 'relative' }}>
-        <div className="group-action-title">{action.title}</div>
-        <div className="group-action-meta">
-          <span className={`owner-chip ${action.owner === 'me' ? 'owner-me' : 'owner-them'}`}>{ownerLabel}</span>
-          <span className="group-action-note">{noteTitle}</span>
-          {action.due && (
-            <span className={isLate ? 'due-late-label' : 'due-normal-label'}>
-              {isLate ? 'Overdue · ' : ''}{fmtDM(action.due)}
-            </span>
-          )}
-          {action.pushed_to ? (
-            <span className="pushed-label">→ {action.pushed_to}</span>
-          ) : (
-            <div style={{ position: 'relative' }}>
-              <button className="action-send-btn"
-                onClick={() => openSendPicker(ownerPerson ? { id: ownerPerson.id, type: 'person', name: ownerPerson.name } : undefined)}>
-                {ownerPerson ? `→ ${ownerPerson.name.split(' ')[0]}` : '→ Send'}
-              </button>
-              {showSend && (
-                <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => { setShowSend(false); setSelectedTargets([]); setSendErr(''); }} />
-                  <div className="action-send-picker">
-                    {people.length > 0 && (
-                      <>
-                        <div className="send-picker-section">People</div>
-                        {people.map((p) => {
-                          const sel = selectedTargets.some(t => t.id === p.id);
-                          return (
-                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
-                              onClick={() => toggleTarget({ id: p.id, type: 'person', name: p.name })}>
-                              <span className="avatar" style={{ background: colorOf(p), width: 22, height: 22, fontSize: 9, flexShrink: 0 }}>
-                                {initials(p.name)}
-                              </span>
-                              {p.name}
-                              {sel && <span className="send-picker-check">✓</span>}
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                    {projects.length > 0 && (
-                      <>
-                        <div className="send-picker-section">Projects</div>
-                        {projects.map((p) => {
-                          const sel = selectedTargets.some(t => t.id === p.id);
-                          return (
-                            <button key={p.id} className={`send-picker-option${sel ? ' selected' : ''}`}
-                              onClick={() => toggleTarget({ id: p.id, type: 'project', name: p.name })}>
-                              <span style={{ color: p.color || 'var(--accent)', fontSize: 12 }}>▤</span>
-                              {p.name}
-                              {sel && <span className="send-picker-check">✓</span>}
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                    {sendErr && (
-                      <div className="send-picker-error" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }}>{sendErr}</div>
-                    )}
-                    {selectedTargets.length > 0 && (
-                      <div className="send-picker-footer">
-                        <button className="send-picker-confirm" onClick={confirmSend} disabled={sending}>
-                          {sending ? 'Sending…' : `Send to ${selectedTargets.map(t => t.name.split(' ')[0]).join(' + ')}`}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Group open actions aggregator ─────────────────────────────────────────────
-function GroupOpenActions({ group }: { group: Person }) {
-  const { data, update, insert } = useCadence();
-  const folder = mtgFolder(group.id);
-
-  const meetings = useMemo(() =>
-    data.notes.filter((n) => n.folder === folder),
-    [data.notes, folder]
-  );
-
-  type OpenAction = ActionItem & { noteId: string; noteTitle: string };
-
-  const allOpenActions = useMemo((): OpenAction[] => {
-    const result: OpenAction[] = [];
-    for (const note of meetings) {
-      const { data: parsed } = parseMeeting(note.body);
-      for (const action of parsed.actions) {
-        if (!action.done && !action.pushed) {
-          result.push({ ...action, noteId: note.id, noteTitle: note.title });
-        }
-      }
-    }
-    return result;
-  }, [meetings]);
-
-  const people = useMemo(() => data.people.filter((p) => !p.type || p.type === 'person'), [data.people]);
-  const projects = useMemo(() => data.projects.filter((p) => !p.deleted_at), [data.projects]);
-
-  // Guard against double-taps firing duplicate work_items / writes.
-  const busy = useRef<Set<string>>(new Set());
-
-  const handleMarkDone = async (action: OpenAction) => {
-    const note = data.notes.find((n) => n.id === action.noteId);
-    if (!note) return;
-    const { data: parsed, raw } = parseMeeting(note.body);
-    const updatedActions = parsed.actions.map((a) =>
-      a.id === action.id ? { ...a, done: true } : a
-    );
-    await update('notes', action.noteId, {
-      body: serializeMeeting({ ...parsed, actions: updatedActions }, raw),
-    } as Partial<Note>);
-  };
-
-  const handleSend = async (action: OpenAction, targets: PushTarget[]) => {
-    if (busy.current.has(action.id)) return;
-    busy.current.add(action.id);
-    try {
-      for (const t of targets) {
-        await insert('work_items', buildTaskFromAction(action, action.noteTitle, t) as Partial<WorkItem>);
-      }
-      const names = targets.map(t => t.name).join(', ');
-      const note = data.notes.find((n) => n.id === action.noteId);
-      if (note) {
-        const { data: parsed, raw } = parseMeeting(note.body);
-        const updatedActions = parsed.actions.map((a) =>
-          a.id === action.id ? { ...a, pushed: true, pushed_to: names } : a
-        );
-        await update('notes', action.noteId, {
-          body: serializeMeeting({ ...parsed, actions: updatedActions }, raw),
-        } as Partial<Note>);
-      }
-    } finally {
-      busy.current.delete(action.id);
-    }
-  };
-
-  if (allOpenActions.length === 0) {
-    return (
-      <div className="empty-state" style={{ margin: '40px auto' }}>
-        <div className="icon">✓</div>
-        <p>No open actions</p>
-        <small>Actions from meeting notes appear here until sent</small>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ padding: '0 16px 16px' }}>
-      {allOpenActions.map((action) => (
-        <GroupActionRow
-          key={`${action.noteId}-${action.id}`}
-          action={action}
-          noteTitle={action.noteTitle}
-          people={people}
-          projects={projects}
-          onSend={(targets) => handleSend(action, targets)}
-          onMarkDone={() => handleMarkDone(action)}
-        />
-      ))}
-    </div>
-  );
-}
 
 // ── Group meeting notes list ──────────────────────────────────────────────────
 function GroupMeetingNotes({ group }: { group: Person }) {
@@ -357,8 +133,6 @@ function GroupMeetingNotes({ group }: { group: Person }) {
 
   const openNote = openId ? data.notes.find((n) => n.id === openId) || null : null;
 
-  const stripHtml = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
   return (
     <div className="detail-section">
       <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -377,9 +151,7 @@ function GroupMeetingNotes({ group }: { group: Person }) {
       ) : (
         <div className="mtg-list">
           {meetings.map((n) => {
-            const preview = n.body.startsWith('{')
-              ? (() => { try { const p = JSON.parse(n.body); return (p.agenda?.[0]?.title || '') + (p.notes ? ' · ' + stripHtml(p.notes) : ''); } catch { return ''; } })()
-              : stripHtml(n.body);
+            const preview = meetingPreviewText(n.body);
             const isNext = n.id === nextId;
             return (
               <button key={n.id} className={`mtg-card${isNext ? ' mtg-card-next' : ''}`} onClick={() => setOpenId(n.id)}>
@@ -395,7 +167,7 @@ function GroupMeetingNotes({ group }: { group: Person }) {
         </div>
       )}
       {openNote && (
-        <MeetingNoteModal
+        <MeetingDocModal
           note={openNote}
           person={group}
           allMeetings={meetings}
@@ -411,7 +183,7 @@ function GroupMeetingNotes({ group }: { group: Person }) {
 function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
   const { data } = useCadence();
   const { dates } = useMeetingDates();
-  const [tab, setTab] = useState<'topics' | 'meetings' | 'actions'>('topics');
+  const [tab, setTab] = useState<'topics' | 'meetings'>('topics');
   const topicCount = useMemo(
     () => readPrepTopics(data.notes, group.id).filter((t) => t.status !== 'covered').length,
     [data.notes, group.id],
@@ -422,15 +194,6 @@ function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
     data.notes.filter((n) => n.folder === folder),
     [data.notes, folder]
   );
-
-  const openActionCount = useMemo(() => {
-    let count = 0;
-    for (const note of meetings) {
-      const { data: parsed } = parseMeeting(note.body);
-      count += parsed.actions.filter((a) => !a.done && !a.pushed).length;
-    }
-    return count;
-  }, [meetings]);
 
   const nextMeeting = getNextMeeting(group.id, data.notes, dates);
 
@@ -471,15 +234,11 @@ function GroupDetail({ group, onEdit }: { group: Person; onEdit: () => void }) {
         <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
           Meetings {meetings.length > 0 && <span className="ptab-badge">{meetings.length}</span>}
         </button>
-        <button className={`people-tab ${tab === 'actions' ? 'active' : ''}`} onClick={() => setTab('actions')}>
-          Open Actions {openActionCount > 0 && <span className="ptab-badge">{openActionCount}</span>}
-        </button>
       </div>
 
       <div className="split-panel-body">
         {tab === 'topics' && <TopicsPanel group={group} />}
         {tab === 'meetings' && <GroupMeetingNotes group={group} />}
-        {tab === 'actions' && <GroupOpenActions group={group} />}
       </div>
     </div>
   );

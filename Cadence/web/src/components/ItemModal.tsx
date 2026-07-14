@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useCadence } from '../lib/store';
-import type { ItemType, Priority, WorkItem, RelatedEntity } from '../lib/types';
+import type { ItemType, Priority, WorkItem, RelatedEntity, Comment } from '../lib/types';
 import { Modal } from './bits';
 import { EntityLinkPicker } from './EntityLinkPicker';
-import { LedgerDirectionToggle, type LedgerDirection } from './LedgerDirectionToggle';
+import { BallControl } from './BallControl';
+import type { LedgerDirection } from './LedgerDirectionToggle';
+import { TaskNotesEditor } from './TaskNotesEditor';
 import { TaskUpdates } from './TaskUpdates';
 
 const TYPES: { v: ItemType; label: string }[] = [
@@ -41,11 +43,19 @@ export function ItemModal({ existing, defaults, onClose }: {
     return seed;
   });
 
+  // "Who has the ball": the counterparty among the linked people. Falls back
+  // to the first linked person when the current holder gets unlinked.
+  const [counterpartyId, setCounterpartyId] = useState<string | null>(base.person_id || null);
+  const linkedPeople = links.filter((l) => l.type === 'person');
+  const effectiveCounterparty =
+    linkedPeople.find((l) => l.id === counterpartyId)?.id || linkedPeople[0]?.id || null;
+  const direction: LedgerDirection = type === 'waitingFor' ? 'theyOwe' : 'iOwe';
+
   const save = async () => {
     if (!title.trim()) return;
     setBusy(true);
     try {
-      const person_id = links.find((l) => l.type === 'person')?.id || null;
+      const person_id = effectiveCounterparty;
       const project_id = links.find((l) => l.type === 'project')?.id || null;
       const filed = !!(person_id || project_id || due);
       const patch = {
@@ -60,6 +70,17 @@ export function ItemModal({ existing, defaults, onClose }: {
         // Only explicit triage actions should clear `inboxed`.
         const filingPatch = filed && !existing.inboxed ? { inboxed: false } : {};
         await update('work_items', existing.id, { ...patch, ...filingPatch } as Partial<WorkItem>);
+        // A handoff (new counterparty or flipped direction) goes on the record.
+        const oldDir: LedgerDirection = existing.type === 'waitingFor' ? 'theyOwe' : 'iOwe';
+        const holder = linkedPeople.find((l) => l.id === person_id);
+        if (holder && (person_id !== existing.person_id || (type !== existing.type && (type === 'waitingFor' || existing.type === 'waitingFor')))) {
+          const newDir: LedgerDirection = type === 'waitingFor' ? 'theyOwe' : 'iOwe';
+          if (person_id !== existing.person_id || newDir !== oldDir) {
+            const text = newDir === 'theyOwe' ? `→ ${holder.name} owes me` : `→ I owe ${holder.name}`;
+            await insert('comments', { work_item_id: existing.id, text, author: 'system' } as Partial<Comment>);
+            logActivity('swap_direction', text);
+          }
+        }
         logActivity('edit_item', title.trim());
       } else {
         await insert('work_items', { ...patch, inboxed: filed ? false : ((base as any).inboxed ?? true), source: (base as any).source || 'you' } as Partial<WorkItem>);
@@ -80,17 +101,20 @@ export function ItemModal({ existing, defaults, onClose }: {
         <input type="text" autoFocus value={title} placeholder="What needs to happen?"
           onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} />
       </div>
-      {links.some((l) => l.type === 'person') && (() => {
-        const person = links.find((l) => l.type === 'person')!;
-        const direction: LedgerDirection = type === 'waitingFor' ? 'theyOwe' : 'iOwe';
-        return (
-          <div className="form-group">
-            <label>Ledger — who owes whom</label>
-            <LedgerDirectionToggle personName={person.name} direction={direction}
-              onChange={(d) => setType(d === 'theyOwe' ? 'waitingFor' : 'task')} />
-          </div>
-        );
-      })()}
+      {linkedPeople.length > 0 && (
+        <div className="form-group">
+          <label>Ledger — who has the ball</label>
+          <BallControl
+            people={linkedPeople.map((l) => ({ id: l.id, name: l.name }))}
+            counterpartyId={effectiveCounterparty}
+            direction={direction}
+            onChange={({ counterpartyId: cid, direction: d }) => {
+              setCounterpartyId(cid);
+              setType(d === 'theyOwe' ? 'waitingFor' : 'task');
+            }}
+          />
+        </div>
+      )}
 
       <div className="form-row">
         <div className="form-group"><label>Type</label>
@@ -115,9 +139,7 @@ export function ItemModal({ existing, defaults, onClose }: {
         <EntityLinkPicker links={links} onChange={setLinks} />
       </div>
 
-      <div className="form-group"><label>Notes</label>
-        <textarea value={notes} placeholder="Context, links, details…" onChange={(e) => setNotes(e.target.value)} />
-      </div>
+      <TaskNotesEditor initial={base.notes || ''} onDraftChange={setNotes} compact />
 
       {existing && <TaskUpdates workItemId={existing.id} createdAt={existing.created_at} />}
     </Modal>

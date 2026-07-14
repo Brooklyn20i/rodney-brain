@@ -44,8 +44,8 @@ describe('ledger direction swap', () => {
   it('flips task → waitingFor in place and logs a history entry', () => {
     render(<TaskDetailPanel task={wi({})} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: '📤 Jarrod owes me' }));
-    // Same record, type flipped — not a new task.
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { type: 'waitingFor' });
+    // Same record, type flipped — not a new task. The ball stays with Jarrod.
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { person_id: 'pJ', type: 'waitingFor' });
     // A system entry is written into the updates thread as history.
     expect(h.store.insert).toHaveBeenCalledWith('comments', {
       work_item_id: 'w1', text: '→ Jarrod Vale owes me', author: 'system',
@@ -56,7 +56,7 @@ describe('ledger direction swap', () => {
     render(<TaskDetailPanel task={wi({ type: 'waitingFor' })} onClose={() => {}} />);
     expect(screen.getByRole('button', { name: '📤 Jarrod owes me' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '📥 I owe Jarrod' }));
-    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { type: 'task' });
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { person_id: 'pJ', type: 'task' });
     expect(h.store.insert).toHaveBeenCalledWith('comments',
       expect.objectContaining({ text: '→ I owe Jarrod Vale' }));
   });
@@ -66,6 +66,22 @@ describe('ledger direction swap', () => {
     setStore({ data: { work_items: [solo] } });
     render(<TaskDetailPanel task={solo} onClose={() => {}} />);
     expect(screen.queryByText(/owes me/)).not.toBeInTheDocument();
+  });
+
+  it('passes the ball to another linked person, keeping the record and logging the handoff', () => {
+    const multi = wi({ related_entities: [
+      { type: 'person', id: 'pJ', name: 'Jarrod Vale' },
+      { type: 'person', id: 'pA', name: 'Amy Stone' },
+    ]});
+    setStore({ data: { work_items: [multi] } });
+    render(<TaskDetailPanel task={multi} onClose={() => {}} />);
+    // Both linked people are counterparty options; the ball is with Jarrod.
+    expect(screen.getByRole('button', { name: 'Jarrod' })).toHaveAttribute('aria-pressed', 'true');
+    // One tap: pass to Amy — same task, person_id moves, direction preserved.
+    fireEvent.click(screen.getByRole('button', { name: 'Amy' }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { person_id: 'pA', type: 'task' });
+    expect(h.store.insert).toHaveBeenCalledWith('comments',
+      expect.objectContaining({ text: '→ I owe Amy Stone', author: 'system' }));
   });
 });
 
