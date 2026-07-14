@@ -5,10 +5,9 @@ import { makeSeed } from './seed';
 // navigation → prune on complete) and the today's-meetings strip.
 
 const pad = (n: number) => String(n).padStart(2, '0');
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => fmt(new Date());
+const addDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return fmt(d); };
 
 async function navTo(page: Page, label: string) {
   await page.locator('#sidebar').getByRole('button', { name: new RegExp(`\\b${label}\\b`) }).click();
@@ -50,19 +49,24 @@ test('pin tasks, reorder, navigate away and back, complete to prune', async ({ p
   await expect(page.getByText("★ Today's focus")).toBeHidden();
 });
 
-test("the Today strip surfaces today's 1:1 and deep-opens the person", async ({ page }) => {
+test('the Next-meetings strip surfaces upcoming 1:1s and deep-opens the person', async ({ page }) => {
   const seed = makeSeed();
-  // Anna's next 1:1 is normally in two days — move it to today.
+  // Anna's 1:1 is today; Bob's is upcoming — both must surface (not just today's).
   const mdates = seed.notes.find((n) => n.id === 'mdates')!;
   mdates.body = JSON.stringify({ 'note-anna': today() });
+  seed.notes.push({ id: 'note-bob', title: '1:1 · Bob Ng', folder: '__mtg__pBob', body: '{}', updated_at: today() } as any);
+  const md = JSON.parse(mdates.body); md['note-bob'] = addDays(3); mdates.body = JSON.stringify(md);
   await page.addInitScript((s) => { (window as any).__CADENCE_E2E__ = s; }, seed);
   await page.goto('/work.html');
 
-  await expect(page.getByText('Meetings today')).toBeVisible();
-  const card = page.locator('.today-strip-card', { hasText: 'Anna Lee' });
-  await expect(card).toBeVisible();
+  await expect(page.getByText('Next meetings')).toBeVisible();
+  const anna = page.locator('.today-strip-card', { hasText: 'Anna Lee' });
+  await expect(anna).toBeVisible();
+  await expect(anna.getByText('Today')).toBeVisible();
+  // Bob's meeting is days away but still shows — the fix for "meetings don't come up".
+  await expect(page.locator('.today-strip-card', { hasText: 'Bob Ng' })).toBeVisible();
 
   // Tap → straight into Anna's detail (ledger first) to prep.
-  await card.click();
+  await anna.click();
   await expect(page.getByText('📤 Anna owes me')).toBeVisible();
 });
