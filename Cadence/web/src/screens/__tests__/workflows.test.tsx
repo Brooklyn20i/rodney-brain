@@ -5,7 +5,7 @@
  * are mocked; every other piece of component logic runs for real.
  */
 import type { ReactElement } from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WORK_NAV } from '../../components/Sidebar';
 import { emptyData } from '../../lib/types';
@@ -295,7 +295,7 @@ describe('People ledger', () => {
 
 // ── Inbox ──────────────────────────────────────────────────────────────────────
 describe('Inbox workflow', () => {
-  it('lists captures and launches the triage wizard', () => {
+  it('lists captures and launches the full triage deck', () => {
     setStore({ data: { work_items: [
       wi({ id: 'in1', title: 'Captured note', inboxed: true }),
     ]}});
@@ -304,15 +304,30 @@ describe('Inbox workflow', () => {
     expect(screen.getByText('Unprocessed captures — triage each into its home')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
     expect(screen.getByText('Captured note')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Start triage (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Triage all (1)' }));
     expect(screen.getByRole('dialog', { name: 'Triage captures' })).toBeInTheDocument();
     expect(screen.getByText('Card 1 of 1')).toBeInTheDocument();
   });
 
-  it('hides the triage button when the inbox is clear', () => {
+  it('every row has its own Triage button that handles JUST that task', () => {
+    setStore({ data: { work_items: [
+      wi({ id: 'in1', title: 'First capture', inboxed: true, created_at: '2026-06-02' }),
+      wi({ id: 'in2', title: 'Second capture', inboxed: true, created_at: '2026-06-01' }),
+    ]}});
+    render(<Inbox onMenu={() => {}} />);
+    const rows = screen.getAllByRole('button', { name: 'Triage →' });
+    expect(rows).toHaveLength(2);
+    // Open the SECOND row's wizard — it's a one-card deck for that task only.
+    const secondRow = screen.getByText('Second capture').closest('.inbox-triage-row')!;
+    fireEvent.click(within(secondRow as HTMLElement).getByRole('button', { name: 'Triage →' }));
+    expect(screen.getByText('Card 1 of 1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Second capture')).toBeInTheDocument();
+  });
+
+  it('hides the triage-all button when the inbox is clear', () => {
     setStore({ data: { work_items: [] } });
     render(<Inbox onMenu={() => {}} />);
-    expect(screen.queryByRole('button', { name: /Start triage/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Triage all/ })).not.toBeInTheDocument();
     expect(screen.getByText('Inbox is clear')).toBeInTheDocument();
   });
 });

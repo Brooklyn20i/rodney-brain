@@ -122,27 +122,30 @@ export function MeetingDocModal({ note, person, allMeetings, onClose, onNavigate
     onClose();
   };
 
-  // ── Inline task capture → Inbox ─────────────────────────────────────────────
-  // Capture-first: tasks noted mid-meeting land in the Inbox tagged with the
-  // person and this meeting, and get properly filed later in the triage wizard.
+  // ── Inline task capture ─────────────────────────────────────────────────────
+  // Two destinations mid-meeting:
+  //  'inbox' — capture-first: waits in the Inbox for the triage wizard.
+  //  'give'  — 1:1s only: straight onto this person's ledger as something THEY
+  //            OWE ME, no Inbox round-trip. Both carry the meeting provenance.
   const [taskDraft, setTaskDraft] = useState('');
-  const [captured, setCaptured] = useState<string[]>([]);
-  const captureTask = async () => {
+  const [captured, setCaptured] = useState<{ title: string; dest: 'inbox' | 'give' }[]>([]);
+  const captureTask = async (dest: 'inbox' | 'give' = 'inbox') => {
     const t = taskDraft.trim();
     if (!t) return;
+    const give = dest === 'give' && !isGroupMeeting;
     try {
       await insert('work_items', {
-        title: t, type: 'task', priority: 'medium', notes: '',
-        inboxed: true, source: 'you',
+        title: t, type: give ? 'waitingFor' : 'task', priority: 'medium', notes: '',
+        inboxed: !give, source: 'you',
         person_id: person.id,
         related_entities: [
           { type: 'person', id: person.id, name: person.name },
           { type: 'note', id: note.id, name: title || note.title },
         ],
       } as Partial<WorkItem>);
-      setCaptured((c) => [...c, t]);
+      setCaptured((c) => [...c, { title: t, dest: give ? 'give' : 'inbox' }]);
       setTaskDraft(''); // clear only after the save succeeds
-      logActivity('meeting_capture_task', t);
+      logActivity(give ? 'meeting_give_task' : 'meeting_capture_task', t);
     } catch { /* error surfaces via the sync banner; draft stays for retry */ }
   };
 
@@ -219,18 +222,30 @@ export function MeetingDocModal({ note, person, allMeetings, onClose, onNavigate
             <input
               className="mtg-capture-input"
               value={taskDraft}
-              placeholder="Capture a task — lands in your Inbox to triage later…"
+              placeholder={isGroupMeeting
+                ? 'Capture a task — lands in your Inbox to triage later…'
+                : `Capture a task — Inbox, or straight to ${person.name.split(' ')[0]}…`}
               onChange={(e) => setTaskDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void captureTask(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') void captureTask('inbox'); }}
             />
-            <button className="btn btn-primary btn-sm" disabled={!taskDraft.trim()} onClick={() => void captureTask()}>
+            {!isGroupMeeting && (
+              <button className="btn btn-secondary btn-sm" disabled={!taskDraft.trim()}
+                title={`Straight onto ${person.name.split(' ')[0]}'s ledger — they owe you this`}
+                onClick={() => void captureTask('give')}>
+                📤 Give to {person.name.split(' ')[0]}
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" disabled={!taskDraft.trim()} onClick={() => void captureTask('inbox')}>
               + Task → Inbox
             </button>
           </div>
           {captured.length > 0 && (
             <div className="mtg-captured-row">
-              {captured.map((t, i) => (
-                <span key={i} className="mtg-captured-chip" title="Captured to the Inbox">✓ {t}</span>
+              {captured.map((c, i) => (
+                <span key={i} className="mtg-captured-chip"
+                  title={c.dest === 'give' ? `On ${person.name.split(' ')[0]}'s ledger` : 'Captured to the Inbox'}>
+                  {c.dest === 'give' ? '📤' : '✓'} {c.title}
+                </span>
               ))}
             </div>
           )}

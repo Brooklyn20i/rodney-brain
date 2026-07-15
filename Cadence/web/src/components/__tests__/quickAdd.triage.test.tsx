@@ -52,6 +52,25 @@ describe('Quick Add captures to the Inbox', () => {
     expect(row.person_id).toBe('amy');              // tag preserved for triage
     expect(row.project_id).toBe('promace');
   });
+
+  it('“Give to {person}” sends the capture straight to their ledger, skipping the Inbox', async () => {
+    setStore({ people: [person({ id: 'amy', name: 'Amy Jones' })] });
+    render(<QuickAdd onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Send me the Q3 numbers Amy' } });
+    fireEvent.click(screen.getByRole('button', { name: /Give to Amy/ }));
+    await waitFor(() => expect(h.store.insert).toHaveBeenCalledTimes(1));
+    const [table, row] = h.store.insert.mock.calls[0];
+    expect(table).toBe('work_items');
+    expect(row.inboxed).toBe(false);                // filed instantly — no triage round-trip
+    expect(row.type).toBe('waitingFor');            // giving a task = they owe me
+    expect(row.person_id).toBe('amy');
+  });
+
+  it('offers no Give button without a person', () => {
+    render(<QuickAdd onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Loose thought' } });
+    expect(screen.queryByRole('button', { name: /Give to/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('Inbox shows every capture awaiting triage', () => {

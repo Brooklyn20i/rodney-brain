@@ -183,4 +183,21 @@ describe('TriageWizard deck flow', () => {
     await click('Done');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('single-item mode: triages exactly the given task and closes on filing', async () => {
+    const onClose = vi.fn();
+    setStore({ work_items: [
+      wi({ id: 'c1', title: 'Older capture', created_at: '2026-06-02T00:00:00Z' }),
+      wi({ id: 'c2', title: 'The one I picked', created_at: '2026-06-01T00:00:00Z' }),
+    ]});
+    render(<TriageWizard itemId="c2" onClose={onClose} />);
+    // Only the chosen task is in the deck — not the newest one.
+    expect(screen.getByText('Card 1 of 1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('The one I picked')).toBeInTheDocument();
+    await click(/My tasks/);
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'c2',
+      expect.objectContaining({ inboxed: false, type: 'task' }));
+    // No done screen — handling the one card finishes the job.
+    expect(onClose).toHaveBeenCalled();
+  });
 });

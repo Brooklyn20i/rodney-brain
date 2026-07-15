@@ -153,9 +153,16 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
   const projectName = data.projects.find((p) => p.id === eff.projectId)?.name;
   const filed = !!(personIds.length > 0 || eff.projectId || eff.due);
 
-  const add = async () => {
+  // Two destinations from the same capture:
+  //  'inbox' — capture-first (default): lands in the Inbox to triage later,
+  //            tags kept as metadata so filing is one tap.
+  //  'give'  — straight onto the first selected person's ledger as something
+  //            THEY OWE ME (giving someone a task = tracking they owe it).
+  //            Skips the Inbox entirely; flip direction later with ⇄ if needed.
+  const add = async (dest: 'inbox' | 'give' = 'inbox') => {
     const title = parsed.title;
     if (!title || busy) return; // busy guard: Enter can fire before the button disables
+    const give = dest === 'give' && personIds.length > 0;
     setBusy(true);
     try {
       // Build related_entities from all selected people + project
@@ -172,21 +179,19 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
       ];
 
       const person_id = personIds[0] || null;
-      // Quick Add is capture-first: everything lands in the Inbox to triage
-      // later, even when tagged with a person/project/date. Those tags are kept
-      // as metadata (so filing is one tap) but no longer file the item straight
-      // into a folder. Use "More options" to create an already-filed task.
       await insert('work_items', {
-        title, type: eff.type, priority: eff.priority,
+        title,
+        type: give ? 'waitingFor' : eff.type,
+        priority: eff.priority,
         due_date: eff.due || null,
         person_id,
         project_id: eff.projectId || null,
         related_entities: relatedEntities.length > 0 ? relatedEntities : [],
         notes: '',
-        inboxed: true,
+        inboxed: !give,
         source: 'you',
       } as Partial<WorkItem>);
-      logActivity('add_item', title);
+      logActivity(give ? 'give_task' : 'add_item', title);
       onClose();
     } finally { setBusy(false); }
   };
@@ -338,15 +343,23 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
           <button className="btn btn-ghost btn-sm" onClick={() => setOpenFull(true)} disabled={!text.trim()}>
             More options
           </button>
-          <button className="btn btn-primary" onClick={add} disabled={!text.trim() || busy}>
+          {personIds.length > 0 && (
+            <button className="btn btn-secondary" onClick={() => add('give')} disabled={!text.trim() || busy}
+              title="Straight onto their ledger as something they owe you — skips the Inbox">
+              📤 Give to {people.find((p) => p.id === personIds[0])?.name.split(' ')[0] || 'person'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => add('inbox')} disabled={!text.trim() || busy}>
             {busy ? 'Adding…' : 'Add to Inbox →'}
           </button>
         </div>
 
         <p className="quick-add-hint">
-          {filed
-            ? `Captured to the Inbox with ${[personIds.length > 0 && (personIds.length > 1 ? `${personIds.length} people` : 'a person'), eff.projectId && 'project', eff.due && 'date'].filter(Boolean).join(', ')} kept — triage it there when you're ready. Use “More options” to file it now.`
-            : 'Lands in the Inbox to triage later. Add a person, project or date now, or sort it out in the Inbox.'}
+          {personIds.length > 0
+            ? `“Give” sends it straight to ${people.find((p) => p.id === personIds[0])?.name.split(' ')[0] || 'their'}’s ledger (they owe you). “Add to Inbox” keeps it for triage.`
+            : filed
+              ? 'Captured to the Inbox with your tags kept — triage it there when you’re ready.'
+              : 'Lands in the Inbox to triage later. Pick a person to send it straight to their ledger.'}
         </p>
       </div>
     </div>

@@ -40,6 +40,11 @@ test('meeting doc edits persist and captured tasks land in the Inbox', async ({ 
   await capture.press('Enter');
   await expect(page.locator('.mtg-captured-chip', { hasText: 'Chase the Q3 roadmap owners' })).toBeVisible();
 
+  // …or straight onto Anna's ledger, skipping the Inbox entirely.
+  await capture.fill('Anna to confirm the venue');
+  await page.getByRole('button', { name: /Give to Anna/ }).click();
+  await expect(page.locator('.mtg-captured-chip', { hasText: 'Anna to confirm the venue' })).toBeVisible();
+
   // Save & Close flushes the edit; the modal closes.
   await page.getByRole('button', { name: /Save & Close/ }).first().click();
   await expect(overlay).toBeHidden();
@@ -50,9 +55,37 @@ test('meeting doc edits persist and captured tasks land in the Inbox', async ({ 
   await expect(page.locator('.mtg-modal-doc .ProseMirror')).toContainText('Q3 roadmap needs a second pass');
   await page.getByRole('button', { name: /Save & Close/ }).first().click();
 
-  // The captured task waits in the Inbox for triage.
+  // The captured task waits in the Inbox for triage…
   await navTo(page, 'Inbox');
   await expect(page.getByText('Chase the Q3 roadmap owners')).toBeVisible();
+  // …while the given task went straight to Anna's owes-me ledger, not the Inbox.
+  await expect(page.getByText('Anna to confirm the venue')).toHaveCount(0);
+  await navTo(page, 'People');
+  await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
+  await expect(
+    page.locator('.ledger-section', { hasText: 'Anna owes me' }).getByText('Anna to confirm the venue'),
+  ).toBeVisible();
+});
+
+// ── Quick Add: give a capture straight to a person's ledger ────────────────────
+test('Quick Add "Give to" files instantly to the ledger, skipping the Inbox', async ({ page }) => {
+  await navTo(page, 'Inbox');
+  await page.getByRole('button', { name: 'Capture task' }).click();
+  await page.getByPlaceholder(/Try "Follow up/).fill('Anna to send the market scan');
+  await page.getByRole('button', { name: /Give to Anna/ }).click();
+
+  // Not in the Inbox…
+  await expect(page.getByText('Anna to send the market scan')).toHaveCount(0);
+
+  // …but on Anna's owes-me ledger, and in Home's Waiting lane.
+  await navTo(page, 'People');
+  await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
+  await expect(
+    page.locator('.ledger-section', { hasText: 'Anna owes me' }).getByText('Anna to send the market scan'),
+  ).toBeVisible();
+  await navTo(page, 'Home');
+  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
+  await expect(page.getByText('Anna to send the market scan')).toBeVisible();
 });
 
 // ── Quick Add captures to the Inbox, even when tagged with a person/project ──
@@ -89,23 +122,23 @@ test('triage wizard files captures to a ledger and a note, emptying the inbox', 
     await expect(page.getByText(title)).toBeVisible();
   }
 
-  // Run the wizard. Card order is newest-first but two rapid captures can tie
-  // on created_at, so branch on whichever card is showing.
-  await page.getByRole('button', { name: 'Start triage (2)' }).click();
-  await expect(page.getByText('Card 1 of 2')).toBeVisible();
-  for (let i = 0; i < 2; i++) {
-    const title = await page.locator('.wizard-card-title').inputValue();
-    if (title === 'Pricing pack for review') {
-      // → Anna, something she owes me (lands on her ledger as a waiting-for).
-      await page.getByRole('button', { name: 'Person…' }).click();
-      await page.getByRole('button', { name: 'Anna Lee' }).click();
-      await page.getByRole('button', { name: 'Something they owe me' }).click();
-    } else {
-      await page.getByRole('button', { name: 'Make it a note' }).click();
-    }
-  }
+  // Triage ONE task on its own, straight from its row — no deck order imposed.
+  const pricingRow = page.locator('.inbox-triage-row', { hasText: 'Pricing pack for review' });
+  await pricingRow.getByRole('button', { name: 'Triage →' }).click();
+  await expect(page.getByText('Card 1 of 1')).toBeVisible();
+  // → Anna, something she owes me (lands on her ledger as a waiting-for).
+  await page.getByRole('button', { name: 'Person…' }).click();
+  await page.getByRole('button', { name: 'Anna Lee' }).click();
+  await page.getByRole('button', { name: 'Something they owe me' }).click();
+  // Single-item triage closes itself — no done screen, and the row is gone.
+  await expect(page.getByText('Card 1 of 1')).toBeHidden();
+  await expect(page.getByText('Pricing pack for review')).toHaveCount(0);
+
+  // The remaining capture goes through the full deck.
+  await page.getByRole('button', { name: 'Triage all (1)' }).click();
+  await expect(page.getByText('Card 1 of 1')).toBeVisible();
+  await page.getByRole('button', { name: 'Make it a note' }).click();
   await expect(page.getByText('Triage complete')).toBeVisible();
-  await expect(page.getByText('2 filed · 0 skipped')).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
 
   // The inbox is empty — the ritual is complete.

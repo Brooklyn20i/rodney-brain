@@ -16,7 +16,8 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
   const { data } = useCadence();
   const [editing, setEditing] = useState<WorkItem | null>(null);
   const [adding, setAdding] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  // 'all' = the card-by-card deck; an id = triage just that one task.
+  const [wizard, setWizard] = useState<null | 'all' | string>(null);
 
   // The Inbox is the triage queue: every unprocessed capture (inboxed),
   // INCLUDING ones already tagged with a person or project — capturing is
@@ -39,8 +40,8 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
       <ScreenHeader title="Inbox" subtitle="Unprocessed captures — triage each into its home" onMenu={onMenu}>
         <button className="btn btn-secondary" onClick={() => setAdding(true)}>+ Capture task</button>
         {totalOpen > 0 && (
-          <button className="btn btn-primary" onClick={() => setWizardOpen(true)}>
-            Start triage ({totalOpen})
+          <button className="btn btn-primary" onClick={() => setWizard('all')}>
+            Triage all ({totalOpen})
           </button>
         )}
       </ScreenHeader>
@@ -54,7 +55,14 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
             <React.Fragment key={key}>
               <div className="section-header"><h2>{label}</h2><span className="section-count" style={{ background: color }}>{items.length}</span></div>
               {items.map((w) => (
-                <TaskRow key={w.id} w={w} onEdit={setEditing} />
+                <div key={w.id} className="inbox-triage-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <TaskRow w={w} onEdit={setEditing} />
+                  </div>
+                  <button className="btn btn-secondary btn-sm inbox-row-triage"
+                    title="Triage this task now"
+                    onClick={() => setWizard(w.id)}>Triage →</button>
+                </div>
               ))}
             </React.Fragment>
           );
@@ -63,7 +71,12 @@ export function Inbox({ onMenu }: { onMenu?: () => void }) {
 
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
       {editing && <ItemModal existing={editing} onClose={() => setEditing(null)} />}
-      {wizardOpen && <TriageWizard onClose={() => setWizardOpen(false)} />}
+      {wizard && (
+        <TriageWizard
+          itemId={wizard === 'all' ? undefined : wizard}
+          onClose={() => setWizard(null)}
+        />
+      )}
     </>
   );
 }
