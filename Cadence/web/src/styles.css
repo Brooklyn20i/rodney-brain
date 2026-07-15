@@ -1757,6 +1757,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 /* ── Inbox triage rows: task card + a "file it" action ── */
 .inbox-triage-row { display: flex; align-items: center; gap: 8px; }
+.inbox-row-triage { flex-shrink: 0; white-space: nowrap; }
 .inbox-file-btn { flex-shrink: 0; white-space: nowrap; }
 
 /* ── Quick Add chips (tap-to-set who/project/date/priority) ── */

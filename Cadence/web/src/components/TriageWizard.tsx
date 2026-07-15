@@ -9,17 +9,20 @@ import { initials } from '../lib/util';
 
 type Stage = 'main' | 'person' | 'direction' | 'project';
 
-// The end-of-day ritual: step through every capture one at a time — polish the
-// title, add context and a date, then ONE tap sends it home. Person filing
-// asks the ledger question (I owe them / they owe me / raise at next 1:1) and
-// can create the person on the spot.
-export function TriageWizard({ onClose }: { onClose: () => void }) {
+// The triage ritual: polish the title, add context and a date, then ONE tap
+// sends it home. Person filing asks the ledger question (I owe them / they owe
+// me / raise at next 1:1) and can create the person on the spot.
+//
+// Two ways in: "Start triage" walks the whole deck card by card; a single
+// item's Triage button (itemId) handles just that one and closes.
+export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?: string }) {
   const { data, insert, update, remove, logActivity } = useCadence();
   const { enqueue } = useAgendaQueue();
 
   // Snapshot the queue at open so filing doesn't reshuffle the deck; each card
   // resolves live by id (skips anything already handled elsewhere).
-  const [ids] = useState(() => getTriageQueue(data.work_items).map((w) => w.id));
+  const [ids] = useState(() =>
+    itemId ? [itemId] : getTriageQueue(data.work_items).map((w) => w.id));
   const [idx, setIdx] = useState(0);
   const [filed, setFiled] = useState(0);
   const [skipped, setSkipped] = useState(0);
@@ -52,6 +55,8 @@ export function TriageWizard({ onClose }: { onClose: () => void }) {
   const projects = data.projects.filter((p) => p.status === 'active' && !p.deleted_at);
 
   const advance = (outcome: 'filed' | 'skipped') => {
+    // Single-item mode: the job is done the moment this card is handled.
+    if (itemId) { onClose(); return; }
     if (outcome === 'filed') setFiled((n) => n + 1);
     else setSkipped((n) => n + 1);
     setIdx((i) => i + 1);
