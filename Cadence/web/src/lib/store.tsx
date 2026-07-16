@@ -4,6 +4,7 @@ import { supabase, isConfigured } from './supabase';
 import { CadenceData, TABLES, emptyData, Workspace, WorkspaceMember } from './types';
 import { enqueue, dequeueAll, dropEntry, queueCount, clearQueue, isNetworkError } from './offlineQueue';
 import { dropMissingColumn } from './supabaseWrite';
+import { applyWorkTableScope } from './workTableScope';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
@@ -86,13 +87,15 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     const results = await Promise.all(tables.map(async (t) => {
       const base = supabase.from(t as string).select('*');
       // Scope to workspace when available (migration 0012+ applied).
-      const q = workspaceId ? (base as any).eq('workspace_id', workspaceId) : base;
+      // Supabase query builders are mutable, so applying .eq() to an alias also
+      // changes `base`. Decide scoping before mutating the builder.
+      const q = applyWorkTableScope(base as any, t as string, workspaceId);
       const r = t === 'activity'
         ? await q.order('created_at', { ascending: false }).limit(200)
         : t === 'agent_messages'
         // agent_messages is owner-scoped via RLS, not workspace-scoped; skip workspace filter
         // so Kobe's replies appear regardless of whether workspace_id is set on the row.
-        ? await base.is('deleted_at', null).order('created_at', { ascending: true }).limit(200)
+        ? await q.is('deleted_at', null).order('created_at', { ascending: true }).limit(200)
         : await q.is('deleted_at', null).order('created_at', { ascending: true });
       return { t, r };
     }));
