@@ -33,6 +33,7 @@ export type OwnerLens = 'kobe' | 'warren' | 'dan' | 'mckinsey' | 'rodney';
 
 export type LoanRateType = 'fixed' | 'variable';
 export type InvestmentSide = 'buy' | 'sell';
+export type InvestmentIncomeKind = 'dividend' | 'distribution' | 'interest';
 
 export type PropertyType = 'house' | 'townhouse' | 'unit' | 'land' | 'commercial' | 'other';
 
@@ -136,6 +137,28 @@ export interface InvestmentTransaction {
   // currency purchase -- it must be captured at entry time. Aggregating
   // `amount` directly across currencies would silently mix AUD and USD.
   amount_aud: number;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface InvestmentIncome {
+  id: string;
+  owner_id: string;
+  entity_id: string | null;
+  holding_id: string | null;
+  payment_date: string;
+  ticker: string;
+  income_kind: InvestmentIncomeKind;
+  currency: string;
+  gross_amount: number;
+  withholding_tax: number;
+  franking_credit: number;
+  net_amount: number;
+  amount_aud: number;
+  source: string;
+  external_ref: string;
   notes: string;
   created_at: string;
   updated_at: string;
@@ -564,6 +587,7 @@ export interface CadenceFinancialData {
   loans: Loan[];
   investment_holdings: InvestmentHolding[];
   investment_transactions: InvestmentTransaction[];
+  investment_income: InvestmentIncome[];
   monthly_metrics: MonthlyMetric[];
   evidence_items: EvidenceItem[];
   decisions: Decision[];
@@ -589,6 +613,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'loans',
   'investment_holdings',
   'investment_transactions',
+  'investment_income',
   'monthly_metrics',
   'evidence_items',
   'decisions',
@@ -614,6 +639,7 @@ export const emptyData = (): CadenceFinancialData => ({
   loans: [],
   investment_holdings: [],
   investment_transactions: [],
+  investment_income: [],
   monthly_metrics: [],
   evidence_items: [],
   decisions: [],
