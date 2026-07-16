@@ -17,6 +17,10 @@ Register in Hermes with e.g.:
 
 from __future__ import annotations
 
+import re
+import urllib.parse
+from datetime import date
+
 import cadence_financial_bridge as bridge
 from mcp.server.fastmcp import FastMCP
 
@@ -40,7 +44,7 @@ def probe() -> dict:
             limit=10,
         )
         writable = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
-        for table in ["properties", "loans", "monthly_metrics", "investment_holdings", "decisions", "liquidity_buckets"]:
+        for table in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets"]:
             rows = bridge.select(table, "select=id", limit=1000)
             counts[table] = len(rows) if isinstance(rows, list) else "?"
         return {
@@ -106,6 +110,159 @@ def list_investment_holdings() -> list[dict]:
         )
     except bridge.FinancialBridgeError as e:
         return [{"error": str(e)}]
+
+
+_INVESTMENT_INCOME_KINDS = {"dividend", "distribution", "interest"}
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+
+
+def _money(value: float | int | None, field: str, required: bool = True) -> tuple[float | None, str | None]:
+    if value is None:
+        return (None, f"{field} is required") if required else (None, None)
+    try:
+        out = round(float(value), 2)
+    except (TypeError, ValueError):
+        return None, f"{field} must be a number"
+    if out < 0:
+        return None, f"{field} must be nonnegative"
+    return out, None
+
+
+@mcp.tool()
+def list_investment_income(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    income_kind: str = "all",
+    limit: int = 100,
+) -> list[dict]:
+    """Investment income/dividends, newest first. Optional start_date/end_date are YYYY-MM-DD; income_kind is dividend/distribution/interest/all."""
+    try:
+        kind = (income_kind or "all").lower()
+        if kind != "all" and kind not in _INVESTMENT_INCOME_KINDS:
+            return [{"error": "income_kind must be dividend, distribution, interest, or all"}]
+        q = "select=*&deleted_at=is.null"
+        if start_date:
+            q += f"&payment_date=gte.{urllib.parse.quote(start_date)}"
+        if end_date:
+            q += f"&payment_date=lte.{urllib.parse.quote(end_date)}"
+        if kind != "all":
+            q += f"&income_kind=eq.{kind}"
+        q += "&order=payment_date.desc,created_at.desc"
+        return bridge.select("investment_income", q, limit=limit)
+    except bridge.FinancialBridgeError as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def log_investment_income(
+    payment_date: str,
+    ticker: str,
+    income_kind: str,
+    currency: str,
+    gross_amount: float,
+    withholding_tax: float = 0,
+    franking_credit: float = 0,
+    net_amount: float | None = None,
+    amount_aud: float | None = None,
+    entity_id: str | None = None,
+    holding_id: str | None = None,
+    source: str = "",
+    external_ref: str = "",
+    notes: str = "",
+) -> dict:
+    """Log first-class investment income. Derives net_amount from gross-withholding when omitted; AUD amount defaults only for AUD currency; nonblank external_ref is idempotent."""
+    try:
+        if not _DATE_RE.match(payment_date or ""):
+            return {"error": "payment_date must be YYYY-MM-DD"}
+        try:
+            date.fromisoformat(payment_date)
+        except ValueError:
+            return {"error": "payment_date must be a valid YYYY-MM-DD date"}
+        kind = (income_kind or "").lower().strip()
+        if kind not in _INVESTMENT_INCOME_KINDS:
+            return {"error": "income_kind must be dividend, distribution, or interest"}
+        curr = (currency or "").upper().strip()
+        if not _CURRENCY_RE.match(curr):
+            return {"error": "currency must be a 3-letter ISO code"}
+        gross, err = _money(gross_amount, "gross_amount")
+        if err:
+            return {"error": err}
+        withholding, err = _money(withholding_tax, "withholding_tax")
+        if err:
+            return {"error": err}
+        franking, err = _money(franking_credit, "franking_credit")
+        if err:
+            return {"error": err}
+        assert gross is not None and withholding is not None and franking is not None
+        if withholding > gross:
+            return {"error": "withholding_tax cannot exceed gross_amount"}
+        if net_amount is None:
+            net = round(gross - withholding, 2)
+        else:
+            net, err = _money(net_amount, "net_amount")
+            if err:
+                return {"error": err}
+        aud = amount_aud
+        if aud is None and curr == "AUD":
+            aud = net
+        elif aud is None:
+            return {"error": "amount_aud is required when currency is not AUD"}
+        aud_value, err = _money(aud, "amount_aud")
+        if err:
+            return {"error": err}
+        if curr == "AUD" and aud_value != net:
+            return {"error": "amount_aud must equal net_amount when currency is AUD"}
+
+        owner_id = bridge.discover_owner_id()
+        ref = (external_ref or "").strip()
+        owner_filter = urllib.parse.quote(owner_id, safe="")
+        ref_filter = urllib.parse.quote(ref, safe="")
+        if ref:
+            existing = bridge.select(
+                "investment_income",
+                f"select=*&owner_id=eq.{owner_filter}&external_ref=eq.{ref_filter}&deleted_at=is.null",
+                limit=1,
+            )
+            if isinstance(existing, list) and existing:
+                result = _first(existing)
+                return result if isinstance(result, dict) else {"error": "Unexpected investment_income response"}
+
+        row = {
+            "owner_id": owner_id,
+            "entity_id": entity_id,
+            "holding_id": holding_id,
+            "payment_date": payment_date,
+            "ticker": (ticker or "").upper().strip(),
+            "income_kind": kind,
+            "currency": curr,
+            "gross_amount": gross,
+            "withholding_tax": withholding,
+            "franking_credit": franking,
+            "net_amount": net,
+            "amount_aud": aud_value,
+            "source": source.strip(),
+            "external_ref": ref,
+            "notes": notes.strip(),
+        }
+        if not row["ticker"]:
+            return {"error": "ticker is required"}
+        try:
+            inserted = _first(bridge.insert("investment_income", row))
+            return inserted if isinstance(inserted, dict) else {"error": "Unexpected investment_income response"}
+        except bridge.FinancialBridgeError:
+            if ref:
+                existing = bridge.select(
+                    "investment_income",
+                    f"select=*&owner_id=eq.{owner_filter}&external_ref=eq.{ref_filter}&deleted_at=is.null",
+                    limit=1,
+                )
+                if isinstance(existing, list) and existing:
+                    result = _first(existing)
+                    return result if isinstance(result, dict) else {"error": "Unexpected investment_income response"}
+            raise
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
 
 
 @mcp.tool()

@@ -23,6 +23,7 @@ import type {
   Goal,
   InsurancePolicy,
   InvestmentHolding,
+  InvestmentIncome,
   InvestmentTransaction,
   LiquidityBucket,
   Loan,
@@ -256,6 +257,27 @@ const investmentTransactions: InvestmentTransaction[] = [
   { ...base, id: 't-2', date: '2025-01-22', ticker: 'VOO', side: 'buy', currency: 'USD', units: 10, price: 520, amount: 5_200, amount_aud: 7_800, notes: 'Screenshot visible; USD converted at purchase-date FX' },
   { ...base, id: 't-3', date: '2025-03-05', ticker: 'VOO', side: 'buy', currency: 'USD', units: 8, price: 530, amount: 4_240, amount_aud: 6_360, notes: 'Screenshot visible; USD converted at purchase-date FX' },
   { ...base, id: 't-4', date: '2025-06-12', ticker: 'BTC', side: 'buy', currency: 'AUD', units: 0.018, price: 83_333, amount: 1_500, amount_aud: 1_500, notes: 'Ledger purchase screenshot' },
+];
+
+const investmentIncome: InvestmentIncome[] = [
+  {
+    ...base,
+    id: 'ii-wire-dividend',
+    entity_id: 'e-harbor',
+    holding_id: null,
+    payment_date: '2025-07-16',
+    ticker: 'WIRE',
+    income_kind: 'dividend',
+    currency: 'AUD',
+    gross_amount: 123.45,
+    withholding_tax: 0,
+    franking_credit: 0,
+    net_amount: 123.45,
+    amount_aud: 123.45,
+    source: 'Demo broker cash statement',
+    external_ref: 'demo-wire-dividend-2025-07-16',
+    notes: 'Fictional dividend fixture; not real brokerage data.',
+  },
 ];
 
 // period, cash_saved, share_buys, btc_buys, debt_reduction, net_worth, cash_offsets,
@@ -512,6 +534,7 @@ export function loadDemoData(): CadenceFinancialData {
     loans,
     investment_holdings: investmentHoldings,
     investment_transactions: investmentTransactions,
+    investment_income: investmentIncome,
     monthly_metrics: monthlyMetrics,
     evidence_items: evidenceItems,
     decisions,

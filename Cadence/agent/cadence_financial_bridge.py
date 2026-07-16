@@ -54,7 +54,7 @@ from typing import Any
 
 TABLES = [
     "entities", "properties", "loans", "investment_holdings",
-    "investment_transactions", "monthly_metrics", "evidence_items",
+    "investment_transactions", "investment_income", "monthly_metrics", "evidence_items",
     "decisions", "liquidity_buckets", "allocation_policies", "risk_policies",
     "goals", "insurance_policies", "estate_items", "property_ledger",
     "budget_lines", "budget_categories", "budget_fx_rates",
@@ -252,7 +252,7 @@ def cmd_probe(_: argparse.Namespace) -> None:
             limit=10,
         )
         writable = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
-        for t in ["properties", "loans", "monthly_metrics", "investment_holdings", "decisions", "liquidity_buckets"]:
+        for t in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets"]:
             rows = select(t, "select=id", limit=1000)
             counts[t] = len(rows) if isinstance(rows, list) else "?"
         print(json.dumps({

@@ -7,7 +7,7 @@
 // Decimal + ROUND_HALF_UP. Every function here is pure: it takes raw rows
 // and returns numbers, never storing a derived figure back onto a row.
 
-import type { BudgetFxRate, InvestmentHolding, InvestmentTransaction, MonthlyMetric } from './types';
+import type { BudgetFxRate, InvestmentHolding, InvestmentIncome, InvestmentTransaction, MonthlyMetric } from './types';
 import { formatMoney } from './util';
 
 const CENTS_PER_DOLLAR = 100;
@@ -320,6 +320,74 @@ export function investmentBuysSummary(
 
 export type InvestmentBucket = 'shares' | 'crypto';
 export type InvestmentExposureBucket = 'shares' | 'crypto' | 'commodities';
+
+export interface InvestmentIncomeFormAmounts {
+  currency: string;
+  grossAmount: string;
+  withholdingTax: string;
+  netAmount: string;
+  amountAud: string;
+}
+
+function formMoney(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function investmentIncomeFormError(input: InvestmentIncomeFormAmounts): string | null {
+  const currency = input.currency.trim().toUpperCase();
+  const gross = formMoney(input.grossAmount);
+  if (gross === null || gross <= 0) return 'Gross amount must be greater than zero';
+
+  const withholding = input.withholdingTax.trim() ? formMoney(input.withholdingTax) : 0;
+  if (withholding === null || withholding < 0) return 'Withholding tax must be zero or greater';
+  if (withholding > gross) return 'Withholding tax cannot exceed gross amount';
+
+  if (input.netAmount.trim()) {
+    const net = formMoney(input.netAmount);
+    if (net === null || net < 0) return 'Net amount must be zero or greater';
+  }
+
+  if (currency !== 'AUD') {
+    if (!input.amountAud.trim()) return 'AUD equivalent is required for non-AUD income';
+    const amountAud = formMoney(input.amountAud);
+    if (amountAud === null || amountAud <= 0) return 'AUD equivalent must be greater than zero';
+  }
+  return null;
+}
+
+export interface InvestmentIncomeSummary {
+  dividends: number;
+  distributions: number;
+  interest: number;
+  total: number;
+  count: number;
+}
+
+export function investmentIncomeSummary(
+  rows: InvestmentIncome[],
+  startDate: string,
+  endDate: string
+): InvestmentIncomeSummary {
+  const selected = rows.filter(
+    (r) => !r.deleted_at && r.payment_date >= startDate && r.payment_date <= endDate
+  );
+  const byKind = (kind: InvestmentIncome['income_kind']) =>
+    selected
+      .filter((r) => r.income_kind === kind)
+      .reduce((sum, r) => sum + toCents(r.amount_aud), 0);
+  const dividendsC = byKind('dividend');
+  const distributionsC = byKind('distribution');
+  const interestC = byKind('interest');
+  return {
+    dividends: centsToDollars(dividendsC),
+    distributions: centsToDollars(distributionsC),
+    interest: centsToDollars(interestC),
+    total: centsToDollars(dividendsC + distributionsC + interestC),
+    count: selected.length,
+  };
+}
 
 export interface FxConversionResult {
   value: number;

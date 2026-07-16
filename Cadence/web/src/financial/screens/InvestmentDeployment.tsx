@@ -5,6 +5,8 @@ import {
   fxRateMap,
   investmentBucketForTransaction,
   investmentBuysSummary,
+  investmentIncomeFormError,
+  investmentIncomeSummary,
   investmentExposureBucketForHolding,
   investmentPerformanceSummary,
   toAudWithFx,
@@ -83,8 +85,8 @@ function PerformanceCard({ summary }: { summary: InvestmentBucketSummary }) {
 }
 
 export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
-  const { data, demo, insert, update } = useCadenceFinancial();
-  const [form, setForm] = useState<'holding' | 'buy' | null>(null);
+  const { data, demo, insert, update, remove } = useCadenceFinancial();
+  const [form, setForm] = useState<'holding' | 'buy' | 'income' | null>(null);
   // Per-row reprice state: holding id -> { value, date }
   const [reprice, setReprice] = useState<Record<string, { value: string; date: string }>>({});
   // Per-card thesis dossier expander: holding id | null
@@ -166,6 +168,25 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   const [holding, setHolding] = useState({ ticker: '', market: '', currency: 'AUD', units: '', native_value: '', cost_basis: '' });
   const [buy, setBuy] = useState({ date: today(), ticker: '', currency: 'AUD', units: '', price: '', amount: '', amount_aud: '', notes: '' });
+  const [income, setIncome] = useState({
+    entity_id: '',
+    holding_id: '',
+    payment_date: today(),
+    ticker: '',
+    income_kind: 'dividend',
+    currency: 'AUD',
+    gross_amount: '',
+    withholding_tax: '',
+    franking_credit: '',
+    net_amount: '',
+    amount_aud: '',
+    source: '',
+    external_ref: '',
+    notes: '',
+  });
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [incomeEdit, setIncomeEdit] = useState<typeof income | null>(null);
+  const [incomeError, setIncomeError] = useState<string | null>(null);
 
   const range = periodRange(data.investment_transactions.map((t) => t.date.slice(0, 7)));
   const summary = range ? investmentBuysSummary(data.investment_transactions, range.start, range.end) : null;
@@ -174,6 +195,13 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   const monthlyMetrics = data.monthly_metrics;
   const budgetFxRates = data.budget_fx_rates;
   const entities = data.entities;
+  const investmentIncomeRows = data.investment_income.filter((r) => !r.deleted_at);
+  const incomeDates = investmentIncomeRows.map((r) => r.payment_date).sort();
+  const incomeSummary = investmentIncomeSummary(
+    investmentIncomeRows,
+    incomeDates[0] ?? '0000-01-01',
+    incomeDates[incomeDates.length - 1] ?? '9999-12-31'
+  );
   const liveFxRates = useMemo(() => liveFxRatesFromQuotes(quotes), [quotes]);
   const effectiveFxRates = useMemo(() => [...budgetFxRates, ...liveFxRates], [budgetFxRates, liveFxRates]);
   const perf = useMemo(
@@ -248,6 +276,98 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
     setForm(null);
   };
 
+  const incomeFormError = (src: typeof income) => investmentIncomeFormError({
+    currency: src.currency,
+    grossAmount: src.gross_amount,
+    withholdingTax: src.withholding_tax,
+    netAmount: src.net_amount,
+    amountAud: src.amount_aud,
+  });
+
+  const incomePayload = (src: typeof income) => {
+    const currency = src.currency.trim().toUpperCase() || 'AUD';
+    const gross = num(src.gross_amount);
+    const withholding = num(src.withholding_tax);
+    const net = src.net_amount.trim() ? num(src.net_amount) : Math.max(0, gross - withholding);
+    return {
+      entity_id: src.entity_id || null,
+      holding_id: src.holding_id || null,
+      payment_date: src.payment_date,
+      ticker: src.ticker.trim().toUpperCase(),
+      income_kind: src.income_kind as 'dividend' | 'distribution' | 'interest',
+      currency,
+      gross_amount: gross,
+      withholding_tax: withholding,
+      franking_credit: num(src.franking_credit),
+      net_amount: net,
+      amount_aud: currency === 'AUD' ? net : num(src.amount_aud),
+      source: src.source.trim(),
+      external_ref: src.external_ref.trim(),
+      notes: src.notes.trim(),
+    };
+  };
+
+  const addIncome = async () => {
+    if (!income.ticker.trim() || !income.payment_date) return;
+    const validationError = incomeFormError(income);
+    if (validationError) {
+      setIncomeError(validationError);
+      return;
+    }
+    setIncomeError(null);
+    await insert('investment_income', incomePayload(income));
+    setIncome({
+      entity_id: '',
+      holding_id: '',
+      payment_date: today(),
+      ticker: '',
+      income_kind: 'dividend',
+      currency: 'AUD',
+      gross_amount: '',
+      withholding_tax: '',
+      franking_credit: '',
+      net_amount: '',
+      amount_aud: '',
+      source: '',
+      external_ref: '',
+      notes: '',
+    });
+    setForm(null);
+  };
+
+  const startEditIncome = (row: (typeof data.investment_income)[number]) => {
+    setEditingIncomeId(row.id);
+    setIncomeEdit({
+      entity_id: row.entity_id ?? '',
+      holding_id: row.holding_id ?? '',
+      payment_date: row.payment_date,
+      ticker: row.ticker,
+      income_kind: row.income_kind,
+      currency: row.currency,
+      gross_amount: String(row.gross_amount),
+      withholding_tax: String(row.withholding_tax),
+      franking_credit: String(row.franking_credit),
+      net_amount: String(row.net_amount),
+      amount_aud: String(row.amount_aud),
+      source: row.source,
+      external_ref: row.external_ref,
+      notes: row.notes,
+    });
+  };
+
+  const saveIncomeEdit = async () => {
+    if (!editingIncomeId || !incomeEdit) return;
+    const validationError = incomeFormError(incomeEdit);
+    if (validationError) {
+      setIncomeError(validationError);
+      return;
+    }
+    setIncomeError(null);
+    await update('investment_income', editingIncomeId, incomePayload(incomeEdit));
+    setEditingIncomeId(null);
+    setIncomeEdit(null);
+  };
+
   const saveReprice = async (id: string) => {
     const r = reprice[id];
     if (!r) return;
@@ -266,6 +386,9 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
         </button>
         <button className="btn btn-primary btn-sm" onClick={() => setForm(form === 'buy' ? null : 'buy')}>
           {form === 'buy' ? 'Cancel' : '+ Buy'}
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setForm(form === 'income' ? null : 'income')}>
+          {form === 'income' ? 'Cancel' : '+ Income'}
         </button>
       </ScreenHeader>
       <div className="screen-content">
@@ -316,6 +439,58 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
             </div>
             <button className="btn btn-primary" onClick={addBuy}>
               Add buy
+            </button>
+          </Card>
+        )}
+        {form === 'income' && (
+          <Card title="Log investment income">
+            <div className="wizard-grid">
+              <div className="form-group">
+                <label className="field">Entity</label>
+                <select value={income.entity_id} onChange={(e) => setIncome((v) => ({ ...v, entity_id: e.target.value }))}>
+                  <option value="">Unassigned</option>
+                  {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="field">Holding</label>
+                <select value={income.holding_id} onChange={(e) => setIncome((v) => ({ ...v, holding_id: e.target.value }))}>
+                  <option value="">No linked holding</option>
+                  {investmentHoldings.filter((h) => !h.deleted_at).map((h) => <option key={h.id} value={h.id}>{h.ticker} · {h.market || h.currency}</option>)}
+                </select>
+              </div>
+              {(
+                [
+                  ['payment_date', 'Payment date'],
+                  ['ticker', 'Ticker'],
+                  ['currency', 'Currency'],
+                  ['gross_amount', 'Gross amount'],
+                  ['withholding_tax', 'Withholding tax'],
+                  ['franking_credit', 'Franking credit'],
+                  ['net_amount', 'Net amount (blank = gross − withholding)'],
+                  ['amount_aud', 'AUD equivalent (required if not AUD)'],
+                  ['source', 'Source'],
+                  ['external_ref', 'External reference'],
+                  ['notes', 'Notes'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="form-group" key={key}>
+                  <label className="field">{label}</label>
+                  <input type="text" value={income[key]} onChange={(e) => setIncome((v) => ({ ...v, [key]: e.target.value }))} />
+                </div>
+              ))}
+              <div className="form-group">
+                <label className="field">Kind</label>
+                <select value={income.income_kind} onChange={(e) => setIncome((v) => ({ ...v, income_kind: e.target.value }))}>
+                  <option value="dividend">Dividend</option>
+                  <option value="distribution">Distribution</option>
+                  <option value="interest">Interest</option>
+                </select>
+              </div>
+            </div>
+            {incomeError && <p className="inv-warning" role="alert">{incomeError}</p>}
+            <button className="btn btn-primary" onClick={addIncome}>
+              Log income
             </button>
           </Card>
         )}
@@ -494,6 +669,96 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
               </section>
             );
           })}
+        </Card>
+
+        <Card title="Investment income">
+          {incomeError && form !== 'income' && <p className="inv-warning" role="alert">{incomeError}</p>}
+          <div className="cf-metric-grid">
+            <div className="cf-metric">
+              <div className="cf-metric-label">Dividends</div>
+              <div className="cf-metric-value">{formatMoney(incomeSummary.dividends, true)}</div>
+            </div>
+            <div className="cf-metric">
+              <div className="cf-metric-label">Distributions</div>
+              <div className="cf-metric-value">{formatMoney(incomeSummary.distributions, true)}</div>
+            </div>
+            <div className="cf-metric">
+              <div className="cf-metric-label">Interest</div>
+              <div className="cf-metric-value">{formatMoney(incomeSummary.interest, true)}</div>
+            </div>
+            <div className="cf-metric">
+              <div className="cf-metric-label">Total income</div>
+              <div className="cf-metric-value">{formatMoney(incomeSummary.total, true)}</div>
+            </div>
+          </div>
+          <div className="cf-table-wrap" style={{ marginTop: 12 }}>
+            <table className="cf-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Entity</th>
+                  <th>Ticker</th>
+                  <th>Kind</th>
+                  <th>Net native</th>
+                  <th>AUD</th>
+                  <th>Source / ref</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...investmentIncomeRows].sort((a, b) => b.payment_date.localeCompare(a.payment_date)).map((row) => {
+                  const editing = editingIncomeId === row.id && incomeEdit;
+                  return (
+                    <tr key={row.id}>
+                      {editing ? (
+                        <>
+                          <td><input value={incomeEdit.payment_date} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, payment_date: e.target.value }))} /></td>
+                          <td>
+                            <select value={incomeEdit.entity_id} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, entity_id: e.target.value }))}>
+                              <option value="">Unassigned</option>
+                              {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                            </select>
+                          </td>
+                          <td><input value={incomeEdit.ticker} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, ticker: e.target.value }))} /></td>
+                          <td>
+                            <select value={incomeEdit.income_kind} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, income_kind: e.target.value }))}>
+                              <option value="dividend">Dividend</option>
+                              <option value="distribution">Distribution</option>
+                              <option value="interest">Interest</option>
+                            </select>
+                          </td>
+                          <td><input value={incomeEdit.net_amount} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, net_amount: e.target.value }))} /></td>
+                          <td><input value={incomeEdit.amount_aud} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, amount_aud: e.target.value }))} /></td>
+                          <td><input value={incomeEdit.source} onChange={(e) => setIncomeEdit((v) => v && ({ ...v, source: e.target.value }))} /></td>
+                          <td>
+                            <button className="btn btn-primary btn-sm" onClick={saveIncomeEdit}>Save</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => { setEditingIncomeId(null); setIncomeEdit(null); }}>Cancel</button>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{row.payment_date}</td>
+                          <td>{entityName(row.entity_id)}</td>
+                          <td>{row.ticker}</td>
+                          <td>{row.income_kind}</td>
+                          <td>{row.currency} {row.net_amount.toLocaleString('en-AU', { minimumFractionDigits: 2 })}</td>
+                          <td>{formatMoney(row.amount_aud)}</td>
+                          <td style={{ textAlign: 'left', color: 'var(--text2)', fontSize: 12 }}>{row.source}{row.external_ref ? ` · ${row.external_ref}` : ''}</td>
+                          <td>
+                            <button className="btn btn-secondary btn-sm" onClick={() => startEditIncome(row)}>Edit</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => remove('investment_income', row.id)}>Delete</button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+                {investmentIncomeRows.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'left', color: 'var(--text2)' }}>No investment income logged yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
         {summary && (

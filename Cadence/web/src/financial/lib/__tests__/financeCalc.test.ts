@@ -5,6 +5,8 @@ import {
   investmentBucketForHolding,
   investmentExposureBucketForHolding,
   investmentBuysSummary,
+  investmentIncomeFormError,
+  investmentIncomeSummary,
   investmentPerformanceSummary,
   latestMonth,
   netWorthBridge,
@@ -12,7 +14,7 @@ import {
   performanceHistory,
   summarizePeriod,
 } from '../financeCalc';
-import type { BudgetFxRate, InvestmentHolding, InvestmentTransaction, MonthlyMetric } from '../types';
+import type { BudgetFxRate, InvestmentHolding, InvestmentIncome, InvestmentTransaction, MonthlyMetric } from '../types';
 import { liveFxRatesFromQuotes, USD_AUD_FX_SYMBOL } from '../livePrices';
 
 // Fictional fixture data only -- see CadenceFinancial/AGENTS.md for why.
@@ -207,6 +209,103 @@ describe('investmentBuysSummary', () => {
     const summary = investmentBuysSummary(mixedCurrency, '2025-02', '2025-02');
 
     expect(summary.shares).toBeCloseTo(250, 2); // 100 (AUD) + 150 (USD converted), not 200
+  });
+});
+
+function income(overrides: Partial<InvestmentIncome> & Pick<InvestmentIncome, 'payment_date' | 'income_kind' | 'amount_aud'>): InvestmentIncome {
+  return {
+    id: `${overrides.payment_date}-${overrides.income_kind}`,
+    owner_id: 'demo-owner',
+    entity_id: null,
+    holding_id: null,
+    ticker: 'WIRE',
+    currency: 'AUD',
+    gross_amount: overrides.amount_aud,
+    withholding_tax: 0,
+    franking_credit: 0,
+    net_amount: overrides.amount_aud,
+    source: '',
+    external_ref: '',
+    notes: '',
+    created_at: '',
+    updated_at: '',
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe('investmentIncomeSummary', () => {
+  it('filters by date range, ignores deleted rows, splits by kind, and sums AUD equivalents', () => {
+    const summary = investmentIncomeSummary(
+      [
+        income({ payment_date: '2026-07-16', income_kind: 'dividend', amount_aud: 491.34 }),
+        income({ payment_date: '2026-07-20', income_kind: 'distribution', ticker: 'VAS', amount_aud: 120.1 }),
+        income({ payment_date: '2026-08-01', income_kind: 'interest', ticker: 'CASH', amount_aud: 12.56 }),
+        income({ payment_date: '2026-07-21', income_kind: 'dividend', amount_aud: 99, deleted_at: '2026-07-22T00:00:00Z' }),
+        income({ payment_date: '2026-06-30', income_kind: 'dividend', amount_aud: 1_000 }),
+      ],
+      '2026-07-01',
+      '2026-07-31'
+    );
+
+    expect(summary.dividends).toBeCloseTo(491.34, 2);
+    expect(summary.distributions).toBeCloseTo(120.1, 2);
+    expect(summary.interest).toBe(0);
+    expect(summary.total).toBeCloseTo(611.44, 2);
+    expect(summary.count).toBe(2);
+  });
+
+  it('returns zero totals for empty input or an empty matching range', () => {
+    expect(investmentIncomeSummary([], '2026-07-01', '2026-07-31')).toEqual({
+      dividends: 0,
+      distributions: 0,
+      interest: 0,
+      total: 0,
+      count: 0,
+    });
+    expect(
+      investmentIncomeSummary(
+        [income({ payment_date: '2026-06-30', income_kind: 'dividend', amount_aud: 10 })],
+        '2026-07-01',
+        '2026-07-31'
+      ).total
+    ).toBe(0);
+  });
+});
+
+describe('investmentIncomeFormError', () => {
+  it('requires a positive AUD equivalent for non-AUD income', () => {
+    expect(investmentIncomeFormError({
+      currency: 'USD',
+      grossAmount: '100',
+      withholdingTax: '0',
+      netAmount: '100',
+      amountAud: '',
+    })).toBe('AUD equivalent is required for non-AUD income');
+    expect(investmentIncomeFormError({
+      currency: 'USD',
+      grossAmount: '100',
+      withholdingTax: '0',
+      netAmount: '100',
+      amountAud: '0',
+    })).toBe('AUD equivalent must be greater than zero');
+  });
+
+  it('rejects invalid amount relationships and accepts a valid AUD dividend', () => {
+    expect(investmentIncomeFormError({
+      currency: 'AUD',
+      grossAmount: '100',
+      withholdingTax: '101',
+      netAmount: '',
+      amountAud: '',
+    })).toBe('Withholding tax cannot exceed gross amount');
+    expect(investmentIncomeFormError({
+      currency: 'AUD',
+      grossAmount: '100',
+      withholdingTax: '0',
+      netAmount: '',
+      amountAud: '',
+    })).toBeNull();
   });
 });
 
