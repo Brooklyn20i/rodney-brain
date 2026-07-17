@@ -7,11 +7,16 @@ import { CadenceFitnessProvider } from './fitness/lib/store';
 import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import { lockCadencePortrait } from './fitness/lib/orientation';
+import { installPwaUpdateRefresh } from './lib/pwaUpdate';
 import './styles.css';
 
 // Build provenance for operators and bug reports. Vite replaces this at build
 // time from Vercel's commit SHA or a local git fallback.
 document.documentElement.dataset.buildCommit = __BUILD_COMMIT__;
+
+// Keep long-lived iPhone/iPad Home Screen sessions on one coherent deployment:
+// update when the PWA resumes, then reload once when the new worker takes over.
+installPwaUpdateRefresh();
 
 // Resilience: a new deploy renames hashed chunks. If a stale service worker
 // serves an old shell that imports a chunk that no longer exists, the browser

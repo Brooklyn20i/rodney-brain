@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { FINANCIAL_THEME_STYLE } from '../../../lib/domainTheme';
 
 const styles = readFileSync(new URL('src/styles.css', `file://${process.cwd()}/`), 'utf8');
 
@@ -42,5 +43,13 @@ describe('Financial theme contrast', () => {
     expect(tokens['--text2']).toBe('#6B6B6B');
     expect(tokens['--text3']).toBe('#ABABAB');
     expect(contrastRatio(tokens['--text'], tokens['--surface'])).toBeGreaterThanOrEqual(7);
+  });
+
+  it('keeps the runtime Financial fallback in lockstep with the CSS theme', () => {
+    const tokens = financialThemeTokens();
+
+    for (const [name, value] of Object.entries(FINANCIAL_THEME_STYLE)) {
+      expect(tokens[name].replace(/\s+/g, '').toLowerCase()).toBe(value.replace(/\s+/g, '').toLowerCase());
+    }
   });
 });
