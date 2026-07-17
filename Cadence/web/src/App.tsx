@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useMemo, useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import type { CSSProperties } from 'react';
 import { useCadence } from './lib/store';
 import { useCadenceFitness } from './fitness/lib/store';
 import { useCadenceFinancial } from './financial/lib/store';
@@ -8,6 +9,7 @@ import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { GlobalCapture } from './components/GlobalCapture';
+import { FINANCIAL_THEME_STYLE } from './lib/domainTheme';
 import { Home } from './screens/taskScreens'; // eager — the default landing screen
 
 // Lazy-load the remaining screens so the initial bundle ships only Home plus
@@ -137,7 +139,8 @@ export function App() {
   // Re-theme the whole app for the active domain and keep the URL honest so a
   // reload / share / Home Screen shortcut re-opens the same section. Setting
   // data-domain on <html> lets the token overrides cascade to <body> too.
-  useEffect(() => {
+  // Layout effect prevents one frame of Health's pale text on Financial cards.
+  useLayoutEffect(() => {
     document.documentElement.dataset.domain = domain;
     document.title = DOMAIN_TITLE[domain];
     const set = (sel: string, attr: string, val: string) =>
@@ -272,7 +275,7 @@ export function App() {
   };
 
   return (
-    <div id="app">
+    <div id="app" style={domain === 'financial' ? FINANCIAL_THEME_STYLE as CSSProperties : undefined}>
       {isOffline && (
         <div className="offline-banner">
           Offline{pendingCount > 0 ? ` — ${pendingCount} change${pendingCount === 1 ? '' : 's'} pending sync` : ''}
