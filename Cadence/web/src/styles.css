@@ -42,11 +42,31 @@
    cascades to <body> too — no default-navy sliver behind the rounded #main.
    Work keeps the :root defaults (navy). */
 html[data-domain="financial"] {
+  /* Wealth keeps a light reading canvas. Own every surface/text token explicitly
+     rather than inheriting them from :root so an iOS PWA domain switch or page
+     restore cannot leave Health's light-on-dark text on Wealth's white cards. */
+  --app-bg: #F4F4F0;
+  --surface: #FFFFFF;
+  --surface2: #F8F8F6;
+  --border: rgba(0,0,0,0.08);
+  --text: #1A1A1A;
+  --text2: #6B6B6B;
+  --text3: #ABABAB;
+  --green: #1A7F37;   --green-bg: #EDFAF1;
+  --blue: #1B5E9E;    --blue-bg: #EDF4FD;
+  --red: #D93025;      --red-bg: #FEF2F1;
+  --orange: #E07D00;   --orange-bg: #FFF8EE;
+  --purple: #6B3FA0;   --purple-bg: #F3EEFA;
+  --teal: #0E7490;     --teal-bg: #ECFAFA;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
   /* Old-money pine green + brass. Deep and rich, but still reads as green
      at Home Screen icon size (bottle green #0E3826 rendered near-black). */
   --sidebar-bg: #124A2C;
   --sidebar-active: #1E5A38;
+  --sidebar-active-text: #FFFFFF;
   --sidebar-icon-active: #C7A24A;
+  --sidebar-text: rgba(255,255,255,0.65);
   --accent: #1C6B45;
   --accent-lt: #2E8A5E;
 }
