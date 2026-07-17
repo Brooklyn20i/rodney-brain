@@ -32,6 +32,7 @@ const FinFreeCashEngine = lazy(() => import('./financial/screens/FreeCashEngine'
 const FinNetWorthBridge = lazy(() => import('./financial/screens/NetWorthBridge').then((m) => ({ default: m.NetWorthBridge })));
 const FinDebtOffsetControl = lazy(() => import('./financial/screens/DebtOffsetControl').then((m) => ({ default: m.DebtOffsetControl })));
 const FinInvestmentDeployment = lazy(() => import('./financial/screens/InvestmentDeployment').then((m) => ({ default: m.InvestmentDeployment })));
+const FinWatches = lazy(() => import('./financial/screens/Watches').then((m) => ({ default: m.Watches })));
 const FinPropertyPortfolio = lazy(() => import('./financial/screens/PropertyPortfolio').then((m) => ({ default: m.PropertyPortfolio })));
 const FinAssetAllocation = lazy(() => import('./financial/screens/AssetAllocation').then((m) => ({ default: m.AssetAllocation })));
 const FinPerformance = lazy(() => import('./financial/screens/Performance').then((m) => ({ default: m.Performance })));
@@ -223,6 +224,7 @@ export function App() {
         case 'net-worth-bridge': return <FinNetWorthBridge onMenu={onMenu} />;
         case 'debt-offset': return <FinDebtOffsetControl onMenu={onMenu} />;
         case 'investments': return <FinInvestmentDeployment onMenu={onMenu} />;
+        case 'watches': return <FinWatches onMenu={onMenu} />;
         case 'property': return <FinPropertyPortfolio onMenu={onMenu} />;
         case 'allocation': return <FinAssetAllocation onMenu={onMenu} />;
         case 'performance': return <FinPerformance onMenu={onMenu} />;

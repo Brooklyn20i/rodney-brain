@@ -2580,3 +2580,26 @@ summary:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Financial Watches ── */
+.watch-filter-bar { display: grid; gap: 10px; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; }
+.watch-filter-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.watch-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.watch-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.watch-card h3 { margin: 0; font-size: 17px; }
+.watch-card p { margin: 4px 0 0; color: var(--text2); font-size: 13px; }
+.watch-value-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.watch-value-grid div { background: var(--surface2); border-radius: 10px; padding: 10px; min-width: 0; }
+.watch-value-grid span, .watch-value-grid small { display: block; color: var(--text2); font-size: 12px; }
+.watch-value-grid strong { display: block; margin: 4px 0; font-size: 15px; overflow-wrap: anywhere; }
+.watch-context-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.watch-context-row span { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; color: var(--text2); font-size: 12px; }
+.watch-notes { color: var(--text2); font-size: 12.5px; line-height: 1.45; display: grid; gap: 4px; }
+.watch-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+@media (max-width: 720px) {
+  .watch-filter-bar { grid-template-columns: 1fr; }
+  .watch-grid { grid-template-columns: minmax(0, 1fr); }
+  .watch-card-head { flex-direction: column; }
+  .watch-value-grid { grid-template-columns: 1fr; }
+}

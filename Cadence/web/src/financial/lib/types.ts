@@ -581,6 +581,44 @@ export interface StrategyItem {
   deleted_at: string | null;
 }
 
+export type WatchCollectionRole = 'permanent' | 'rotation' | 'exit_trade' | 'future';
+export type WatchOwnershipStatus = 'owned' | 'candidate' | 'traded' | 'sold';
+export type WatchFullSetStatus = 'full' | 'partial' | 'none' | 'unknown';
+
+export interface Watch {
+  id: string;
+  owner_id: string;
+  brand: string;
+  model: string;
+  reference: string;
+  nickname: string;
+  year: number | null;
+  collection_role: WatchCollectionRole;
+  ownership_status: WatchOwnershipStatus;
+  currency: string;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  current_value: number | null;
+  value_as_of: string | null;
+  valuation_source: string;
+  insurance_value: number | null;
+  full_set_status: WatchFullSetStatus;
+  accessories: string;
+  material: string;
+  dial: string;
+  service_history: string;
+  provenance: string;
+  insurance_notes: string;
+  storage_location: string;
+  security_notes: string;
+  notes: string;
+  sentimental: boolean;
+  external_ref: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface CadenceFinancialData {
   entities: Entity[];
   properties: Property[];
@@ -605,6 +643,7 @@ export interface CadenceFinancialData {
   investment_theses: InvestmentThesis[];
   thesis_notes: ThesisNote[];
   strategy_items: StrategyItem[];
+  watches: Watch[];
 }
 
 export const TABLES: (keyof CadenceFinancialData)[] = [
@@ -631,6 +670,7 @@ export const TABLES: (keyof CadenceFinancialData)[] = [
   'investment_theses',
   'thesis_notes',
   'strategy_items',
+  'watches',
 ];
 
 export const emptyData = (): CadenceFinancialData => ({
@@ -657,4 +697,5 @@ export const emptyData = (): CadenceFinancialData => ({
   investment_theses: [],
   thesis_notes: [],
   strategy_items: [],
+  watches: [],
 });
