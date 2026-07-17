@@ -44,7 +44,7 @@ def probe() -> dict:
             limit=10,
         )
         writable = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
-        for table in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets"]:
+        for table in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets", "watches"]:
             rows = bridge.select(table, "select=id", limit=1000)
             counts[table] = len(rows) if isinstance(rows, list) else "?"
         return {
@@ -110,6 +110,162 @@ def list_investment_holdings() -> list[dict]:
         )
     except bridge.FinancialBridgeError as e:
         return [{"error": str(e)}]
+
+
+_WATCH_CATEGORIES = {"permanent", "rotation", "exit_trade", "future"}
+_WATCH_STATUSES = {"owned", "candidate", "traded", "sold"}
+_WATCH_BOX_PAPERS = {"full", "partial", "none", "unknown"}
+
+
+@mcp.tool()
+def list_watches(collection_role: str = "all", status: str = "all", limit: int = 100) -> list[dict]:
+    """Watch collection register. collection_role: permanent/rotation/exit_trade/future/all; status: owned/candidate/traded/sold/all."""
+    try:
+        role = (collection_role or "all").lower().strip()
+        st = (status or "all").lower().strip()
+        if role != "all" and role not in _WATCH_CATEGORIES:
+            return [{"error": "collection_role must be permanent, rotation, exit_trade, future, or all"}]
+        if st != "all" and st not in _WATCH_STATUSES:
+            return [{"error": "status must be owned, candidate, traded, sold, or all"}]
+        q = "select=*&deleted_at=is.null"
+        if role != "all":
+            q += f"&collection_role=eq.{role}"
+        if st != "all":
+            q += f"&ownership_status=eq.{st}"
+        q += "&order=brand.asc,model.asc"
+        return bridge.select("watches", q, limit=limit)
+    except bridge.FinancialBridgeError as e:
+        return [{"error": str(e)}]
+
+
+@mcp.tool()
+def upsert_watch(
+    brand: str,
+    model: str,
+    reference: str = "",
+    nickname: str = "",
+    year: int | None = None,
+    collection_role: str = "rotation",
+    ownership_status: str = "owned",
+    currency: str = "AUD",
+    purchase_price: float | None = None,
+    purchase_date: str | None = None,
+    current_value: float | None = None,
+    value_as_of: str | None = None,
+    valuation_source: str = "",
+    insurance_value: float | None = None,
+    full_set_status: str = "unknown",
+    accessories: str = "",
+    material: str = "",
+    dial: str = "",
+    service_history: str = "",
+    provenance: str = "",
+    insurance_notes: str = "",
+    storage_location: str = "",
+    security_notes: str = "",
+    notes: str = "",
+    sentimental: bool = False,
+    external_ref: str = "",
+) -> dict:
+    """Insert a watch row, idempotent by owner + nonblank external_ref. Does not infer valuation or mutate financial totals."""
+    try:
+        if not (brand or "").strip():
+            return {"error": "brand is required"}
+        if not (model or "").strip():
+            return {"error": "model is required"}
+        role = (collection_role or "").lower().strip()
+        if role not in _WATCH_CATEGORIES:
+            return {"error": "collection_role must be permanent, rotation, exit_trade, or future"}
+        st = (ownership_status or "").lower().strip()
+        if st not in _WATCH_STATUSES:
+            return {"error": "ownership_status must be owned, candidate, traded, or sold"}
+        full_set = (full_set_status or "unknown").lower().strip()
+        if full_set not in _WATCH_BOX_PAPERS:
+            return {"error": "full_set_status must be full, partial, none, or unknown"}
+        curr = (currency or "").upper().strip()
+        if not _CURRENCY_RE.match(curr):
+            return {"error": "currency must be a 3-letter ISO code"}
+        if curr != "AUD":
+            return {"error": "currency must be AUD until evidence-based FX conversion is implemented"}
+        if year is not None and (int(year) < 1800 or int(year) > date.today().year + 1):
+            return {"error": "year must be a plausible watch year"}
+        for date_field, date_value in (("purchase_date", purchase_date), ("value_as_of", value_as_of)):
+            if date_value:
+                if not _DATE_RE.match(date_value):
+                    return {"error": f"{date_field} must be YYYY-MM-DD"}
+                try:
+                    date.fromisoformat(date_value)
+                except ValueError:
+                    return {"error": f"{date_field} must be a valid YYYY-MM-DD date"}
+        purchase, err = _money(purchase_price, "purchase_price", required=False)
+        if err:
+            return {"error": err}
+        current, err = _money(current_value, "current_value", required=False)
+        if err:
+            return {"error": err}
+        insured, err = _money(insurance_value, "insurance_value", required=False)
+        if err:
+            return {"error": err}
+
+        owner_id = bridge.discover_owner_id()
+        ref = (external_ref or "").strip()
+        owner_filter = urllib.parse.quote(owner_id, safe="")
+        ref_filter = urllib.parse.quote(ref, safe="")
+        if ref:
+            existing = bridge.select(
+                "watches",
+                f"select=*&owner_id=eq.{owner_filter}&external_ref=eq.{ref_filter}&deleted_at=is.null",
+                limit=1,
+            )
+            if isinstance(existing, list) and existing:
+                result = _first(existing)
+                return result if isinstance(result, dict) else {"error": "Unexpected watches response"}
+
+        row = {
+            "owner_id": owner_id,
+            "brand": brand.strip(),
+            "model": model.strip(),
+            "reference": reference.strip(),
+            "nickname": nickname.strip(),
+            "year": int(year) if year is not None else None,
+            "collection_role": role,
+            "ownership_status": st,
+            "currency": curr,
+            "purchase_price": purchase,
+            "purchase_date": purchase_date,
+            "current_value": current,
+            "value_as_of": value_as_of,
+            "valuation_source": valuation_source.strip(),
+            "insurance_value": insured,
+            "full_set_status": full_set,
+            "accessories": accessories.strip(),
+            "material": material.strip(),
+            "dial": dial.strip(),
+            "service_history": service_history.strip(),
+            "provenance": provenance.strip(),
+            "insurance_notes": insurance_notes.strip(),
+            "storage_location": storage_location.strip(),
+            "security_notes": security_notes.strip(),
+            "notes": notes.strip(),
+            "sentimental": bool(sentimental),
+            "external_ref": ref,
+        }
+        try:
+            inserted = _first(bridge.insert("watches", row))
+            return inserted if isinstance(inserted, dict) else {"error": "Unexpected watches response"}
+        except bridge.FinancialBridgeError:
+            if ref:
+                existing = bridge.select(
+                    "watches",
+                    f"select=*&owner_id=eq.{owner_filter}&external_ref=eq.{ref_filter}&deleted_at=is.null",
+                    limit=1,
+                )
+                if isinstance(existing, list) and existing:
+                    result = _first(existing)
+                    return result if isinstance(result, dict) else {"error": "Unexpected watches response"}
+            raise
+    except bridge.FinancialBridgeError as e:
+        return {"error": str(e)}
 
 
 _INVESTMENT_INCOME_KINDS = {"dividend", "distribution", "interest"}

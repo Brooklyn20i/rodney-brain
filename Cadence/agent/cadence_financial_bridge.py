@@ -58,7 +58,7 @@ TABLES = [
     "decisions", "liquidity_buckets", "allocation_policies", "risk_policies",
     "goals", "insurance_policies", "estate_items", "property_ledger",
     "budget_lines", "budget_categories", "budget_fx_rates",
-    "agent_messages", "financial_agent_access",
+    "agent_messages", "financial_agent_access", "watches",
 ]
 
 KEYCHAIN_SERVICE = "cadence-financial-agent-password"
@@ -252,7 +252,7 @@ def cmd_probe(_: argparse.Namespace) -> None:
             limit=10,
         )
         writable = [g for g in grants if isinstance(g, dict) and g.get("can_write")] if isinstance(grants, list) else []
-        for t in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets"]:
+        for t in ["properties", "loans", "monthly_metrics", "investment_holdings", "investment_income", "decisions", "liquidity_buckets", "watches"]:
             rows = select(t, "select=id", limit=1000)
             counts[t] = len(rows) if isinstance(rows, list) else "?"
         print(json.dumps({
