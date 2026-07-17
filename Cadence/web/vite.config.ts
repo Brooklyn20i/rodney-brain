@@ -19,51 +19,19 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       // Use the existing manifest.json from public/ rather than generating one.
       manifest: false,
-      workbox: {
-        // Serve cached index.html for all navigation requests when offline.
-        // Without this, opening the URL offline fails at the network level
-        // before the service worker can intercept it.
-        navigateFallback: '/work.html',
-        // The marketing site must never be swallowed by the app's offline
-        // fallback: with the PWA installed, a navigation to /tour/* or /kobe
-        // isn't a precached URL, so workbox would serve work.html (the app)
-        // instead of letting Vercel serve the marketing page. Deny those
-        // routes (and the root landing page) so they always hit the network.
-        navigateFallbackDenylist: [/^\/$/, /^\/tour\//, /^\/kobe$/, /\.[^/]+$/],
-        cleanupOutdatedCaches: true,
-        // Cache all built assets (JS chunks, CSS, fonts, icons).
+      injectManifest: {
+        // Cache all built app assets. Navigation routing and update handover are
+        // app-owned in src/sw.ts so each domain gets its own shell and an old
+        // open PWA is refreshed by the replacement worker itself.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // But NOT the marketing screenshots / wallpapers (~6MB) — the installed
-        // app never renders them (they're marketing-only, already denied by the
-        // navigate fallback), and the PDF renderer chunk (~770KB) is loaded on
-        // demand at export time, not needed offline. Precaching these bloated
-        // the first-visit download to ~9MB on cellular for no app benefit.
         globIgnores: ['**/shots/**', '**/wallpapers/**', 'assets/react-pdf-*.js'],
-        // The one big-but-legit precache entry (the app JS) can exceed the 2MB
-        // default cap; raise it so the shell still precaches.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            // Supabase REST reads: network-first with a 5 s timeout.
-            // On timeout / offline, serve the cached response so screens load.
-            urlPattern: /^https:\/\/[a-z0-9]+\.supabase\.co\/rest\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api-v1',
-              networkTimeoutSeconds: 5,
-              cacheableResponse: { statuses: [0, 200] },
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-          {
-            // Supabase Auth endpoints: network-only (never cache tokens).
-            urlPattern: /^https:\/\/[a-z0-9]+\.supabase\.co\/auth\//,
-            handler: 'NetworkOnly',
-          },
-        ],
       },
     }),
   ],

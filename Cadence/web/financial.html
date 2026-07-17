@@ -13,6 +13,34 @@
   <link rel="icon" type="image/png" href="./icon-financial-192.png?v=4" />
   <link rel="apple-touch-icon" href="./icon-financial-180.png?v=4" />
   <title>Cadence Wealth</title>
+  <style id="financial-boot-theme">
+    /* Critical Wealth tokens live in the shell as well as the app stylesheet.
+       A replacement service worker can therefore recover an older installed
+       PWA without one pale-on-white frame while React and hashed CSS start. */
+    html[data-domain="financial"]:root {
+      --app-bg: #F4F4F0;
+      --surface: #FFFFFF;
+      --surface2: #F8F8F6;
+      --border: rgba(0,0,0,0.08);
+      --text: #1A1A1A;
+      --text2: #6B6B6B;
+      --text3: #ABABAB;
+      --sidebar-bg: #124A2C;
+      --sidebar-active: #1E5A38;
+      --sidebar-active-text: #FFFFFF;
+      --sidebar-icon-active: #C7A24A;
+      --sidebar-text: rgba(255,255,255,0.65);
+      --accent: #1C6B45;
+      --accent-lt: #2E8A5E;
+    }
+    html[data-domain="financial"],
+    html[data-domain="financial"] body,
+    html[data-domain="financial"] #root {
+      min-height: 100%;
+      background: #F4F4F0;
+      color: #1A1A1A;
+    }
+  </style>
 </head>
 <body>
   <div id="root"></div>
