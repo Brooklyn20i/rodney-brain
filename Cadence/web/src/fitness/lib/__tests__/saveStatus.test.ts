@@ -19,4 +19,12 @@ describe('save status', () => {
     expect(saveState(false, false)).toBe('saved');
     expect(saveStatusLabel(false, false)).toBe('saved ✓');
   });
+
+  it('shows queued (never "saved ✓") while offline writes await replay', () => {
+    expect(saveState(false, false, 3)).toBe('queued');
+    expect(saveStatusLabel(false, false, 3)).toBe('3 queued — will sync when online');
+    // A live write or a real error still outranks the queue.
+    expect(saveState(true, false, 3)).toBe('saving');
+    expect(saveState(false, true, 3)).toBe('unsaved');
+  });
 });

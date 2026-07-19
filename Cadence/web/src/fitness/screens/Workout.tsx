@@ -45,7 +45,7 @@ import type { CardioKind, ProgramDay, WorkoutSet } from '../lib/types';
 const REST_DEFAULT_KEY = 'cadence-fitness:rest-default';
 
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
-  const { data, insert, insertMany, update, remove, saving, syncError } = useCadenceFitness();
+  const { data, insert, insertMany, update, remove, saving, syncError, pendingCount } = useCadenceFitness();
   const today = todayISO();
 
   const active = data.workouts.find((w) => w.status === 'in_progress');
@@ -592,7 +592,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <>
       <ScreenHeader
         title={stripDayPrefix(active.name || 'Session')}
-        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saveStatusLabel(saving, Boolean(syncError))}`}
+        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saveStatusLabel(saving, Boolean(syncError), pendingCount)}`}
         onMenu={onMenu}
       >
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
