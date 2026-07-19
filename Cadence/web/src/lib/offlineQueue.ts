@@ -1,5 +1,9 @@
 // Offline write queue — persists pending mutations to localStorage so they
 // survive page reloads and are replayed automatically when the network returns.
+// `createOfflineQueue(key)` gives each domain store its own isolated queue
+// (Work replays against `public`, Fitness against the `fitness` schema — the
+// wrong drainer must never pick up the other's ops). The module-level
+// functions remain bound to the original Work-store key.
 
 export type QueuedOp =
   | { op: 'insert'; table: string; row: Record<string, unknown> }
@@ -12,42 +16,65 @@ interface QueueEntry {
   op: QueuedOp;
 }
 
+export interface OfflineQueue {
+  enqueue: (op: QueuedOp) => string;
+  dequeueAll: () => QueueEntry[];
+  dropEntry: (qid: string) => void;
+  clearQueue: () => void;
+  queueCount: () => number;
+}
+
+export function createOfflineQueue(key: string): OfflineQueue {
+  const load = (): QueueEntry[] => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? '[]');
+    } catch {
+      return [];
+    }
+  };
+  const persist = (entries: QueueEntry[]): void => {
+    localStorage.setItem(key, JSON.stringify(entries));
+  };
+  return {
+    enqueue(op: QueuedOp): string {
+      const qid = crypto.randomUUID();
+      const entries = load();
+      entries.push({ qid, timestamp: Date.now(), op });
+      persist(entries);
+      return qid;
+    },
+    dequeueAll: () => load(),
+    dropEntry(qid: string): void {
+      persist(load().filter((e) => e.qid !== qid));
+    },
+    clearQueue(): void {
+      localStorage.removeItem(key);
+    },
+    queueCount: () => load().length,
+  };
+}
+
 const KEY = 'cadence_offline_queue';
-
-function load(): QueueEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '[]');
-  } catch {
-    return [];
-  }
-}
-
-function persist(entries: QueueEntry[]): void {
-  localStorage.setItem(KEY, JSON.stringify(entries));
-}
+const workQueue = createOfflineQueue(KEY);
 
 export function enqueue(op: QueuedOp): string {
-  const qid = crypto.randomUUID();
-  const entries = load();
-  entries.push({ qid, timestamp: Date.now(), op });
-  persist(entries);
-  return qid;
+  return workQueue.enqueue(op);
 }
 
 export function dequeueAll(): QueueEntry[] {
-  return load();
+  return workQueue.dequeueAll();
 }
 
 export function dropEntry(qid: string): void {
-  persist(load().filter((e) => e.qid !== qid));
+  workQueue.dropEntry(qid);
 }
 
 export function clearQueue(): void {
-  localStorage.removeItem(KEY);
+  workQueue.clearQueue();
 }
 
 export function queueCount(): number {
-  return load().length;
+  return workQueue.queueCount();
 }
 
 // Returns true when the error is a transient network failure rather than a

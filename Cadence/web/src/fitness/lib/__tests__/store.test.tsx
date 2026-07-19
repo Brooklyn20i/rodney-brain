@@ -387,6 +387,81 @@ describe('reload cannot clobber in-flight optimistic writes (the "set unticks it
   });
 });
 
+describe('durable offline queue (dead-spot gym sets survive and sync)', () => {
+  const QKEY = 'cadence_fitness_offline_queue';
+  let onLine = true;
+  beforeEach(() => {
+    localStorage.removeItem(QKEY);
+    onLine = true;
+    Object.defineProperty(window.navigator, 'onLine', { get: () => onLine, configurable: true });
+    h.session = { user: { id: 'u1' } };
+    localStorage.setItem('cadence-fitness:seeded-exercises', '1');
+  });
+  const qOps = () => (JSON.parse(localStorage.getItem(QKEY) ?? '[]') as Array<{ op: { op: string } }>).map((e) => e.op.op);
+  const mount = async () => {
+    const rendered = renderHook(() => useCadenceFitness(), { wrapper });
+    await waitFor(() => expect(h.rtHandlers.length).toBeGreaterThan(0));
+    return rendered;
+  };
+
+  it('queues writes made offline (no network attempt), keeps them visible, and drains on reconnect', async () => {
+    const { result } = await mount();
+    onLine = false;
+
+    // Log a set and tick it while fully offline — both resolve, nothing thrown.
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 'q1', done: false } as never);
+      await result.current.update('workout_sets', 'q1', { done: true } as never);
+    });
+    expect(qOps()).toEqual(['insert', 'update']);
+    expect(result.current.pendingCount).toBe(2);
+    const rows = () => result.current.data.workout_sets as Array<{ id: string; done: boolean }>;
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].done).toBe(true);
+    expect(result.current.syncError).toBeNull();
+
+    // Reconnect: the replay succeeds and the post-drain reload returns the
+    // server truth including the replayed row.
+    onLine = true;
+    h.thenResult = { data: [{ id: 'q1', done: true }], error: null };
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(qOps()).toEqual([]);
+    expect(rows()[0].done).toBe(true);
+  });
+
+  it('queues an offline delete and keeps the row hidden', async () => {
+    const { result } = await mount();
+    h.writeResults.push({ data: { id: 'q2', set_number: 1 }, error: null });
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 'q2', set_number: 1 } as never);
+    });
+
+    onLine = false;
+    await act(async () => {
+      await result.current.remove('workout_sets', 'q2');
+    });
+    expect(qOps()).toEqual(['remove']);
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(0);
+    expect(result.current.pendingCount).toBe(1);
+  });
+
+  it('a mid-save connection drop (exhausted retries on a network error) queues instead of rolling back', async () => {
+    const { result } = await mount();
+    // Online, but every attempt dies like a dropped connection. runWithRetry
+    // makes 4 attempts with 300/600/1200ms backoff — real timers, ~2.1s.
+    for (let i = 0; i < 4; i++) h.writeResults.push({ data: null, error: new Error('Failed to fetch') });
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 'q3', reps: 8 } as never);
+    });
+    expect(qOps()).toEqual(['insert']);
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
+    expect(result.current.syncError).toBeNull();
+  }, 15000);
+});
+
 describe('insertMany (atomic multi-row create)', () => {
   it('adds every row optimistically in one batch', async () => {
     const { result } = renderHook(() => useCadenceFitness(), { wrapper });
