@@ -143,7 +143,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     const t = setInterval(() => {
       forceTick((x) => x + 1); // drives the elapsed-time display too
       if (restEndsAt.current !== null) {
-        const left = Math.round((restEndsAt.current - Date.now()) / 1000);
+        // ceil, not round: a free-running interval sampling at half-second
+        // offsets would otherwise repeat/skip displayed seconds ("4, 4, 2…").
+        const left = Math.ceil((restEndsAt.current - Date.now()) / 1000);
         setRestLeft(left);
         if (shouldFireRestCompleteCue(left, chimedRef.current)) {
           chimedRef.current = true;
@@ -161,7 +163,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   // workout and expired safely if long past.
   useEffect(() => {
     if (!active) return;
-    const snap = loadRestTimer(localStore(), active.id, Date.now());
+    const snap = loadRestTimer(localStore(), active.id);
     if (!snap) return;
     restEndsAt.current = snap.endsAt;
     restSetIdRef.current = snap.completedSetId ?? null;
@@ -1270,12 +1272,6 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
   const restPct = restTotal > 0 ? Math.max(0, Math.min(100, (restLeft! / restTotal) * 100)) : 0;
   const restSet = restSetIdRef.current ? sessionSets.find((s) => s.id === restSetIdRef.current) : null;
   const restSetHasUnsavedDraft = restSet ? setHasDraft(restSet.id) : false;
-  const saveRestSet = () =>
-    restSet
-      ? runLocked(`rest-save:${restSet.id}`, async () => {
-          await commitSet(restSet);
-        })
-      : Promise.resolve();
   const discardRestSetDraft = () => {
     if (restSet) clearSetDraft(restSet.id);
   };
@@ -1303,18 +1299,21 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             +30s
           </button>
         )}
-        <button className="rest-timer-skip" aria-pressed={restCueMuted} onClick={() => changeRestCueMuted(!restCueMuted)}>
-          {restCueMuted ? 'Sound off' : 'Sound on'}
+        <button
+          className="rest-timer-skip rest-timer-icon"
+          aria-pressed={restCueMuted}
+          aria-label={restCueMuted ? 'Sound off — tap to unmute' : 'Sound on — tap to mute'}
+          onClick={() => changeRestCueMuted(!restCueMuted)}
+        >
+          {restCueMuted ? '🔇' : '🔊'}
         </button>
+        {/* "Done" commits any unsaved draft (completeRest → commitSet), so a
+            separate Save button would be redundant; only the escape hatch to
+            throw edits away stays. */}
         {restLeft <= 0 && restSetHasUnsavedDraft && (
-          <>
-            <button className="rest-timer-skip" onClick={saveRestSet}>
-              Save set
-            </button>
-            <button className="rest-timer-skip" onClick={discardRestSetDraft}>
-              Discard edits
-            </button>
-          </>
+          <button className="rest-timer-skip" onClick={discardRestSetDraft}>
+            Discard edits
+          </button>
         )}
         <button className="rest-timer-skip" onClick={completeRest}>
           {restLeft <= 0 ? 'Done' : 'Skip'}
@@ -1343,7 +1342,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
       <div className={`screen-content ${gymMode ? 'gym-mode' : ''}`}>
         {actionError && <div className="cf-callout cf-callout-warn" role="alert">{actionError}</div>}
-        {restBar}
+        {/* List mode keeps the timer at the top; Gym Focus docks it at the
+            bottom with the nav so it never buries the exercise card. */}
+        {!gymMode && restBar}
 
         {gymMode ? (
           exerciseIds.length === 0 ? (
@@ -1351,6 +1352,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               <div className="cf-callout">No exercises in this session yet — add one, or log a run below.</div>
               {addExerciseControl('card')}
               {renderCardioBlock()}
+              {restBar && <div className="gym-dock">{restBar}</div>}
             </>
           ) : (
             <>
@@ -1388,25 +1390,31 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
                 </div>
               </div>
               {renderExercise(exerciseIds[idx], true)}
-              <div className="gym-nav">
-                <button className="btn btn-secondary" disabled={idx === 0} onClick={() => setFocusIndex(idx - 1)}>
-                  ← Prev
-                </button>
-                {idx < exerciseIds.length - 1 ? (
-                  <button className="btn btn-primary" onClick={() => setFocusIndex(idx + 1)}>
-                    Next →
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" onClick={finishSession} disabled={pendingAction !== null}>
-                    {pendingAction === 'finish' ? 'Finishing…' : 'Finish ✓'}
-                  </button>
-                )}
-              </div>
               {addExerciseControl('plain')}
               {renderCardioBlock()}
               <button className="btn btn-ghost btn-sm wo-discard" onClick={discardSession} disabled={pendingAction !== null}>
                 Discard session
               </button>
+              {/* Docked footer: the rest timer (when running) sits right above
+                  always-reachable Prev/Next — nothing to scroll for mid-set,
+                  nothing cut off by the home indicator. */}
+              <div className="gym-dock">
+                {restBar}
+                <div className="gym-nav">
+                  <button className="btn btn-secondary" disabled={idx === 0} onClick={() => setFocusIndex(idx - 1)}>
+                    ← Prev
+                  </button>
+                  {idx < exerciseIds.length - 1 ? (
+                    <button className="btn btn-primary" onClick={() => setFocusIndex(idx + 1)}>
+                      Next →
+                    </button>
+                  ) : (
+                    <button className="btn btn-primary" onClick={finishSession} disabled={pendingAction !== null}>
+                      {pendingAction === 'finish' ? 'Finishing…' : 'Finish ✓'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </>
           )
         ) : (

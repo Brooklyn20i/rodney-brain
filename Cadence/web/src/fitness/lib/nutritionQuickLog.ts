@@ -1,5 +1,5 @@
 import { MEAL_LABEL } from './util';
-import type { NutritionLog, SavedMeal } from './types';
+import type { MealType, NutritionLog, SavedMeal } from './types';
 
 type MacroRow = Pick<SavedMeal, 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'>;
 type NutritionLogDraft = Pick<
@@ -31,17 +31,29 @@ export function scaleMacros(
 export function quickLogFromSavedFood(
   meal: SavedMeal,
   date: string,
-  portion: string | number
+  portion: string | number,
+  mealOverride?: MealType
 ): NutritionLogDraft {
   const qty = normalisePortion(portion);
   const scaled = scaleMacros(meal, qty);
   return {
     date,
-    meal: meal.meal,
+    // A saved food's stored meal is just where it was FIRST logged — eggs saved
+    // at breakfast get eaten at dinner too, so the caller's meal-for-now wins.
+    meal: mealOverride ?? meal.meal,
     name: qty === 1 ? meal.name : `${meal.name} × ${qty}`,
     ...scaled,
     notes: ['Quick logged from saved food', meal.notes].filter(Boolean).join(' — '),
   };
+}
+
+/** Default meal slot for the current time of day, so logging "now" needs zero taps. */
+export function mealForHour(hour: number): MealType {
+  if (hour < 11) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 17) return 'snack';
+  if (hour < 21) return 'dinner';
+  return 'snack';
 }
 
 export function filterSavedFoods(meals: SavedMeal[], query: string): SavedMeal[] {
@@ -59,7 +71,7 @@ export function filterSavedFoods(meals: SavedMeal[], query: string): SavedMeal[]
   );
 }
 
-function normaliseFoodName(name: string): string {
+export function normaliseFoodName(name: string): string {
   return name
     .replace(/ × \d+(\.\d+)?$/, '')
     .trim()

@@ -6,7 +6,7 @@
 
 export interface RestTimerSnapshot {
   workoutId: string;
-  /** Absolute epoch-ms deadline. Remaining = round((endsAt - now) / 1000). */
+  /** Absolute epoch-ms deadline. Remaining = ceil((endsAt - now) / 1000). */
   endsAt: number;
   /** Original span in seconds, for the progress bar after a restore. */
   total: number;
@@ -15,10 +15,6 @@ export interface RestTimerSnapshot {
 }
 
 const KEY = 'cadence-fitness:rest-timer';
-// Historical auto-expiry threshold. Completed timers now restore beyond this so
-// mobile/PWA resume can show the set's save/reset state instead of silently
-// hiding a stranded draft.
-export const REST_EXPIRE_GRACE_MS = 30_000;
 
 export function saveRestTimer(storage: Storage | undefined, snap: RestTimerSnapshot): void {
   if (!storage) return;
@@ -38,11 +34,7 @@ export function clearRestTimer(storage: Storage | undefined): void {
   }
 }
 
-export function loadRestTimer(
-  storage: Storage | undefined,
-  workoutId: string,
-  _now: number
-): RestTimerSnapshot | null {
+export function loadRestTimer(storage: Storage | undefined, workoutId: string): RestTimerSnapshot | null {
   if (!storage) return null;
   try {
     const raw = storage.getItem(KEY);

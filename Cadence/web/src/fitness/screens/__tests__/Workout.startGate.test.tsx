@@ -319,7 +319,7 @@ describe('rest timer +30s persistence', () => {
     expect(after.total).toBe(150);
 
     // A remount restores from the extended deadline (not the original 120s).
-    const restored = loadRestTimer(localStorage, 'wk', Date.now());
+    const restored = loadRestTimer(localStorage, 'wk');
     expect(restored?.endsAt).toBe(after.endsAt);
     expect(restored?.total).toBe(150);
 
@@ -445,8 +445,10 @@ describe('set persistence state', () => {
     });
 
     expect(screen.getByText(/Set has unsaved edits/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Save set/i })).toBeTruthy();
+    // "Done" commits the draft (no separate Save button); Discard is the only
+    // extra control so the bar stays compact on a phone.
     expect(screen.getByRole('button', { name: /Discard edits/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Done$/i })).toBeTruthy();
   });
 
   it('restores long-expired rest state after mobile resume instead of hiding stranded set edits', async () => {
