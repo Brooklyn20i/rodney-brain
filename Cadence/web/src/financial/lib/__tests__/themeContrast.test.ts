@@ -67,6 +67,23 @@ describe('Financial theme contrast', () => {
     }
   });
 
+  // The deeper root cause: content text must be ANCHORED to the theme token on
+  // the content root, or elements that don't set their own color inherit the
+  // per-domain HTML shell's hardcoded base color (health.html is near-white).
+  // Switching domains in-app then left Wealth's white cards showing near-white
+  // headings / big numbers. Lock the anchor so it can't be dropped again.
+  it('anchors content text to the theme token so nothing inherits a shell literal', () => {
+    const mainBlock = styles.match(/#main\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(mainBlock).toMatch(/color:\s*var\(--text\)/);
+
+    // The primary display values (big numbers) and screen titles must set their
+    // own themed color rather than relying on inheritance.
+    const metricValue = styles.match(/\.cf-metric-value\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(metricValue).toMatch(/color:\s*var\(--text\)/);
+    const h1 = styles.match(/\.screen-header h1\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(h1).toMatch(/color:\s*var\(--text\)/);
+  });
+
   // Root cause of the recurring bug: the theme is duplicated across the CSS,
   // the runtime object, AND the boot shell — and only the first two were
   // guarded. Pin the boot shell to the same source of truth so no future edit
