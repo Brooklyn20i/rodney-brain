@@ -2432,6 +2432,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .nu-qty-btn:active { background: var(--border); }
 .nu-log-to { display: flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--text2); }
 .nu-log-to select { width: auto; padding: 7px 8px; }
+/* Edit-in-place for a logged entry. */
+.nu-log-edit { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin: 6px 0; background: var(--surface2); }
+.nu-log-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 @media (max-width: 480px) {
   .nu-saved-row { grid-template-columns: 1fr; gap: 7px; }
   .nu-saved-actions { justify-content: flex-end; }
