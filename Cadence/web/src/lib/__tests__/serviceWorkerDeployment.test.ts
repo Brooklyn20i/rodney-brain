@@ -37,6 +37,18 @@ describe('PWA deployment coherence', () => {
     expect(financialShell).toContain('id="financial-boot-theme"');
     expect(financialShell).toContain('--surface: #FFFFFF');
     expect(financialShell).toContain('--text: #1A1A1A');
-    expect(financialShell).toContain('html[data-domain="financial"]:root');
+    // A hard readability floor that does not depend on the runtime data-domain
+    // attribute, so a mid-update handover can never paint pale-on-white.
+    expect(financialShell).toMatch(/html,\s*body,\s*#root\s*\{[^}]*color:\s*#1A1A1A/);
+  });
+
+  it('keeps the Financial boot theme a FLOOR, not an override of the loaded CSS', () => {
+    const financialShell = readProjectFile('financial.html');
+    // Scoped to :root (0,1,0), never html[data-domain="financial"]:root (0,2,1)
+    // — otherwise a stale cached shell served during a PWA update would win over
+    // the fresh app stylesheet's html[data-domain="financial"] rules (0,1,1).
+    // That inverted specificity was a root cause of the recurring contrast bug.
+    expect(financialShell).not.toContain('html[data-domain="financial"]:root');
+    expect(financialShell).toMatch(/id="financial-boot-theme"[\s\S]*?:root\s*\{/);
   });
 });

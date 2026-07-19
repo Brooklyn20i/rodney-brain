@@ -14,10 +14,23 @@
   <link rel="apple-touch-icon" href="./icon-financial-180.png?v=4" />
   <title>Cadence Wealth</title>
   <style id="financial-boot-theme">
-    /* Critical Wealth tokens live in the shell as well as the app stylesheet.
-       A replacement service worker can therefore recover an older installed
-       PWA without one pale-on-white frame while React and hashed CSS start. */
-    html[data-domain="financial"]:root {
+    /* Wealth's critical readable tokens, in the shell as well as the app
+       stylesheet, so a service worker recovering an older installed PWA never
+       shows a pale-on-white frame while React and the hashed CSS start.
+
+       SINGLE SOURCE OF TRUTH: src/lib/domainTheme.ts (FINANCIAL_THEME_STYLE).
+       themeContrast.test.ts fails CI if this block, the styles.css
+       html[data-domain="financial"] block, and that object ever drift apart —
+       which is what let this bug keep coming back.
+
+       Scoped to :root (specificity 0,1,0), NOT html[data-domain]:root — so this
+       is only a BOOT FLOOR. The loaded stylesheet's html[data-domain="financial"]
+       rules (0,1,1) always win once present, meaning a stale cached shell served
+       mid-update can tide over the first frame but can never override the fresh
+       theme. financial.html is only ever the Wealth shell, so the bare :root
+       scope is safe. */
+    :root {
+      color-scheme: light;
       --app-bg: #F4F4F0;
       --surface: #FFFFFF;
       --surface2: #F8F8F6;
@@ -33,13 +46,9 @@
       --accent: #1C6B45;
       --accent-lt: #2E8A5E;
     }
-    html[data-domain="financial"],
-    html[data-domain="financial"] body,
-    html[data-domain="financial"] #root {
-      min-height: 100%;
-      background: #F4F4F0;
-      color: #1A1A1A;
-    }
+    /* Hard readability floor — dark ink on the light canvas holds even if the
+       runtime data-domain attribute is momentarily wrong during a handover. */
+    html, body, #root { min-height: 100%; background: #F4F4F0; color: #1A1A1A; }
   </style>
 </head>
 <body>
