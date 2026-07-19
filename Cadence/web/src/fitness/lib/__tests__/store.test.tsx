@@ -6,7 +6,7 @@
  * doesn't silently change the gym-mode contract. Renders the REAL provider
  * against a mock Supabase.
  */
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 
@@ -22,8 +22,12 @@ const h = vi.hoisted(() => ({
   // can drive deferred / out-of-order server responses deterministically.
   deferSingle: false,
   singlePending: [] as Array<{ resolve: (v: WriteResult) => void; payload: unknown }>,
-  // Result for the `.select()`-terminated path (insertMany). null → default.
+  // Result for the `.select()`-terminated path (insertMany, reload fetches).
+  // null → default.
   thenResult: null as WriteResult | null,
+  // Realtime handlers registered via channel.on, so tests can fire a
+  // postgres_changes echo and drive the debounced reload path for real.
+  rtHandlers: [] as Array<{ table: string; fn: () => void }>,
 }));
 
 vi.mock('../../../lib/supabase', () => {
@@ -50,7 +54,13 @@ vi.mock('../../../lib/supabase', () => {
       Promise.resolve(h.thenResult ?? { data: [], error: null }).then(onF, onR);
     return b;
   };
-  const channel = { on: () => channel, subscribe: () => channel };
+  const channel = {
+    on: (_event: string, filter: { table?: string }, fn: () => void) => {
+      h.rtHandlers.push({ table: filter?.table ?? '', fn });
+      return channel;
+    },
+    subscribe: () => channel,
+  };
   return {
     supabase: {
       schema: () => makeBuilder(),
@@ -78,6 +88,7 @@ beforeEach(() => {
   h.deferSingle = false;
   h.singlePending = [];
   h.thenResult = null;
+  h.rtHandlers = [];
 });
 
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -278,6 +289,101 @@ describe('strict (server-acknowledged) update — session activation safety', ()
     // Non-strict optimistic-first contract is preserved elsewhere.
     expect(status(result)).toBe('in_progress');
     expect(result.current.syncError).toBeTruthy();
+  });
+});
+
+describe('reload cannot clobber in-flight optimistic writes (the "set unticks itself" bug)', () => {
+  // These run AUTHENTICATED so the realtime effect subscribes and we can fire a
+  // postgres_changes echo, wait out the 700ms debounce, and let the real
+  // reload() apply a refetch snapshot whose query ran BEFORE our write
+  // committed (exactly what gym wifi produces).
+  const signIn = () => {
+    h.session = { user: { id: 'u1' } };
+    localStorage.setItem('cadence-fitness:seeded-exercises', '1');
+  };
+  const fireStaleRefetch = async (table: string, rows: unknown[]) => {
+    h.thenResult = { data: rows, error: null };
+    act(() => {
+      h.rtHandlers.find((r) => r.table === table)!.fn();
+    });
+    // Ride out the 700ms realtime debounce so reload() actually runs.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 800));
+    });
+    h.thenResult = null;
+  };
+  const mount = async () => {
+    signIn();
+    const rendered = renderHook(() => useCadenceFitness(), { wrapper });
+    await waitFor(() => expect(h.rtHandlers.length).toBeGreaterThan(0));
+    return rendered;
+  };
+
+  it('a refetch that predates an in-flight tick does NOT untick the set', async () => {
+    const { result } = await mount();
+    h.writeResults.push({ data: { id: 'w1', done: false }, error: null });
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 'w1', done: false } as never);
+    });
+
+    // Tick the set; hold the server response open (slow gym wifi).
+    h.deferSingle = true;
+    let tick: Promise<unknown>;
+    await act(async () => {
+      tick = result.current.update('workout_sets', 'w1', { done: true } as never);
+    });
+    await flush();
+    expect((result.current.data.workout_sets as Array<{ done: boolean }>)[0].done).toBe(true);
+
+    // A realtime echo triggers a refetch whose SELECT ran pre-commit: the
+    // snapshot still says done:false. It must not undo the tick.
+    await fireStaleRefetch('workout_sets', [{ id: 'w1', done: false }]);
+    expect((result.current.data.workout_sets as Array<{ done: boolean }>)[0].done).toBe(true);
+
+    // The write finally lands; the tick survives end-to-end.
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w1', done: true }, error: null });
+      await tick!;
+    });
+    expect((result.current.data.workout_sets as Array<{ done: boolean }>)[0].done).toBe(true);
+  });
+
+  it('a freshly added row survives a refetch that does not include it yet', async () => {
+    const { result } = await mount();
+    h.deferSingle = true;
+    let ins: Promise<unknown>;
+    await act(async () => {
+      ins = result.current.insert('workout_sets', { id: 'w2', set_number: 4 } as never);
+    });
+    await flush();
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
+
+    // Refetch snapshot predates the insert commit → empty table. The optimistic
+    // row must not vanish.
+    await fireStaleRefetch('workout_sets', []);
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
+
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 'w2', set_number: 4 }, error: null });
+      await ins!;
+    });
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
+  });
+
+  it('a deleted row is not resurrected by a refetch that still contains it', async () => {
+    const { result } = await mount();
+    h.writeResults.push({ data: { id: 'w3', set_number: 1 }, error: null });
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 'w3', set_number: 1 } as never);
+    });
+    await act(async () => {
+      await result.current.remove('workout_sets', 'w3');
+    });
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(0);
+
+    // Refetch snapshot from before the soft-delete committed still has the row.
+    await fireStaleRefetch('workout_sets', [{ id: 'w3', set_number: 1 }]);
+    expect(result.current.data.workout_sets as unknown[]).toHaveLength(0);
   });
 });
 

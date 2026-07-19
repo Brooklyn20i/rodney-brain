@@ -208,14 +208,26 @@ test.describe('Gym Focus — 320×568 portrait', () => {
     await expect(rows).toHaveCount(5); // no delayed 6th row
   });
 
-  test('the nav does not overlap the set rows', async ({ page }) => {
+  test('the docked nav stays reachable and never permanently buries a set row', async ({ page }) => {
     await openWorkoutScreen(page);
     await startSuggestedSession(page);
-    const nav = await page.locator('.gym-nav').boundingBox();
+
+    // The dock (rest timer + Prev/Next) is pinned inside the viewport at all
+    // times — no scrolling to reach the nav mid-set.
+    const dock = await page.locator('.gym-dock').boundingBox();
+    expect(dock).not.toBeNull();
+    expect(dock!.y + dock!.height).toBeLessThanOrEqual(568 + 1);
+
+    // And because the dock occupies real layout space at the end of the flow,
+    // scrolling to the bottom brings every set row fully above it — nothing is
+    // permanently hidden underneath.
+    await page
+      .locator('.screen-content')
+      .evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    const dockAfter = await page.locator('.gym-dock').boundingBox();
     const lastRow = await page.locator('.wo-set-row').last().boundingBox();
-    expect(nav).not.toBeNull();
     expect(lastRow).not.toBeNull();
-    expect(nav!.y).toBeGreaterThanOrEqual(lastRow!.y + lastRow!.height - 1);
+    expect(dockAfter!.y).toBeGreaterThanOrEqual(lastRow!.y + lastRow!.height - 1);
   });
 
   test('set controls and the progress navigator are accessible', async ({ page }) => {

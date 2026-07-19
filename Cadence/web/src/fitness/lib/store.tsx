@@ -141,6 +141,44 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     return run;
   };
 
+  // ── Pending-mutation ledger ───────────────────────────────────────────────
+  // reload() replaces whole tables with a server snapshot. Mid-workout our own
+  // writes are often still in flight (gym-wifi retries can take seconds), so a
+  // realtime-triggered refetch can run its query BEFORE a write commits and
+  // then clobber the optimistic state — the "ticked set unticks itself" bug
+  // (and freshly added sets vanishing, and the rest timer restarting when the
+  // set is re-ticked). Every optimistic change is tracked here until the
+  // server acknowledges it, and the ledger is overlaid onto every reload
+  // result, so a refetch can never undo what the user just did.
+  const pendingPatches = useRef(new Map<string, { seq: number; patch: Record<string, unknown> }>());
+  const pendingInserts = useRef(new Map<string, { table: string; row: any }>());
+  const pendingDeletes = useRef(new Set<string>());
+  // After the server ACKs a write, keep protecting it briefly: a refetch whose
+  // query ran pre-commit can still be applying. One realtime debounce window
+  // (700ms) plus headroom comfortably covers it.
+  const RETIRE_MS = 2500;
+  const retirePatchLater = (key: string, seq: number) => {
+    setTimeout(() => {
+      const entry = pendingPatches.current.get(key);
+      if (entry && entry.seq === seq) pendingPatches.current.delete(key);
+    }, RETIRE_MS);
+  };
+  const overlayPending = (t: string, rows: any[]): any[] => {
+    let out = rows;
+    if (pendingDeletes.current.size) out = out.filter((r) => !pendingDeletes.current.has(`${t}:${r.id}`));
+    out = out.map((r) => {
+      const p = pendingPatches.current.get(`${t}:${r.id}`);
+      return p ? { ...r, ...p.patch } : r;
+    });
+    const present = new Set(out.map((r: any) => r.id));
+    for (const [key, ins] of pendingInserts.current) {
+      if (ins.table !== t) continue;
+      if (present.has(ins.row.id)) pendingInserts.current.delete(key); // visible server-side → ledger done
+      else out = [...out, ins.row];
+    }
+    return out;
+  };
+
   const reload = useCallback(async (table?: Table) => {
     if (OFFLINE) return;
     const tables = (table ? [table] : TABLES) as string[];
@@ -148,7 +186,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     setData((prev) => {
       const next = { ...prev };
       results.forEach(({ t, error, data }) => {
-        if (!error && data) (next as any)[t] = data;
+        if (!error && data) (next as any)[t] = overlayPending(t, data);
       });
       return next;
     });
@@ -237,8 +275,12 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     }
 
     const ownedRow = ownerId ? { owner_id: ownerId, ...stamped } : stamped;
+    const ledgerKey = `${table as string}:${ownedRow.id}`;
     // Show the row immediately (optimistic) so the UI never stalls on a slow
-    // gym connection; reconcile with the server copy once the write lands.
+    // gym connection; reconcile with the server copy once the write lands. The
+    // ledger entry keeps a concurrent reload from dropping the row before the
+    // server has it.
+    pendingInserts.current.set(ledgerKey, { table: table as string, row: ownedRow });
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ownedRow] }));
     // Column-drift tolerant (shared helper): strip + retry a column the DB
     // doesn't have yet, composed with the gym-wifi network retry.
@@ -250,11 +292,17 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       )
     );
     if (error) {
+      pendingInserts.current.delete(ledgerKey); // rolled back — nothing to protect
       setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== ownedRow.id) }));
       setSyncError(friendlyError(error));
       throw error;
     }
-    if (d) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === ownedRow.id ? d : r)) }));
+    if (d) {
+      // Keep protecting with the SERVER copy until a reload actually contains
+      // the row (overlayPending retires the entry when it sees the id).
+      pendingInserts.current.set(ledgerKey, { table: table as string, row: d });
+      setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === ownedRow.id ? d : r)) }));
+    }
     return (d ?? ownedRow) as Row<K>;
   };
 
@@ -272,18 +320,22 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     const owned = stamped.map((r) => (ownerId ? { owner_id: ownerId, ...r } : r));
     const ids = new Set(owned.map((r) => r.id));
     // Optimistic: show every row immediately so the UI never stalls; reconcile
-    // (or roll the WHOLE batch back) once the single insert lands.
+    // (or roll the WHOLE batch back) once the single insert lands. Ledger
+    // entries keep a concurrent reload from dropping the batch mid-flight.
+    for (const r of owned) pendingInserts.current.set(`${table as string}:${r.id}`, { table: table as string, row: r });
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ...owned] }));
     const { data: d, error } = await trackWrite(() =>
       runWithRetry(() => supabase.schema('fitness').from(table as string).insert(owned).select())
     );
     if (error) {
+      for (const r of owned) pendingInserts.current.delete(`${table as string}:${r.id}`);
       setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => !ids.has(r.id)) }));
       setSyncError(friendlyError(error));
       throw error;
     }
     if (Array.isArray(d) && d.length) {
       const byId = new Map((d as any[]).map((row) => [row.id, row]));
+      for (const row of d as any[]) pendingInserts.current.set(`${table as string}:${row.id}`, { table: table as string, row });
       setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => byId.get(r.id) ?? r) }));
       return d as Row<K>[];
     }
@@ -328,6 +380,14 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     const key = `${table as string}:${id}`;
     const seq = (seqCounter.current += 1);
     writeSeq.current.set(key, seq);
+    // Ledger: protect the optimistic change from a concurrent reload snapshot
+    // (patches for one row accumulate; the newest write owns the entry).
+    // Strict writes are NOT optimistic, so they only enter the ledger on ack —
+    // otherwise a reload could surface the change before the server confirmed.
+    if (!strict) {
+      const prevEntry = pendingPatches.current.get(key);
+      pendingPatches.current.set(key, { seq, patch: { ...prevEntry?.patch, ...(patch as Record<string, unknown>) } });
+    }
     const { data: d, error } = await enqueueWrite(key, () =>
       trackWrite(() =>
         writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
@@ -338,6 +398,10 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       )
     );
     if (error) {
+      // Terminal failure → stop protecting this change; the server's truth wins
+      // on the next reload (the banner has already told the user).
+      const entry = pendingPatches.current.get(key);
+      if (entry && entry.seq === seq) pendingPatches.current.delete(key);
       setSyncError(friendlyError(error));
       // STRICT: propagate so the caller can preserve its invariant (roll back the
       // staged row). Local state was never optimistically changed, so no false
@@ -349,6 +413,13 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       // and realtime reconciles later.
       return optimistic as Row<K>;
     }
+    // Acknowledged: keep the ledger entry briefly (a refetch whose query ran
+    // pre-commit may still be applying), then retire it.
+    if (strict) {
+      const prevEntry = pendingPatches.current.get(key);
+      pendingPatches.current.set(key, { seq, patch: { ...prevEntry?.patch, ...(patch as Record<string, unknown>) } });
+    }
+    retirePatchLater(key, seq);
     // Only reconcile from the response if no newer write for this row has been
     // issued — otherwise a slow older response would clobber the newer value.
     // (In strict mode this is also where the change is FIRST applied locally.)
@@ -422,6 +493,12 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   };
 
   const remove = async (table: Table, id: string): Promise<void> => {
+    const ledgerKey = `${table as string}:${id}`;
+    // Ledger: keep a concurrent reload from resurrecting the row while the
+    // soft-delete is still in flight. Also drop any pending insert/patch for it.
+    pendingDeletes.current.add(ledgerKey);
+    pendingInserts.current.delete(ledgerKey);
+    pendingPatches.current.delete(ledgerKey);
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (OFFLINE) return;
     const { error } = await trackWrite(() =>
@@ -436,7 +513,14 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     );
     // Same reasoning as update(): the row is already gone locally; a failed
     // delete is noted but never thrown, so it can't spam the rejection banner.
-    if (error) setSyncError(friendlyError(error));
+    if (error) {
+      pendingDeletes.current.delete(ledgerKey); // server still has it — let reload resurrect honestly
+      setSyncError(friendlyError(error));
+      return;
+    }
+    // Committed: fetches now exclude the row; keep the tombstone through one
+    // more refetch window, then retire it.
+    setTimeout(() => pendingDeletes.current.delete(ledgerKey), RETIRE_MS);
   };
 
   const clearSyncError = useCallback(() => setSyncError(null), []);

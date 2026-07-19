@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSavedFoodPicker,
   filterSavedFoods,
+  mealForHour,
   quickLogFromSavedFood,
   scaleMacros,
 } from '../nutritionQuickLog';
@@ -76,6 +77,23 @@ describe('nutrition quick-log helpers', () => {
       fat_g: 18,
     });
     expect(row.notes).toContain('Quick logged from saved food');
+  });
+
+  it('logs to the meal the caller says is happening NOW, not where the food was first saved', () => {
+    const row = quickLogFromSavedFood(saved({ meal: 'breakfast' }), '2026-07-05', 1, 'dinner');
+    expect(row.meal).toBe('dinner');
+    // Without an override the stored meal still applies.
+    expect(quickLogFromSavedFood(saved({ meal: 'breakfast' }), '2026-07-05', 1).meal).toBe('breakfast');
+  });
+
+  it('maps the hour of day to a sensible default meal slot', () => {
+    expect(mealForHour(7)).toBe('breakfast');
+    expect(mealForHour(10)).toBe('breakfast');
+    expect(mealForHour(12)).toBe('lunch');
+    expect(mealForHour(14)).toBe('lunch');
+    expect(mealForHour(16)).toBe('snack');
+    expect(mealForHour(19)).toBe('dinner');
+    expect(mealForHour(22)).toBe('snack');
   });
 
   it('filters saved foods by name, meal label and notes', () => {
