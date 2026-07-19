@@ -3,14 +3,28 @@ import { readFileSync } from 'node:fs';
 import { FINANCIAL_THEME_STYLE } from '../../../lib/domainTheme';
 
 const styles = readFileSync(new URL('src/styles.css', `file://${process.cwd()}/`), 'utf8');
+const financialShell = readFileSync(new URL('financial.html', `file://${process.cwd()}/`), 'utf8');
+
+function tokensFrom(block: string): Record<string, string> {
+  return Object.fromEntries(
+    [...block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()])
+  );
+}
 
 function financialThemeTokens(): Record<string, string> {
   const block = styles.match(/html\[data-domain="financial"\]\s*\{([^}]*)\}/)?.[1];
   if (!block) throw new Error('Financial theme block is missing');
+  return tokensFrom(block);
+}
 
-  return Object.fromEntries(
-    [...block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()])
-  );
+// The boot <style> in financial.html is a THIRD copy of the same tokens (the
+// one no test used to guard). Parse its :root block so drift here fails CI too.
+function financialBootTokens(): Record<string, string> {
+  const style = financialShell.match(/id="financial-boot-theme"[\s\S]*?<\/style>/)?.[0];
+  if (!style) throw new Error('financial.html boot theme <style> is missing');
+  const block = style.match(/:root\s*\{([^}]*)\}/)?.[1];
+  if (!block) throw new Error('financial.html boot :root block is missing');
+  return tokensFrom(block);
 }
 
 function luminance(hex: string): number {
@@ -50,6 +64,26 @@ describe('Financial theme contrast', () => {
 
     for (const [name, value] of Object.entries(FINANCIAL_THEME_STYLE)) {
       expect(tokens[name].replace(/\s+/g, '').toLowerCase()).toBe(value.replace(/\s+/g, '').toLowerCase());
+    }
+  });
+
+  // Root cause of the recurring bug: the theme is duplicated across the CSS,
+  // the runtime object, AND the boot shell — and only the first two were
+  // guarded. Pin the boot shell to the same source of truth so no future edit
+  // can leave financial.html holding stale tokens.
+  it('keeps the financial.html boot shell in lockstep with the theme', () => {
+    const boot = financialBootTokens();
+    const norm = (v: string) => v.replace(/\s+/g, '').toLowerCase();
+
+    // Every token the boot floor carries must match the source of truth…
+    for (const [name, value] of Object.entries(boot)) {
+      expect(FINANCIAL_THEME_STYLE).toHaveProperty(name);
+      expect(norm(value)).toBe(norm((FINANCIAL_THEME_STYLE as Record<string, string>)[name]));
+    }
+    // …and the readability-critical ones must be present, so they can't be
+    // quietly dropped from the shell.
+    for (const critical of ['--app-bg', '--surface', '--text', '--text2', '--text3']) {
+      expect(boot).toHaveProperty(critical);
     }
   });
 });
