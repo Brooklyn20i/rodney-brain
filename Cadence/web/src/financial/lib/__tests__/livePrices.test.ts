@@ -3,6 +3,8 @@ import {
   fetchLiveQuotes,
   liveFxRatesFromQuotes,
   liveNativeValue,
+  quoteAutoRepriceBlockReason,
+  quoteCanAutoReprice,
   quoteCurrencyMatchesHolding,
   quoteSymbolsForHoldings,
   USD_AUD_FX_SYMBOL,
@@ -72,6 +74,19 @@ describe('quoteCurrencyMatchesHolding', () => {
     expect(quoteCurrencyMatchesHolding('PMGOLD.AX', '', 'AUD')).toBe(true);
     expect(quoteCurrencyMatchesHolding('PMGOLD.AX', '', 'USD')).toBe(false);
     expect(quoteCurrencyMatchesHolding('GOOG', '', 'USD')).toBe(false);
+  });
+});
+
+describe('quoteCanAutoReprice', () => {
+  it('blocks PMGOLD because Yahoo returns a materially wrong quote for that ASX product', () => {
+    expect(quoteCanAutoReprice('PMGOLD.AX', '', 'AUD')).toBe(false);
+    expect(quoteAutoRepriceBlockReason('PMGOLD.AX')).toMatch(/official ASX/i);
+  });
+
+  it('allows other currency-compatible ASX and US quotes', () => {
+    expect(quoteCanAutoReprice('VBTC.AX', 'AUD', 'AUD')).toBe(true);
+    expect(quoteCanAutoReprice('WIRE.AX', 'AUD', 'AUD')).toBe(true);
+    expect(quoteCanAutoReprice('GOOG', 'USD', 'USD')).toBe(true);
   });
 });
 

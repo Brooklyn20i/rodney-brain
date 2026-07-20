@@ -18,6 +18,8 @@ import {
   fetchLiveQuotes,
   liveFxRatesFromQuotes,
   liveNativeValue,
+  quoteAutoRepriceBlockReason,
+  quoteCanAutoReprice,
   quoteCurrencyMatchesHolding,
   quoteSymbolsForHoldings,
   yahooSymbol,
@@ -125,7 +127,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
     // cross-currency conversion isn't done here (FX rates are AUD-pegged). A
     // blank Yahoo currency is accepted only for explicit .AX/AUD symbols by the
     // helper, covering ASX ETPs such as PMGOLD.AX.
-    if (!quoteCurrencyMatchesHolding(symbol, q.currency, h.currency)) return null;
+    if (!quoteCanAutoReprice(symbol, q.currency, h.currency)) return null;
     return liveNativeValue(h.units, q.price);
   };
 
@@ -559,6 +561,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                   {rows.map((h) => {
                   const editing = reprice[h.id];
                   const live = liveFor(h);
+                  const liveBlockReason = quoteAutoRepriceBlockReason(yahooSymbol(h));
                   const thesis = (data.investment_theses ?? []).find((t) => t.target_id === h.id && !t.deleted_at);
                   const perUnit = h.units > 0 ? (live !== null ? live : h.native_value) / h.units : null;
                   const sig = thesis && !thesis.is_structural ? priceSignal(thesis, perUnit) : null;
@@ -602,7 +605,9 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                         </div>
                       </div>
                       <div className="inv-holding-live">
-                        {live === null ? (
+                        {liveBlockReason ? (
+                          <span className="inv-warning">{liveBlockReason}</span>
+                        ) : live === null ? (
                           (() => {
                             const mm = quoteCurrencyMismatch(h);
                             return mm ? (
