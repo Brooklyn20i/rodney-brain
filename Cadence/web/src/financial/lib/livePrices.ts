@@ -75,6 +75,22 @@ export function quoteCurrencyMatchesHolding(symbol: string, quoteCurrency: strin
   return quote === '' && symbol.toUpperCase().endsWith('.AX') && holding === 'AUD';
 }
 
+// Upstream quote data can be numerically wrong even when its currency metadata
+// looks compatible. PMGOLD.AX is a known Yahoo Finance exception: on
+// 2026-07-20 Yahoo returned A$17.94 while the official ASX market page showed
+// A$56.93. Keep PMGOLD on manual/official-ASX repricing until the discrepancy
+// is demonstrably resolved.
+export function quoteAutoRepriceBlockReason(symbol: string): string | null {
+  if (symbol.trim().toUpperCase() === 'PMGOLD.AX') {
+    return 'Automatic PMGOLD pricing is disabled because the feed is wrong; use the official ASX price.';
+  }
+  return null;
+}
+
+export function quoteCanAutoReprice(symbol: string, quoteCurrency: string, holdingCurrency: string): boolean {
+  return quoteAutoRepriceBlockReason(symbol) === null && quoteCurrencyMatchesHolding(symbol, quoteCurrency, holdingCurrency);
+}
+
 // units * price, rounded to cents -- the holding's new native_value if the
 // live quote is applied.
 export function liveNativeValue(units: number, price: number): number {
