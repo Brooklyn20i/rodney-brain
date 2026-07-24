@@ -1726,6 +1726,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .task-detail-title:focus { outline: none; }
 .task-detail-title.done { text-decoration: line-through; color: var(--text3); }
 .task-detail-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+/* Inbox capture opened in the detail panel: the one-tap way to finish triage. */
+.task-inbox-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding: 10px 12px; border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 10px; background: rgba(245, 158, 11, 0.08); }
+.task-inbox-banner-label { font-size: 12.5px; font-weight: 600; color: var(--text2); }
 .task-detail-defer { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .task-detail-meta { margin-top: 14px; font-size: 11px; color: var(--text3); }
 .task-hub-empty { align-items: center; justify-content: center; }

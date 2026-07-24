@@ -79,11 +79,29 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
   const applyBall = ({ counterpartyId, direction: d }: BallState) => {
     const p = linkedPeople.find((l) => l.id === counterpartyId);
     if (!p) return;
-    if (counterpartyId === task.person_id && d === direction) return;
-    patch({ person_id: counterpartyId, type: d === 'theyOwe' ? 'waitingFor' : 'task' });
+    if (counterpartyId === task.person_id && d === direction) {
+      // Re-affirming the current holder on an Inbox capture IS the triage
+      // decision — file it, no handoff to log.
+      if (task.inboxed) patch({ inboxed: false });
+      return;
+    }
+    // Assigning the ball is triage too: a capture given to a person belongs in
+    // their ledger, not the Inbox.
+    patch({ person_id: counterpartyId, type: d === 'theyOwe' ? 'waitingFor' : 'task', ...(task.inboxed ? { inboxed: false } : {}) });
     const text = d === 'theyOwe' ? `→ ${p.name} owes me` : `→ I owe ${p.name}`;
     insert('comments', { work_item_id: task.id, text, author: 'system' } as Partial<Comment>);
     logActivity('swap_direction', text);
+  };
+
+  // One-tap way OUT of the Inbox from the detail panel. Enriching a capture
+  // here (ball, links, dates) used to leave it stranded in the triage tray —
+  // the only exits were the little row buttons. The label says exactly where
+  // the task will land.
+  const ballPerson = linkedPeople.find((l) => l.id === task.person_id) || linkedPeople[0] || null;
+  const fileFromInbox = () => {
+    if (ballPerson) patch({ inboxed: false, person_id: ballPerson.id });
+    else patch({ inboxed: false, type: 'task' });
+    logActivity('triage_item', task.title);
   };
 
   const del = () => {
@@ -119,6 +137,17 @@ export function TaskDetailPanel({ task, onClose }: { task: WorkItem; onClose: ()
           <TypeTag type={task.type} /><PriTag priority={task.priority} />
           {task.source && task.source !== 'you' && <span className="tag">via {task.source}</span>}
         </div>
+
+        {task.inboxed && (
+          <div className="task-inbox-banner">
+            <span className="task-inbox-banner-label">📥 Still in the Inbox — file it to finish triage</span>
+            <button className="btn btn-primary btn-sm" onClick={fileFromInbox}>
+              {ballPerson
+                ? `File to ${ballPerson.name.split(' ')[0]}'s ledger`
+                : 'Move to My tasks'}
+            </button>
+          </div>
+        )}
 
         {linkedPeople.length > 0 && (
           <div className="form-group">

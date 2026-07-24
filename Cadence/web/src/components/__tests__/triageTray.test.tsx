@@ -152,12 +152,43 @@ describe('ItemModal capture editing', () => {
     const { container } = render(<ItemModal existing={wi({ id: 'c1', title: 'Clarify me', inboxed: true })} onClose={vi.fn()} />);
     const dueInput = container.querySelector('input[type="date"]') as HTMLInputElement;
     fireEvent.change(dueInput, { target: { value: '2026-07-31' } });
-    fireEvent.click(screen.getByText('Save'));
+    // The default save on an inboxed capture is explicit about NOT filing.
+    fireEvent.click(screen.getByRole('button', { name: 'Save, keep in Inbox' }));
     await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
     const [, id, patch] = h.store.update.mock.calls[0];
     expect(id).toBe('c1');
     expect(patch.due_date).toBe('2026-07-31');
     expect(patch.inboxed).not.toBe(false);
+  });
+
+  it('"Save & file" is the explicit exit: clears inboxed and names the ledger it goes to', async () => {
+    const captureAmy = wi({
+      id: 'c1', title: 'Chase the invoice', inboxed: true, person_id: 'amy',
+      related_entities: [{ type: 'person', id: 'amy', name: 'Amy Stone' }],
+    });
+    setStore({ work_items: [captureAmy] });
+    render(<ItemModal existing={captureAmy} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: "Save & file to Amy's ledger" }));
+    await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
+    const [, id, patch] = h.store.update.mock.calls[0];
+    expect(id).toBe('c1');
+    expect(patch).toMatchObject({ inboxed: false, person_id: 'amy' });
+  });
+
+  it('"Save & move to My tasks" files a person-less capture', async () => {
+    setStore({ work_items: [wi({ id: 'c1', title: 'Solo capture', inboxed: true })] });
+    render(<ItemModal existing={wi({ id: 'c1', title: 'Solo capture', inboxed: true })} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save & move to My tasks' }));
+    await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
+    const [, , patch] = h.store.update.mock.calls[0];
+    expect(patch.inboxed).toBe(false);
+  });
+
+  it('an already-filed task keeps the plain Save button', () => {
+    setStore({ work_items: [wi({ id: 'f1', title: 'Filed task', inboxed: false })] });
+    render(<ItemModal existing={wi({ id: 'f1', title: 'Filed task', inboxed: false })} onClose={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+    expect(screen.queryByText(/Save & file|keep in Inbox/)).toBeNull();
   });
 });
 
