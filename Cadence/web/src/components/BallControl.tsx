@@ -27,15 +27,18 @@ export function BallControl({ people, counterpartyId, direction, onChange }: {
               className={`ball-person${p.id === current.id ? ' active' : ''}`}
               aria-pressed={p.id === current.id}
               title={`Pass the ball: this now sits between me and ${p.name}`}
-              onClick={() => { if (p.id !== current.id) onChange({ counterpartyId: p.id, direction }); }}
+              onClick={() => onChange({ counterpartyId: p.id, direction })}
             >{p.name.split(' ')[0]}</button>
           ))}
         </div>
       )}
+      {/* Same-state taps are forwarded too — the parent decides whether they
+          are a no-op or carry meaning (e.g. re-affirming the holder on an
+          Inbox capture IS the triage decision, and files it). */}
       <LedgerDirectionToggle
         personName={current.name}
         direction={direction}
-        onChange={(d) => { if (d !== direction || current.id !== counterpartyId) onChange({ counterpartyId: current.id, direction: d }); }}
+        onChange={(d) => onChange({ counterpartyId: current.id, direction: d })}
       />
     </div>
   );

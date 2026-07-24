@@ -85,6 +85,52 @@ describe('ledger direction swap', () => {
   });
 });
 
+describe('filing an inboxed capture from the detail panel', () => {
+  // The bug: enriching a capture in the detail panel (ball, links, dates) left
+  // it stranded in the Inbox tray — the only exits were the row buttons.
+  it('shows a file banner on an inboxed task and one tap sends it to the ledger', () => {
+    const capture = wi({ inboxed: true });
+    setStore({ data: { work_items: [capture] } });
+    render(<TaskDetailPanel task={capture} onClose={() => {}} />);
+    expect(screen.getByText(/Still in the Inbox/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: "File to Jarrod's ledger" }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { inboxed: false, person_id: 'pJ' });
+  });
+
+  it('files a person-less capture to My tasks instead', () => {
+    const solo = wi({ inboxed: true, person_id: null, related_entities: [] });
+    setStore({ data: { work_items: [solo] } });
+    render(<TaskDetailPanel task={solo} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Move to My tasks' }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { inboxed: false, type: 'task' });
+  });
+
+  it('assigning the ball on an inboxed capture files it in the same patch', () => {
+    const capture = wi({ inboxed: true });
+    setStore({ data: { work_items: [capture] } });
+    render(<TaskDetailPanel task={capture} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: '📤 Jarrod owes me' }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', {
+      person_id: 'pJ', type: 'waitingFor', inboxed: false,
+    });
+  });
+
+  it('re-affirming the current holder on an inboxed capture still files it (no phantom handoff)', () => {
+    const capture = wi({ inboxed: true });
+    setStore({ data: { work_items: [capture] } });
+    render(<TaskDetailPanel task={capture} onClose={() => {}} />);
+    // "I owe Jarrod" is already the active state — tapping it is the decision.
+    fireEvent.click(screen.getByRole('button', { name: '📥 I owe Jarrod' }));
+    expect(h.store.update).toHaveBeenCalledWith('work_items', 'w1', { inboxed: false });
+    expect(h.store.insert).not.toHaveBeenCalled(); // no handoff comment
+  });
+
+  it('shows no banner on an already-filed task', () => {
+    render(<TaskDetailPanel task={wi({})} onClose={() => {}} />);
+    expect(screen.queryByText(/Still in the Inbox/)).not.toBeInTheDocument();
+  });
+});
+
 describe('task updates & history', () => {
   it('lists existing updates newest-first with the created origin pinned last', () => {
     setStore({ data: {

@@ -51,7 +51,7 @@ export function ItemModal({ existing, defaults, onClose }: {
     linkedPeople.find((l) => l.id === counterpartyId)?.id || linkedPeople[0]?.id || null;
   const direction: LedgerDirection = type === 'waitingFor' ? 'theyOwe' : 'iOwe';
 
-  const save = async () => {
+  const save = async (fileOut = false) => {
     if (!title.trim()) return;
     setBusy(true);
     try {
@@ -67,8 +67,9 @@ export function ItemModal({ existing, defaults, onClose }: {
       if (existing) {
         // Editing an inboxed Quick Capture should not silently file it just
         // because Rodney adds a due date/person/project while clarifying it.
-        // Only explicit triage actions should clear `inboxed`.
-        const filingPatch = filed && !existing.inboxed ? { inboxed: false } : {};
+        // Only explicit triage actions — like the "Save & file" button —
+        // clear `inboxed`.
+        const filingPatch = fileOut ? { inboxed: false } : {};
         await update('work_items', existing.id, { ...patch, ...filingPatch } as Partial<WorkItem>);
         // A handoff (new counterparty or flipped direction) goes on the record.
         const oldDir: LedgerDirection = existing.type === 'waitingFor' ? 'theyOwe' : 'iOwe';
@@ -94,7 +95,18 @@ export function ItemModal({ existing, defaults, onClose }: {
     <Modal title={existing ? 'Edit Item' : 'New Item'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+        {existing?.inboxed && (
+          <button className="btn btn-primary" onClick={() => save(true)} disabled={busy}>
+            {busy
+              ? 'Saving…'
+              : linkedPeople.length > 0
+                ? `Save & file to ${(linkedPeople.find((l) => l.id === effectiveCounterparty) || linkedPeople[0]).name.split(' ')[0]}'s ledger`
+                : 'Save & move to My tasks'}
+          </button>
+        )}
+        <button className={`btn ${existing?.inboxed ? 'btn-secondary' : 'btn-primary'}`} onClick={() => save()} disabled={busy}>
+          {busy ? 'Saving…' : existing?.inboxed ? 'Save, keep in Inbox' : 'Save'}
+        </button>
       </>}>
       <div className="form-group">
         <label>Title</label>
