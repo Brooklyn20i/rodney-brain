@@ -74,7 +74,7 @@ export function upsertTopic(topics: PrepTopic[], topic: PrepTopic): PrepTopic[] 
 }
 
 // Hook: read/mutate the series prep note with freshest-snapshot semantics
-// (same ref-guarded pattern as lib/agendaQueue).
+// (same ref-guarded pattern as lib/dayPlan).
 export function usePrepTopics(groupId: string) {
   const { data, insert, update } = useCadence();
   const notesRef = useRef(data.notes);
@@ -102,13 +102,6 @@ export function usePrepTopics(groupId: string) {
   const removeTopic = useCallback((topicId: string) =>
     write((topics) => topics.filter((t) => t.id !== topicId)), [write]);
 
-  // Mark every topic in `topicIds` covered — used when a meeting closes with
-  // their agenda items marked covered.
-  const markCovered = useCallback((topicIds: string[]) => {
-    if (!topicIds.length) return Promise.resolve();
-    return write((topics) => topics.map((t) => topicIds.includes(t.id) ? { ...t, status: 'covered' as const } : t));
-  }, [write]);
-
   // Create a REAL prep task linked to the group and attach it to the topic.
   const addPrepTask = useCallback(async (topic: PrepTopic, title: string, groupName: string, due?: string | null) => {
     const t = title.trim();
@@ -131,5 +124,5 @@ export function usePrepTopics(groupId: string) {
     }
   }, [groupId, insert, write]);
 
-  return { topics, addTopic, updateTopic, removeTopic, markCovered, addPrepTask };
+  return { topics, addTopic, updateTopic, removeTopic, addPrepTask };
 }

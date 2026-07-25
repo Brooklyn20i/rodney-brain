@@ -7,10 +7,10 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emptyData } from '../../lib/types';
 
-const h = vi.hoisted(() => ({ store: {} as any, enqueue: vi.fn() }));
+const h = vi.hoisted(() => ({ store: {} as any, raise: vi.fn() }));
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
-vi.mock('../../lib/agendaQueue', () => ({
-  useAgendaQueue: () => ({ enqueue: h.enqueue, clear: vi.fn() }),
+vi.mock('../../lib/raiseList', () => ({
+  useRaiseList: () => ({ raise: h.raise, unraise: vi.fn(), toggle: vi.fn() }),
 }));
 
 import { TriageWizard } from '../TriageWizard';
@@ -39,7 +39,7 @@ const click = (name: string | RegExp) =>
 const lastUpdate = () => h.store.update.mock.calls[h.store.update.mock.calls.length - 1];
 
 beforeEach(() => {
-  h.enqueue = vi.fn().mockResolvedValue('queued');
+  h.raise = vi.fn().mockResolvedValue(undefined);
   setStore({ work_items: [wi({ id: 'c1', title: 'Capture one' })] });
 });
 afterEach(() => cleanup());
@@ -68,7 +68,7 @@ describe('TriageWizard destinations', () => {
       inboxed: false, type: 'waitingFor', person_id: 'pA',
       related_entities: [{ type: 'person', id: 'pA', name: 'Anna Lee' }],
     })]);
-    expect(h.enqueue).not.toHaveBeenCalled();
+    expect(h.raise).not.toHaveBeenCalled();
   });
 
   it('Person → I owe them: stays a task on my list, linked to them', async () => {
@@ -82,7 +82,7 @@ describe('TriageWizard destinations', () => {
     })]);
   });
 
-  it('Person → raise at next 1:1: files to them AND queues the agenda item', async () => {
+  it('Person → raise at next 1:1: files to them AND flags the SAME record on their raise list', async () => {
     setStore({ work_items: [wi({ id: 'c1', title: 'Discuss budget' })], people: [anna] });
     render(<TriageWizard onClose={vi.fn()} />);
     await click(/Person…/);
@@ -91,9 +91,8 @@ describe('TriageWizard destinations', () => {
     expect(lastUpdate()).toEqual(['work_items', 'c1', expect.objectContaining({
       inboxed: false, type: 'task', person_id: 'pA',
     })]);
-    expect(h.enqueue).toHaveBeenCalledWith('pA', {
-      title: 'Discuss budget', notes: '', source_item_id: 'c1',
-    });
+    // Id only, never a title copy — one record, two views.
+    expect(h.raise).toHaveBeenCalledWith('pA', 'c1');
   });
 
   it('meeting groups are not offered in the person picker', async () => {

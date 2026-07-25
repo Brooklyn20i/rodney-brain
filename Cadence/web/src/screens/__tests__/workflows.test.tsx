@@ -241,6 +241,23 @@ describe('Home workflow', () => {
     expect(screen.getByText('Upcoming meetings')).toBeInTheDocument();
     expect(screen.getByText(/No upcoming meetings/)).toBeInTheDocument();
   });
+
+  it('the 1:1 chip counts open ledger items and raised tasks from the raise list', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' })],
+      work_items: [
+        wi({ id: 'w1', title: 'Deck', person_id: 'pA', type: 'task' }),
+        wi({ id: 'w2', title: 'Numbers', person_id: 'pA', type: 'waitingFor' }),
+      ],
+      notes: [
+        { id: 'nA', title: '1:1 · Anna', folder: '__mtg__pA', body: '{}', created_at: '', updated_at: '', deleted_at: null },
+        mdatesNote({ nA: '2026-06-20' }),
+        { id: 'rn', title: '__raise__pA', body: '{"raised":["w1"]}', folder: null, created_at: '', updated_at: '', deleted_at: null },
+      ],
+    }});
+    render(<Home onMenu={() => {}} />);
+    expect(screen.getByText('2 open · 1 to raise')).toBeInTheDocument();
+  });
 });
 
 // ── People ledger ───────────────────────────────────────────────────────────────
@@ -290,6 +307,66 @@ describe('People ledger', () => {
       type: 'task',
       person_id: 'pA',
     }));
+  });
+
+  // ── The raise flag: the 1:1 agenda IS the ledger ──────────────────────────
+  const raiseNote = (personId: string, ids: string[]) => ({
+    id: `rn-${personId}`, title: `__raise__${personId}`, body: JSON.stringify({ raised: ids }),
+    folder: null, created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null,
+  });
+
+  it('a raised task groups into "Next 1:1" AND stays in its ledger section with a lit flag', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna Lee' })],
+      work_items: [wi({ id: 'mine', title: 'Send Anna the deck', person_id: 'pA', type: 'task' })],
+      notes: [raiseNote('pA', ['mine'])],
+    }});
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    expect(screen.getByText(/🗓 Next 1:1/)).toBeInTheDocument();
+    // Same record, two views: once in Next 1:1, once in the I-owe ledger.
+    expect(screen.getAllByText('Send Anna the deck')).toHaveLength(2);
+    expect(document.querySelector('.raise-flag.active')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '✓ Covered' })).toBeInTheDocument();
+  });
+
+  it('"✓ Covered" unflags without completing — writes an empty raise list', () => {
+    const update = vi.fn().mockResolvedValue({});
+    setStore({ update, data: {
+      people: [person({ id: 'pA', name: 'Anna Lee' })],
+      work_items: [wi({ id: 'mine', title: 'Send Anna the deck', person_id: 'pA', type: 'task' })],
+      notes: [raiseNote('pA', ['mine'])],
+    }});
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    fireEvent.click(screen.getByRole('button', { name: '✓ Covered' }));
+    expect(update).toHaveBeenCalledWith('notes', 'rn-pA', { body: '{"raised":[]}' });
+  });
+
+  it('the 🗓 flag on a ledger row raises the task into the list', () => {
+    const update = vi.fn().mockResolvedValue({});
+    setStore({ update, data: {
+      people: [person({ id: 'pA', name: 'Anna Lee' })],
+      work_items: [wi({ id: 'mine', title: 'Send Anna the deck', person_id: 'pA', type: 'task' })],
+      notes: [raiseNote('pA', [])],
+    }});
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    expect(screen.queryByText(/🗓 Next 1:1/)).not.toBeInTheDocument(); // empty → no section
+    fireEvent.click(screen.getByRole('button', { name: '🗓' }));
+    expect(update).toHaveBeenCalledWith('notes', 'rn-pA', { body: '{"raised":["mine"]}' });
+  });
+
+  it('a legacy __agenda__ entry with a source_item_id still surfaces in Next 1:1 (lazy migration)', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna Lee' })],
+      work_items: [wi({ id: 'mine', title: 'Carry me over', person_id: 'pA', type: 'task' })],
+      notes: [{
+        id: 'lg-pA', title: '__agenda__pA', folder: null,
+        body: JSON.stringify({ items: [{ id: 'q1', title: 'Carry me over', source_item_id: 'mine' }] }),
+        created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null,
+      }],
+    }});
+    render(<People onMenu={() => {}} initialSelectedId="pA" />);
+    expect(screen.getByText(/🗓 Next 1:1/)).toBeInTheDocument();
+    expect(screen.getAllByText('Carry me over')).toHaveLength(2);
   });
 });
 

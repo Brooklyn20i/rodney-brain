@@ -4,7 +4,7 @@ import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { getTriageQueue } from '../lib/selectors';
 import { reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
-import { useAgendaQueue } from '../lib/agendaQueue';
+import { useRaiseList } from '../lib/raiseList';
 import { initials } from '../lib/util';
 
 type Stage = 'main' | 'person' | 'direction' | 'project';
@@ -17,7 +17,7 @@ type Stage = 'main' | 'person' | 'direction' | 'project';
 // item's Triage button (itemId) handles just that one and closes.
 export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?: string }) {
   const { data, insert, update, remove, logActivity } = useCadence();
-  const { enqueue } = useAgendaQueue();
+  const { raise } = useRaiseList();
 
   // Snapshot the queue at open so filing doesn't reshuffle the deck; each card
   // resolves live by id (skips anything already handled elsewhere).
@@ -82,7 +82,7 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
     logActivity('triage_my_task', title);
   });
 
-  const toPerson = (person: Person, direction: 'iOwe' | 'theyOwe' | 'agenda') => act(async () => {
+  const toPerson = (person: Person, direction: 'iOwe' | 'theyOwe' | 'raise') => act(async () => {
     await update('work_items', item!.id, {
       ...edits(),
       inboxed: false,
@@ -90,8 +90,10 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
       person_id: person.id,
       related_entities: reassignPrimaryPerson(item!.related_entities, item!.person_id, person),
     } as Partial<WorkItem>);
-    if (direction === 'agenda') {
-      await enqueue(person.id, { title: title.trim() || item!.title, notes, source_item_id: item!.id });
+    // "Raise" is a FLAG on the filed task — one record, shown in the ledger
+    // and grouped under Next 1:1 on the person's page.
+    if (direction === 'raise') {
+      await raise(person.id, item!.id);
     }
     logActivity('triage_person', `${title} → ${person.name}`);
   });
@@ -220,7 +222,7 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
                 <button className="wizard-dest" disabled={busy} onClick={() => toPerson(pickedPerson, 'theyOwe')}>
                   📤 Something they owe me
                 </button>
-                <button className="wizard-dest" disabled={busy} onClick={() => toPerson(pickedPerson, 'agenda')}>
+                <button className="wizard-dest" disabled={busy} onClick={() => toPerson(pickedPerson, 'raise')}>
                   🗓 Raise at the next 1:1
                 </button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setStage('person')}>← Back</button>

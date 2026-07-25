@@ -9,8 +9,7 @@ import { autoColor, AVATAR_COLORS, initials, fmtDM, fmtDMY, fmtWeekDM, todayStr,
 import { useMeetingDates, getNextMeeting } from '../lib/meetings';
 import { isAgentTask } from '../lib/tasks';
 import { getPersonLedger, getPersonInvolved } from '../lib/selectors';
-import { readAgendaQueue, useAgendaQueue } from '../lib/agendaQueue';
-import { RaiseAt1on1Button } from '../components/RaiseAt1on1Button';
+import { readRaiseList, useRaiseList } from '../lib/raiseList';
 import { htmlToPlain } from '../lib/richText';
 import type { Comment } from '../lib/types';
 
@@ -151,10 +150,13 @@ function PersonModal({ existing, onClose, onDelete, groups }: { existing?: Perso
 
 
 // ── Meeting notes list ─────────────────────────────────────────────────────────
+// Demoted to a collapsed section: the ledger is the 1:1 system now; the doc
+// trail is here for when the write-up matters, one tap away, never in the way.
 function MeetingNotes({ person }: { person: Person }) {
   const { data, insert } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const folder = mtgFolder(person.id);
   const today = todayStr();
@@ -171,13 +173,6 @@ function MeetingNotes({ person }: { person: Person }) {
         return db.localeCompare(da); // most recent past first
       });
   }, [data.notes, folder, dates]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-open the nearest upcoming 1:1 when this person is first shown.
-  useEffect(() => {
-    if (openId) return;
-    const upcoming = meetings.find((n) => (dates[n.id] || n.created_at).slice(0, 10) >= today);
-    if (upcoming) setOpenId(upcoming.id);
-  }, [person.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nextId = meetings.find((n) => (dates[n.id] || n.created_at).slice(0, 10) >= today)?.id;
 
@@ -199,12 +194,17 @@ function MeetingNotes({ person }: { person: Person }) {
 
   return (
     <div className="detail-section">
-      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        📝 Meeting Notes
+      <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setOpen((o) => !o)}>
+        📝 Meeting notes
         {meetings.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{meetings.length}</span>}
-        <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={newMeeting}>+ New 1:1</button>
+        {open && (
+          <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }}
+            onClick={(e) => { e.stopPropagation(); void newMeeting(); }}>+ New 1:1</button>
+        )}
+        <span style={{ marginLeft: open ? 8 : 'auto', fontSize: 11, color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+          {open ? '▴' : '▾'}</span>
       </h3>
-      {meetings.length === 0 ? (
+      {open && (meetings.length === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
           No meeting notes yet. Hit "+ New 1:1" to start capturing.
         </p>
@@ -225,7 +225,7 @@ function MeetingNotes({ person }: { person: Person }) {
             );
           })}
         </div>
-      )}
+      ))}
       {openNote && (
         <MeetingDocModal
           note={openNote}
@@ -240,8 +240,11 @@ function MeetingNotes({ person }: { person: Person }) {
 }
 
 // ── Single topic (work_item) card ──────────────────────────────────────────────
-function TopicCard({ w, onEdit, raisable, flipFor }: {
-  w: WorkItem; onEdit: (w: WorkItem) => void; raisable?: boolean;
+function TopicCard({ w, onEdit, raise, flipFor }: {
+  w: WorkItem; onEdit: (w: WorkItem) => void;
+  // The 1:1 raise flag on this row. 'flag' (ledger rows) = 🗓 toggle; 'covered'
+  // (Next 1:1 rows) = a "✓ Covered" button that unflags without completing.
+  raise?: { raised: boolean; toggle: () => void; variant: 'flag' | 'covered' };
   // When set (the ledger rows), show the one-tap ⇄ handoff: flip who owes whom
   // with this person, in place, logged into the task's history.
   flipFor?: Person;
@@ -276,7 +279,17 @@ function TopicCard({ w, onEdit, raisable, flipFor }: {
         <button className="btn-icon topic-flip" onClick={flip}
           title={w.type === 'waitingFor' ? `Now I owe ${flipFor.name.split(' ')[0]}` : `Now ${flipFor.name.split(' ')[0]} owes me`}>⇄</button>
       )}
-      {raisable && <RaiseAt1on1Button task={w} compact />}
+      {raise && raise.variant === 'flag' && (
+        <button className={`btn-icon raise-flag${raise.raised ? ' active' : ''}`}
+          aria-pressed={raise.raised}
+          title={raise.raised ? 'On next 1:1 — tap to remove' : 'Raise at next 1:1'}
+          onClick={raise.toggle}>🗓</button>
+      )}
+      {raise && raise.variant === 'covered' && (
+        <button className="btn btn-ghost btn-sm"
+          title="Covered — remove from Next 1:1 without completing"
+          onClick={raise.toggle}>✓ Covered</button>
+      )}
       <button className="btn-icon" onClick={() => onEdit(w)}>✎</button>
     </div>
   );
@@ -350,10 +363,11 @@ function RecentlyDone({ items }: { items: WorkItem[] }) {
 // "I owe {name}" and "{name} owes me" are the same UI with a different item
 // type behind the quick-add — I-owe inserts a task, owes-me inserts a
 // waitingFor (which is what puts it in this column and Home's Waiting lane).
-function LedgerSection({ person, title, items, overdue, accent, addType, addPlaceholder, onEdit }: {
+function LedgerSection({ person, title, items, overdue, accent, addType, addPlaceholder, onEdit, raisedIds, onToggleRaise }: {
   person: Person; title: string; items: WorkItem[]; overdue: number;
   accent: string; addType: WorkItem['type']; addPlaceholder: string;
   onEdit: (w: WorkItem) => void;
+  raisedIds: string[]; onToggleRaise: (workItemId: string) => void;
 }) {
   const { insert, logActivity } = useCadence();
   const [draft, setDraft] = useState('');
@@ -378,7 +392,10 @@ function LedgerSection({ person, title, items, overdue, accent, addType, addPlac
         {items.length > 0 && <span className="section-count" style={{ background: accent }}>{items.length}</span>}
         {overdue > 0 && <span className="ledger-overdue-chip">{overdue} overdue</span>}
       </h3>
-      {items.map((w) => <TopicCard key={w.id} w={w} onEdit={onEdit} raisable flipFor={person} />)}
+      {items.map((w) => (
+        <TopicCard key={w.id} w={w} onEdit={onEdit} flipFor={person}
+          raise={{ raised: raisedIds.includes(w.id), toggle: () => onToggleRaise(w.id), variant: 'flag' }} />
+      ))}
       {items.length === 0 && <p className="ledger-empty">Nothing here — all square.</p>}
       <div className="topic-add">
         <span style={{ color: 'var(--text3)', fontSize: 16 }}>+</span>
@@ -395,14 +412,12 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const { data } = useCadence();
   const { dates } = useMeetingDates();
   const nextMeeting = getNextMeeting(person.id, data.notes, dates);
-  const [tab, setTab] = useState<'ledger' | 'meetings'>('ledger');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<WorkItem | null>(null);
 
   // The two-way ledger: what I owe them vs what they owe me. Inboxed captures
   // are excluded until triaged (getPersonLedger builds on isFiledTask).
   const ledger = useMemo(() => getPersonLedger(data.work_items, person.id), [data.work_items, person.id]);
-  const openCount = ledger.iOwe.length + ledger.theyOwe.length;
   // Multi-person tasks where the ball is currently with someone else.
   const involved = useMemo(
     () => getPersonInvolved(data.work_items, person.id).filter((w) => !w.done),
@@ -413,13 +428,19 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
   const recentDone = mine.filter((w) => w.done && w.completed_at && w.completed_at > daysAgo(14))
     .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
 
-  const meetingCount = data.notes.filter((n) => n.folder === mtgFolder(person.id)).length;
   const first = person.name.trim().split(/\s+/)[0] || person.name;
 
-  // Items raised for the next 1:1 — the prep list you work through in the
-  // meeting (tick off = clear), alongside the ledger itself.
-  const queued = useMemo(() => readAgendaQueue(data.notes, person.id), [data.notes, person.id]);
-  const { clear: clearQueue } = useAgendaQueue();
+  // The 1:1 agenda IS the ledger: raised tasks are the same records, flagged
+  // and grouped up top so the meeting is worked straight off them.
+  const raisedIds = useMemo(
+    () => readRaiseList(data.notes, data.work_items, person.id),
+    [data.notes, data.work_items, person.id],
+  );
+  const { unraise, toggle: toggleRaise } = useRaiseList();
+  const raisedItems = useMemo(() => {
+    const byId = new Map(data.work_items.map((w) => [w.id, w]));
+    return raisedIds.map((id) => byId.get(id)).filter((w): w is WorkItem => Boolean(w));
+  }, [raisedIds, data.work_items]);
 
   return (
     <div className="split-right">
@@ -445,84 +466,71 @@ function Detail({ person, onEditPerson }: { person: Person; onEditPerson: () => 
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="people-tabs">
-        <button className={`people-tab ${tab === 'ledger' ? 'active' : ''}`} onClick={() => setTab('ledger')}>
-          Ledger {openCount > 0 && <span className="ptab-badge">{openCount}</span>}
-        </button>
-        <button className={`people-tab ${tab === 'meetings' ? 'active' : ''}`} onClick={() => setTab('meetings')}>
-          Meetings {meetingCount > 0 && <span className="ptab-badge">{meetingCount}</span>}
-        </button>
-      </div>
-
       <div className="split-panel-body">
-        {tab === 'ledger' && (
-          <>
-            {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
-            <InlineNotes person={person} />
-            <LedgerSection
-              person={person}
-              title={`📤 ${first} owes me`}
-              items={ledger.theyOwe}
-              overdue={ledger.theyOweOverdue}
-              accent="var(--teal)"
-              addType="waitingFor"
-              addPlaceholder={`Give ${first} a task — press Enter`}
-              onEdit={setEditing}
-            />
-            <LedgerSection
-              person={person}
-              title={`📥 I owe ${first}`}
-              items={ledger.iOwe}
-              overdue={ledger.iOweOverdue}
-              accent="var(--accent)"
-              addType="task"
-              addPlaceholder={`Something I owe ${first} — press Enter`}
-              onEdit={setEditing}
-            />
-            {queued.length > 0 && (
-              <div className="detail-section">
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>🗓 To raise at next 1:1
-                  <span className="section-count" style={{ background: 'var(--purple)' }}>{queued.length}</span>
-                </h3>
-                {queued.map((q) => (
-                  <div key={q.id} className="work-item-row">
-                    <input type="checkbox" checked={false} title="Raised — tick to clear"
-                      onChange={() => void clearQueue(person.id, [q.id])}
-                      style={{ width: 15, height: 15, accentColor: 'var(--purple)' }} />
-                    <span className="wi-title" style={{ flex: 1 }}>{q.title}</span>
-                    <button className="btn-icon" title="Remove without raising"
-                      onClick={() => void clearQueue(person.id, [q.id])}>✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {involved.length > 0 && (
-              <div className="detail-section">
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>↔ Involved — ball elsewhere
-                  <span className="section-count" style={{ background: 'var(--text3)' }}>{involved.length}</span>
-                </h3>
-                {involved.map((w) => {
-                  const holder = data.people.find((p) => p.id === w.person_id);
-                  return (
-                    <div key={w.id} className="work-item-row" style={{ cursor: 'pointer' }} onClick={() => setEditing(w)}>
-                      <span style={{ color: 'var(--text3)', fontSize: 13 }}>↔</span>
-                      <span className="wi-title" style={{ flex: 1 }}>{w.title}</span>
-                      <span className="tag" style={{ fontSize: 11 }}>
-                        with {holder ? holder.name.split(' ')[0] : 'me'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={() => setAdding(true)}>
-              + Add with full details
-            </button>
-            <RecentlyDone items={recentDone} />
-          </>
+        {person.email && <p className="card-meta" style={{ marginBottom: 10 }}>✉ {person.email}</p>}
+        {raisedItems.length > 0 && (
+          <div className="detail-section ledger-section" style={{ ['--section-accent' as string]: 'var(--purple)' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              🗓 Next 1:1{nextMeeting ? ` · ${fmtNextMtg(nextMeeting)}` : ''}
+              <span className="section-count" style={{ background: 'var(--purple)' }}>{raisedItems.length}</span>
+            </h3>
+            {raisedItems.map((w) => (
+              <TopicCard key={w.id} w={w} onEdit={setEditing} flipFor={person}
+                raise={{ raised: true, toggle: () => void unraise(person.id, w.id), variant: 'covered' }} />
+            ))}
+          </div>
         )}
-        {tab === 'meetings' && <MeetingNotes person={person} />}
+        <LedgerSection
+          person={person}
+          title={`📤 ${first} owes me`}
+          items={ledger.theyOwe}
+          overdue={ledger.theyOweOverdue}
+          accent="var(--teal)"
+          addType="waitingFor"
+          addPlaceholder={`Give ${first} a task — press Enter`}
+          onEdit={setEditing}
+          raisedIds={raisedIds}
+          onToggleRaise={(id) => void toggleRaise(person.id, id)}
+        />
+        <LedgerSection
+          person={person}
+          title={`📥 I owe ${first}`}
+          items={ledger.iOwe}
+          overdue={ledger.iOweOverdue}
+          accent="var(--accent)"
+          addType="task"
+          addPlaceholder={`Something I owe ${first} — press Enter`}
+          onEdit={setEditing}
+          raisedIds={raisedIds}
+          onToggleRaise={(id) => void toggleRaise(person.id, id)}
+        />
+        {involved.length > 0 && (
+          <div className="detail-section">
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>↔ Involved — ball elsewhere
+              <span className="section-count" style={{ background: 'var(--text3)' }}>{involved.length}</span>
+            </h3>
+            {involved.map((w) => {
+              const holder = data.people.find((p) => p.id === w.person_id);
+              return (
+                <div key={w.id} className="work-item-row" style={{ cursor: 'pointer' }} onClick={() => setEditing(w)}>
+                  <span style={{ color: 'var(--text3)', fontSize: 13 }}>↔</span>
+                  <span className="wi-title" style={{ flex: 1 }}>{w.title}</span>
+                  <span className="tag" style={{ fontSize: 11 }}>
+                    with {holder ? holder.name.split(' ')[0] : 'me'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10 }} onClick={() => setAdding(true)}>
+          + Add with full details
+        </button>
+        <InlineNotes person={person} />
+        <RecentlyDone items={recentDone} />
+        {/* Meeting docs kept, demoted: the ledger is the 1:1 system; the doc
+            trail lives collapsed at the bottom for when the write-up matters. */}
+        <MeetingNotes person={person} />
       </div>
 
       {adding && <ItemModal defaults={{ person_id: person.id, type: 'followUp', inboxed: false } as Partial<WorkItem>} onClose={() => setAdding(false)} />}

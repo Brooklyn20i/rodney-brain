@@ -15,18 +15,11 @@ async function navTo(page: Page, label: string) {
 test('meeting doc edits persist and captured tasks land in the Inbox', async ({ page }) => {
   await navTo(page, 'People');
   await page.locator('.person-item', { hasText: 'Anna Lee' }).click();
-  await page.locator('.people-tab', { hasText: 'Meetings' }).click();
-
-  // The meetings tab may auto-open the upcoming 1:1; wait briefly for that
-  // effect before clicking the card. Without this, CI can race the auto-open:
-  // the modal appears between isVisible() and click(), then intercepts the click.
+  // Meeting docs live in a collapsed section at the bottom of the single
+  // ledger-first page now — expand it and open the doc (no auto-open).
+  await page.getByText('📝 Meeting notes').click();
   const overlay = page.locator('.mtg-overlay');
-  const autoOpened = await overlay.waitFor({ state: 'visible', timeout: 1_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!autoOpened) {
-    await page.locator('.mtg-card', { hasText: '1:1 · Anna Lee' }).click();
-  }
+  await page.locator('.mtg-card', { hasText: '1:1 · Anna Lee' }).click();
   await expect(overlay).toBeVisible();
   await expect(page.locator('.mtg-modal-doc')).toBeVisible();
 
