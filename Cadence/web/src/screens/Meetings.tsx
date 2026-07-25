@@ -268,7 +268,7 @@ export function Meetings({ onMenu, initialSelectedId }: { onMenu?: () => void; i
   return (
     <>
       <ScreenHeader title="Meetings" onMenu={onMenu} />
-      <div className="split-view">
+      <div className="split-view rail-split">
         <div className="split-left">
           <div className="split-panel-header">
             <h3>{groups.length} {groups.length === 1 ? 'meeting' : 'meetings'}</h3>

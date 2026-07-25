@@ -353,7 +353,7 @@ export function Notes({ onMenu }: { onMenu?: () => void }) {
   return (
     <>
       <ScreenHeader title="Notes" onMenu={onMenu} />
-      <div className={`split-view${note && !showList ? ' notes-focus' : ''}`}>
+      <div className={`split-view rail-split${note && !showList ? ' notes-focus' : ''}`}>
         <div className="split-left">
           <div className="split-panel-header"><h3>Notebooks</h3>
             <div style={{ display: 'flex', gap: 6 }}>
