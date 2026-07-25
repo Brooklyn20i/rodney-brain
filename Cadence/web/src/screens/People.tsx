@@ -587,7 +587,7 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
   return (
     <>
       <ScreenHeader title="People" onMenu={onMenu} />
-      <div className="split-view">
+      <div className="split-view people-split">
         <div className="split-left">
           <div className="split-panel-header">
             <h3>{sorted.length} {sorted.length === 1 ? 'person' : 'people'}</h3>
@@ -619,12 +619,17 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
                               </div>
                             </div>
                           </button>
-                          <div className="person-reorder-btns">
-                            <button className="person-reorder-btn" title="Move up"
-                              disabled={idx === 0} onClick={() => moveInGroup(p, 'up')}>↑</button>
-                            <button className="person-reorder-btn" title="Move down"
-                              disabled={idx === gPeople.length - 1} onClick={() => moveInGroup(p, 'down')}>↓</button>
-                          </div>
+                          {/* Contextual, not permanent: the reorder gutter on
+                              every row cost ~40px of rail width and constant
+                              noise. Select a person, then move them. */}
+                          {selected === p.id && (
+                            <div className="person-reorder-btns">
+                              <button className="person-reorder-btn" title="Move up"
+                                disabled={idx === 0} onClick={() => moveInGroup(p, 'up')}>↑</button>
+                              <button className="person-reorder-btn" title="Move down"
+                                disabled={idx === gPeople.length - 1} onClick={() => moveInGroup(p, 'down')}>↓</button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

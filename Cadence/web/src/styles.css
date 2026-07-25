@@ -1221,6 +1221,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .priority-cards { grid-template-columns: 1fr; }
   .split-view { flex-direction: column; }
   .split-left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); max-height: 240px; }
+  /* The People rail's fixed desktop width must yield to the stacked layout. */
+  .people-split .split-left { width: 100%; }
 }
 
 /* ── Rich Text Editor (TipTap) ── */
@@ -1448,6 +1450,21 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   color: var(--text3); padding: 14px 16px 4px; }
 .person-list-row { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
 .person-list-row .person-item { flex: 1; min-width: 0; }
+
+/* ── People rail: compact master-detail list ──────────────────────────────
+   The rail is a NAME PICKER, not a workspace — a fixed ~300px master-list
+   width (the platform convention) keeps every full name + counts readable
+   while the ledger detail absorbs all the freed width. Scoped so the
+   Home/Projects/Notes split views keep their proportional rails. */
+.people-split .split-left { width: 300px; min-width: 260px; flex-shrink: 0; }
+.people-split .person-item { padding: 7px 10px; margin-bottom: 4px; gap: 9px; }
+.people-split .person-item .avatar { width: 26px; height: 26px; font-size: 10px; }
+/* Without min-width:0 a flex child refuses to shrink below its nowrap text,
+   so long meta lines would push the card past the rail edge. */
+.people-split .person-item .project-info { flex: 1; min-width: 0; }
+.people-split .project-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.people-split .project-meta { font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.people-split .person-list-row { padding-right: 4px; }
 .person-reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .person-reorder-btn { background: none; border: 1px solid var(--border); border-radius: 4px;
   width: 22px; height: 22px; cursor: pointer; font-size: 11px; color: var(--text2);
