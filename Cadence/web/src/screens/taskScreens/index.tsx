@@ -1,160 +1,39 @@
 import { useMemo, useState } from 'react';
 import { useCadence } from '../../lib/store';
 import type { WorkItem } from '../../lib/types';
-import { ScreenHeader, EmptyState } from '../../components/bits';
-import { StatTile } from '../../components/StatTile';
+import { ScreenHeader } from '../../components/bits';
 import { QuickAdd } from '../../components/QuickAdd';
-import { TaskList } from './TaskList';
-import type { TaskGroup } from './TaskList';
-import { TaskDetailPanel } from './TaskDetailPanel';
+import { CommitmentsBoard } from './CommitmentsBoard';
+import { TaskSlideOver } from './TaskSlideOver';
 import { TodayStrip } from '../../components/TodayStrip';
 import { TriageTray } from '../../components/TriageTray';
-import { todayStr, addDaysStr, priorityScore, isOverdue, isDueToday, fmtDM, TYPE_LABEL } from '../../lib/util';
-import { bucketForDue } from '../../lib/dateBuckets';
-import { isFiledTask } from '../../lib/tasks';
+import { addDaysStr, fmtDM } from '../../lib/util';
+import { getCommitments } from '../../lib/selectors';
 import { useDayPlan } from '../../lib/dayPlan';
 
-type Lane = 'mine' | 'waiting';
-type GroupBy = 'due' | 'priority' | 'person' | 'project' | 'type';
-type DateFilter = 'all' | 'overdue' | 'today' | 'week' | 'none';
-
-// Two lanes only: Mine = what I owe; Waiting = what others owe me (the global
-// they-owe-me view, grouped by person). No All/Delegated — those were noise.
-const LANE_OPTS: { v: Lane; label: string }[] = [
-  { v: 'mine', label: 'Mine' }, { v: 'waiting', label: 'Waiting' },
-];
-const GROUP_OPTS: { v: GroupBy; label: string }[] = [
-  { v: 'due', label: 'Due date' }, { v: 'priority', label: 'Priority' },
-  { v: 'person', label: 'Person' }, { v: 'project', label: 'Project' },
-  { v: 'type', label: 'Type' },
-];
-
-const PRI_META: Record<string, { label: string; color: string; rank: number }> = {
-  high: { label: 'High priority', color: 'var(--red)', rank: 0 },
-  medium: { label: 'Medium priority', color: 'var(--orange)', rank: 1 },
-  low: { label: 'Low priority', color: 'var(--text3)', rank: 2 },
-};
-
-const inLane = (w: WorkItem, lane: Lane): boolean => {
-  switch (lane) {
-    case 'waiting': return isFiledTask(w) && w.type === 'waitingFor';
-    default: return isFiledTask(w) && w.type !== 'waitingFor';
-  }
-};
-
-// Home: Rodney's commitments in one place — the triage tray for fresh
-// captures, lanes (Mine = what I owe / Waiting = what others owe me),
-// clickable stat tiles as date filters, grouped master list with inline
-// quick-add, and an edit-in-place detail panel (People's split view).
+// Home: Rodney's two questions on one dense screen — "what's my day?" (the
+// meetings strip, fresh captures, Today's focus) and "what are my
+// commitments?" (the board: my own to-dos vs what I owe people vs what
+// they owe me). The task editor is a slide-over so the board keeps the
+// full width.
 export function Home({ onMenu, onNavigate }: {
   onMenu?: () => void;
   onNavigate?: (screen: string, id?: string | null) => void;
 }) {
   const { data, insert, update } = useCadence();
   const { pinned, pin, unpin, move } = useDayPlan();
-  const [lane, setLane] = useState<Lane>('mine');
-  const [groupBy, setGroupBy] = useState<GroupBy>('due');
-  const [filter, setFilter] = useState<DateFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
 
-  const { groups, counts, recentlyDone } = useMemo(() => {
-    const open = data.work_items.filter((w) => !w.deleted_at && inLane(w, lane));
-    const counts = {
-      total: open.length,
-      overdue: open.filter((w) => isOverdue(w.due_date)).length,
-      today: open.filter((w) => isDueToday(w.due_date)).length,
-      week: open.filter((w) => !!w.due_date && w.due_date > todayStr() && w.due_date <= addDaysStr(7)).length,
-      none: open.filter((w) => !w.due_date).length,
-    };
+  const commitments = useMemo(() => getCommitments(data.work_items), [data.work_items]);
 
-    // Date filter applies before grouping.
-    const filtered = open.filter((w) => {
-      if (filter === 'all') return true;
-      if (filter === 'overdue') return isOverdue(w.due_date);
-      if (filter === 'today') return isDueToday(w.due_date);
-      if (filter === 'week') return !!w.due_date && w.due_date >= todayStr() && w.due_date <= addDaysStr(7);
-      if (filter === 'none') return !w.due_date;
-      return true;
-    });
-
-    const byKey = new Map<string, TaskGroup & { rank: number }>();
-    const add = (key: string, label: string, color: string, rank: number, w: WorkItem) => {
-      let g = byKey.get(key);
-      if (!g) { g = { key, label, color, rank, items: [] }; byKey.set(key, g); }
-      g.items.push(w);
-    };
-
-    for (const w of filtered) {
-      if (groupBy === 'due') {
-        const b = bucketForDue(w.due_date); add(b.key, b.label, b.color, b.rank, w);
-      } else if (groupBy === 'priority') {
-        const m = PRI_META[w.priority] || PRI_META.low; add(w.priority, m.label, m.color, m.rank, w);
-      } else if (groupBy === 'type') {
-        add(w.type, TYPE_LABEL[w.type] || 'Task', 'var(--accent)', 0, w);
-      } else if (groupBy === 'person') {
-        if (w.person_id) {
-          const p = data.people.find((x) => x.id === w.person_id);
-          add(w.person_id, p?.name || 'Unknown person', 'var(--teal)', 0, w);
-        } else add('_none', 'Unassigned', 'var(--text3)', 99, w);
-      } else if (groupBy === 'project') {
-        if (w.project_id) {
-          const p = data.projects.find((x) => x.id === w.project_id);
-          add(w.project_id, p?.name || 'Unknown project', 'var(--accent)', 0, w);
-        } else add('_none', 'No project', 'var(--text3)', 99, w);
-      }
-    }
-
-    const groups = [...byKey.values()];
-    for (const g of groups) {
-      if (groupBy === 'due') {
-        g.items.sort((a, b) => g.key === 'none'
-          ? priorityScore(b) - priorityScore(a)
-          : (a.due_date || '').localeCompare(b.due_date || ''));
-      } else {
-        g.items.sort((a, b) => priorityScore(b) - priorityScore(a));
-      }
-    }
-    groups.sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
-
+  const recentlyDone = useMemo(() => {
     const doneSince = addDaysStr(-14);
-    const recentlyDone = data.work_items
+    return data.work_items
       .filter((w) => !w.deleted_at && w.done && (w.completed_at || '').slice(0, 10) >= doneSince)
       .sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
-
-    return { groups, counts, recentlyDone };
-  }, [data, lane, groupBy, filter]);
-
-  const quickAddDueFor = (groupKey: string): string | null | undefined => {
-    if (groupBy !== 'due') return null; // group semantics handled in onQuickAdd
-    switch (groupKey) {
-      case 'today': return todayStr();
-      case 'week': return addDaysStr(1);
-      case 'later': return addDaysStr(14);
-      case 'none': return null;
-      default: return undefined; // no quick-add under Overdue
-    }
-  };
-
-  const onQuickAdd = (title: string, due: string | null, groupKey: string) => {
-    const row: Partial<WorkItem> = {
-      title, type: 'task', priority: 'medium', due_date: due,
-      inboxed: false, source: 'you',
-    };
-    if (groupBy === 'person' && groupKey !== '_none') {
-      const p = data.people.find((x) => x.id === groupKey);
-      if (p) { row.person_id = p.id; row.related_entities = [{ type: 'person', id: p.id, name: p.name }]; }
-    } else if (groupBy === 'project' && groupKey !== '_none') {
-      const p = data.projects.find((x) => x.id === groupKey);
-      if (p) { row.project_id = p.id; row.related_entities = [{ type: 'project', id: p.id, name: p.name }]; }
-    } else if (groupBy === 'priority') {
-      row.priority = groupKey as WorkItem['priority'];
-    } else if (groupBy === 'type') {
-      row.type = groupKey as WorkItem['type'];
-    }
-    insert('work_items', row);
-  };
+  }, [data.work_items]);
 
   const selected = selectedId ? data.work_items.find((w) => w.id === selectedId) || null : null;
 
@@ -169,12 +48,7 @@ export function Home({ onMenu, onNavigate }: {
     done: !w.done, completed_at: !w.done ? new Date().toISOString() : null,
   } as Partial<WorkItem>);
 
-  const subtitle = `${counts.total} open · ${counts.overdue} overdue · ${counts.today} due today`;
-
-  const tile = (key: DateFilter, num: number, label: string, tone: 'default' | 'red' | 'orange' = 'default') => (
-    <StatTile num={num} label={label} tone={tone} active={filter === key}
-      onClick={() => setFilter(filter === key ? 'all' : key)} />
-  );
+  const subtitle = `${commitments.open} open · ${commitments.overdue} overdue · ${commitments.dueToday} due today`;
 
   return (
     <>
@@ -182,112 +56,72 @@ export function Home({ onMenu, onNavigate }: {
         <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Capture task</button>
       </ScreenHeader>
 
-      <div className="hub-toolbar">
-        <div className="hub-seg-group">
-          <span className="hub-seg-label">Lane</span>
-          {LANE_OPTS.map((o) => (
-            <button key={o.v} className={`hub-seg ${lane === o.v ? 'active' : ''}`}
-              onClick={() => setLane(o.v)}>{o.label}</button>
-          ))}
-        </div>
-        <div className="hub-seg-group">
-          <span className="hub-seg-label">Group</span>
-          {GROUP_OPTS.map((o) => (
-            <button key={o.v} className={`hub-seg ${groupBy === o.v ? 'active' : ''}`}
-              onClick={() => setGroupBy(o.v)}>{o.label}</button>
-          ))}
-        </div>
-      </div>
+      <div className="home-scroll">
+        {/* Do I have meetings today? Answered before anything else. */}
+        <TodayStrip onNavigate={onNavigate} />
 
-      <div className="split-view task-hub">
-        <div className="split-left task-hub-left">
-          <div className="split-panel-body">
-            {/* Do I have meetings today? Answered before anything else. */}
-            <TodayStrip onNavigate={onNavigate} />
+        {/* The combined cockpit: fresh captures to shape sit right here, one
+            tap from filing. It's the same queue as the Inbox screen — a
+            preview of it — so "Open Inbox →" leads to the full triage view. */}
+        <TriageTray onEdit={(w) => setSelectedId(w.id)} onOpenInbox={() => onNavigate?.('inbox')} />
 
-            {/* The combined cockpit: fresh captures to shape sit right here, one
-                tap from filing. It's the same queue as the Inbox screen — a
-                preview of it — so "Open Inbox →" leads to the full triage view. */}
-            <TriageTray onEdit={(w) => setSelectedId(w.id)} onOpenInbox={() => onNavigate?.('inbox')} />
-
-            {pinnedItems.length > 0 && (
-              <div className="detail-section day-plan" aria-label="Today's focus">
-                <h3>★ Today's focus
-                  <span className="section-count" style={{ background: 'var(--accent)', marginLeft: 8 }}>{pinnedItems.length}</span>
-                </h3>
-                {pinnedItems.map((w, i) => (
-                  <div key={w.id} className={`work-item-row day-plan-row${selectedId === w.id ? ' selected' : ''}`}>
-                    <input type="checkbox" checked={w.done} onChange={() => toggleDone(w)}
-                      style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
-                    <span className="wi-title" style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}
-                      onClick={() => setSelectedId(w.id)}>{w.title}</span>
-                    <button className="btn btn-ghost btn-sm" title="Move up" disabled={i === 0}
-                      onClick={() => move(w.id, -1)}>↑</button>
-                    <button className="btn btn-ghost btn-sm" title="Move down" disabled={i === pinnedItems.length - 1}
-                      onClick={() => move(w.id, 1)}>↓</button>
-                    <button className="pin-star pinned" title="Unpin from Today's focus"
-                      onClick={() => unpin(w.id)}>★</button>
-                  </div>
-                ))}
+        {pinnedItems.length > 0 && (
+          <div className="detail-section day-plan" aria-label="Today's focus">
+            <h3>★ Today's focus
+              <span className="section-count" style={{ background: 'var(--accent)', marginLeft: 8 }}>{pinnedItems.length}</span>
+            </h3>
+            {pinnedItems.map((w, i) => (
+              <div key={w.id} className={`work-item-row day-plan-row${selectedId === w.id ? ' selected' : ''}`}>
+                <input type="checkbox" checked={w.done} onChange={() => toggleDone(w)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
+                <span className="wi-title" style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}
+                  onClick={() => setSelectedId(w.id)}>{w.title}</span>
+                <button className="btn btn-ghost btn-sm" title="Move up" disabled={i === 0}
+                  onClick={() => move(w.id, -1)}>↑</button>
+                <button className="btn btn-ghost btn-sm" title="Move down" disabled={i === pinnedItems.length - 1}
+                  onClick={() => move(w.id, 1)}>↓</button>
+                <button className="pin-star pinned" title="Unpin from Today's focus"
+                  onClick={() => unpin(w.id)}>★</button>
               </div>
-            )}
-
-            <div className="hub-stats" aria-label="Task filters">
-              {tile('overdue', counts.overdue, 'Overdue', counts.overdue ? 'red' : 'default')}
-              {tile('today', counts.today, 'Today', counts.today ? 'orange' : 'default')}
-              {tile('week', counts.week, 'This week')}
-              {tile('none', counts.none, 'No date')}
-            </div>
-
-            {groups.length === 0 && (
-              <EmptyState icon="✓" title="Tasks are clear" sub="Capture a task when needed; quick captures land in the Inbox for triage." />
-            )}
-
-            <TaskList
-              groups={groups}
-              selectedId={selectedId}
-              onSelect={(w) => setSelectedId(w.id)}
-              quickAddDueFor={quickAddDueFor}
-              onQuickAdd={onQuickAdd}
-              pinnedIds={pinnedSet}
-              onTogglePin={(w) => { if (pinnedSet.has(w.id)) void unpin(w.id); else void pin(w.id); }}
-            />
-
-            {recentlyDone.length > 0 && (
-              <div className="detail-section" style={{ marginTop: 16 }}>
-                <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setDoneOpen((o) => !o)}>
-                  ✓ Recently Done
-                  <span className="section-count" style={{ background: 'var(--green)' }}>{recentlyDone.length}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>
-                    Last 14 days {doneOpen ? '▴' : '▾'}</span>
-                </h3>
-                {doneOpen && recentlyDone.map((w) => (
-                  <div key={w.id} className="work-item-row" style={{ opacity: 0.65 }}>
-                    <span style={{ color: 'var(--green)', fontSize: 13 }}>✓</span>
-                    <span className="wi-title done" style={{ flex: 1 }}>{w.title}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>{w.completed_at ? fmtDM(w.completed_at) : ''}</span>
-                    <button className="btn btn-ghost btn-sm" title="Reopen"
-                      onClick={() => update('work_items', w.id, { done: false, completed_at: null } as Partial<WorkItem>)}>↩</button>
-                  </div>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
-        </div>
+        )}
 
-        {selected
-          ? <TaskDetailPanel task={selected} onClose={() => setSelectedId(null)} />
-          : (
-            <div className="split-right task-hub-empty">
-              <div className="empty-state" style={{ margin: 'auto' }}>
-                <div className="icon">◎</div>
-                <p>Select a task</p>
-                <small style={{ color: 'var(--text3)' }}>Edit it in place — no modal, no page change.</small>
+        <CommitmentsBoard
+          commitments={commitments}
+          people={data.people}
+          selectedId={selectedId}
+          onSelect={(w) => setSelectedId(w.id)}
+          onQuickAddTodo={(title) => insert('work_items', {
+            title, type: 'task', priority: 'medium', due_date: null,
+            person_id: null, inboxed: false, source: 'you',
+          } as Partial<WorkItem>)}
+          pinnedIds={pinnedSet}
+          onTogglePin={(w) => { if (pinnedSet.has(w.id)) void unpin(w.id); else void pin(w.id); }}
+        />
+
+        {recentlyDone.length > 0 && (
+          <div className="detail-section" style={{ marginTop: 16 }}>
+            <h3 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onClick={() => setDoneOpen((o) => !o)}>
+              ✓ Recently Done
+              <span className="section-count" style={{ background: 'var(--green)' }}>{recentlyDone.length}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>
+                Last 14 days {doneOpen ? '▴' : '▾'}</span>
+            </h3>
+            {doneOpen && recentlyDone.map((w) => (
+              <div key={w.id} className="work-item-row" style={{ opacity: 0.65 }}>
+                <span style={{ color: 'var(--green)', fontSize: 13 }}>✓</span>
+                <span className="wi-title done" style={{ flex: 1 }}>{w.title}</span>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>{w.completed_at ? fmtDM(w.completed_at) : ''}</span>
+                <button className="btn btn-ghost btn-sm" title="Reopen"
+                  onClick={() => update('work_items', w.id, { done: false, completed_at: null } as Partial<WorkItem>)}>↩</button>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        )}
       </div>
 
+      {selected && <TaskSlideOver task={selected} onClose={() => setSelectedId(null)} />}
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </>
   );

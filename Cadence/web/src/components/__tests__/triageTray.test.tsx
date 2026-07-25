@@ -71,16 +71,18 @@ describe('Triage tray population', () => {
 describe('Triage actions', () => {
   const capture = wi({ id: 'c1', title: 'Chase the invoice', inboxed: true });
 
-  it('"My task" files the capture out of the tray and normalises it to task type', async () => {
-    setStore({ work_items: [wi({ ...capture, type: 'waitingFor' })] });
+  it('"My to-do" files the capture as owed-to-no-one: task type AND person cleared', async () => {
+    setStore({ work_items: [wi({ ...capture, type: 'waitingFor', person_id: 'amy' })] });
     render(<TriageTray onEdit={vi.fn()} />);
-    fireEvent.click(screen.getByText('My task'));
+    fireEvent.click(screen.getByText('My to-do'));
     await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
     const [table, id, patch] = h.store.update.mock.calls[0];
     expect(table).toBe('work_items');
     expect(id).toBe('c1');
     expect(patch.inboxed).toBe(false);
     expect(patch.type).toBe('task');
+    // Owed to no one — the tagged person must not silently become a debt.
+    expect(patch.person_id).toBeNull();
   });
 
   it('"Waiting…" with a person files it as waitingFor owed by that person', async () => {
@@ -142,7 +144,7 @@ describe('Triage actions', () => {
     setStore({ work_items: [capture] }, { canEdit: false });
     render(<TriageTray onEdit={vi.fn()} />);
     expect(screen.getByText('Chase the invoice')).toBeTruthy();
-    expect(screen.queryByText('My task')).toBeNull();
+    expect(screen.queryByText('My to-do')).toBeNull();
   });
 });
 

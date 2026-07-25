@@ -102,31 +102,62 @@ describe('Dashboard workflow', () => {
 
 // ── Home ────────────────────────────────────────────────────────────────────────
 describe('Home workflow', () => {
-  it('lands as Home: my commitments with lanes and counts', () => {
+  it('lands as Home: the three-column commitments board with counts', () => {
     setStore({ data: { work_items: [
       wi({ id: 't1', title: 'Overdue one', due_date: addDaysStr(-1) }),
       wi({ id: 't2', title: 'Later one', due_date: addDaysStr(20) }),
     ]}});
     render(<Home onMenu={() => {}} />);
     expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument();
-    expect(screen.getByText('Mine')).toBeInTheDocument();
-    expect(screen.getByText('Waiting')).toBeInTheDocument();
-    expect(screen.getByText('Overdue one')).toBeInTheDocument();
-    expect(screen.getByText('Later one')).toBeInTheDocument();
+    // Three columns, all visible at once — no lane toggle.
+    expect(screen.getByText(/My to-do/)).toBeInTheDocument();
+    expect(screen.getByText(/I owe/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting on/)).toBeInTheDocument();
+    // Both person-less tasks land in My to-do under due-bucket subheads.
+    const todo = within(screen.getByTestId('col-todo'));
+    expect(todo.getByText('Overdue one')).toBeInTheDocument();
+    expect(todo.getByText('Later one')).toBeInTheDocument();
     expect(screen.getByText(/2 open · 1 overdue/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Capture task/ })).toBeInTheDocument();
   });
 
-  it('switches grouping to Person', () => {
+  it('person-linked and waiting work land in their columns, grouped by person', () => {
     setStore({ data: {
       people: [person({ id: 'pA', name: 'Anna' })],
-      work_items: [wi({ id: 't1', title: 'Hers', person_id: 'pA' })],
+      work_items: [
+        wi({ id: 'h1', title: 'Hers', person_id: 'pA' }),
+        wi({ id: 'h2', title: 'Theirs', person_id: 'pA', type: 'waitingFor' }),
+        wi({ id: 'h3', title: 'Just mine' }),
+      ],
     }});
     render(<Home onMenu={() => {}} />);
-    fireEvent.click(screen.getByText('Person'));
-    // 'Anna' shows as both the group header and the task's person tag.
-    expect(screen.getAllByText('Anna').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Hers')).toBeInTheDocument();
+    const owed = within(screen.getByTestId('col-owed'));
+    expect(owed.getByText('Anna')).toBeInTheDocument();     // person subhead
+    expect(owed.getByText('Hers')).toBeInTheDocument();
+    const waiting = within(screen.getByTestId('col-waiting'));
+    expect(waiting.getByText('Theirs')).toBeInTheDocument();
+    expect(within(screen.getByTestId('col-todo')).getByText('Just mine')).toBeInTheDocument();
+  });
+
+  it('the column quick-add inserts a person-less filed to-do', () => {
+    const insert = vi.fn();
+    setStore({ insert, data: {} });
+    render(<Home onMenu={() => {}} />);
+    const input = screen.getByPlaceholderText('+ Add a to-do — press Enter');
+    fireEvent.change(input, { target: { value: 'Sharpen the strategy deck' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(insert).toHaveBeenCalledWith('work_items', expect.objectContaining({
+      title: 'Sharpen the strategy deck', type: 'task', person_id: null, inboxed: false,
+    }));
+  });
+
+  it('clicking a row opens the slide-over detail; Escape closes it', () => {
+    setStore({ data: { work_items: [wi({ id: 't1', title: 'Open me' })] } });
+    render(<Home onMenu={() => {}} />);
+    fireEvent.click(within(screen.getByTestId('col-todo')).getByText('Open me'));
+    expect(document.querySelector('.slideover-panel .task-detail')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('.slideover-panel')).toBeNull();
   });
 
   it("shows Today's focus in plan order and reorders with ↑", () => {

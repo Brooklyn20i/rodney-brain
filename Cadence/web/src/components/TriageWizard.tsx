@@ -78,7 +78,10 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
   };
 
   const toMyTasks = () => act(async () => {
-    await update('work_items', item!.id, { ...edits(), inboxed: false, type: 'task' } as Partial<WorkItem>);
+    // "My to-do" means owed to NO ONE: clear the counterparty so the task
+    // lands in Home's My-to-do column, not someone's ledger. Any tagged
+    // person stays in related_entities as context (People "Involved").
+    await update('work_items', item!.id, { ...edits(), inboxed: false, type: 'task', person_id: null } as Partial<WorkItem>);
     logActivity('triage_my_task', title);
   });
 
@@ -169,7 +172,7 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
             {stage === 'main' && (
               <div className="wizard-dests">
                 <button className="wizard-dest" disabled={busy} onClick={toMyTasks}>
-                  ◎ My tasks
+                  📝 My to-do
                 </button>
                 <button className="wizard-dest" disabled={busy} onClick={() => setStage('person')}>
                   ✦ Person…

@@ -33,10 +33,9 @@ test('flip who owes whom without recreating the task, and log an update', async 
   await detail.getByRole('button', { name: 'Add update' }).click();
   await expect(detail.locator('.task-update-text', { hasText: 'Agreed she sends numbers Friday' })).toBeVisible();
 
-  // Same record moved sides: it now shows on Home's Waiting lane…
+  // Same record moved sides: it now shows in Home's Waiting-on column…
   await page.locator('.task-detail-close').click();
-  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
-  await expect(page.getByText('Overdue review')).toBeVisible();
+  await expect(page.getByTestId('col-waiting').getByText('Overdue review')).toBeVisible();
 
   // …and on Anna's "owes me" ledger.
   await navTo(page, 'People');

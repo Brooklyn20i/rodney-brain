@@ -2,7 +2,7 @@
 // No React dependencies — data in, arrays out.
 
 import type { CadenceData, WorkItem, Project, ProjectUpdate, Milestone } from './types';
-import { todayStr, addDaysStr, isOverdue, TYPE_LABEL } from './util';
+import { todayStr, addDaysStr, isOverdue, isDueToday, TYPE_LABEL } from './util';
 import { isAgentCreated, isAgentTask, isFiledTask, isLinkedToPerson, isLinkedToProject, isUserTask } from './tasks';
 
 // ── Triage tray (Quick Capture / untriaged) ───────────────────────────────────
@@ -24,6 +24,37 @@ export function getWaitingOnOthers(items: WorkItem[]): WorkItem[] {
   return items
     .filter((w) => isFiledTask(w) && w.type === 'waitingFor')
     .sort(byDueThenPri);
+}
+
+// ── Commitments board (Home) ──────────────────────────────────────────────────
+// ONE source of truth for Home's three columns. The split Rodney actually
+// thinks in: my own to-dos (owed to no one) vs tasks I owe named people vs
+// what others owe me. `open`/`overdue`/`dueToday` cover ONLY what Rodney must
+// do (todo + owedByMe) — waiting is other people's burden.
+export interface Commitments {
+  todo: WorkItem[];      // person_id null, type !== 'waitingFor' — my own list
+  owedByMe: WorkItem[];  // person_id set,  type !== 'waitingFor' — I owe people
+  waiting: WorkItem[];   // type === 'waitingFor' (person optional) — they owe me
+  open: number;
+  overdue: number;
+  dueToday: number;
+}
+
+export function getCommitments(items: WorkItem[]): Commitments {
+  const filed = items.filter((w) => !w.deleted_at && isFiledTask(w));
+  const waiting = filed.filter((w) => w.type === 'waitingFor').sort(byDueThenPri);
+  const mine = filed.filter((w) => w.type !== 'waitingFor');
+  const todo = mine.filter((w) => !w.person_id).sort(byDueThenPri);
+  const owedByMe = mine.filter((w) => !!w.person_id).sort(byDueThenPri);
+  const load = [...todo, ...owedByMe];
+  return {
+    todo,
+    owedByMe,
+    waiting,
+    open: load.length,
+    overdue: load.filter((w) => isOverdue(w.due_date)).length,
+    dueToday: load.filter((w) => isDueToday(w.due_date)).length,
+  };
 }
 
 // ── Person ledger ─────────────────────────────────────────────────────────────
