@@ -23,6 +23,8 @@ test('raise → Next 1:1 section → flip → covered → re-raise → done prun
   await page.getByText('Overdue review').click();
   await page.locator('.task-detail').getByRole('button', { name: /1:1/ }).click();
   await expect(page.locator('.task-detail').getByText('✓ On 1:1 list')).toBeVisible();
+  // Close the slide-over first — its backdrop would swallow the sidebar click.
+  await page.locator('.task-detail-close').click();
 
   // 2. On Anna's page it groups under "Next 1:1" as a full ledger card…
   await navTo(page, 'People');
@@ -60,10 +62,9 @@ test('raise → Next 1:1 section → flip → covered → re-raise → done prun
   await expect(page.locator('.ledger-section', { hasText: 'Next 1:1' })).toBeHidden();
 
   // 7. Reopen from Recently Done so the record is live again, then confirm the
-  //    same record sits in Home's Waiting lane — no new task was ever created.
+  //    same record sits in Home's Waiting-on column — no new task was created.
   await page.getByText('✓ Recently Done').click();
   await page.locator('.work-item-row', { hasText: 'Overdue review' }).getByRole('button', { name: '↩' }).click();
   await navTo(page, 'Home');
-  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
-  await expect(page.getByText('Overdue review')).toBeVisible();
+  await expect(page.getByTestId('col-waiting').getByText('Overdue review')).toBeVisible();
 });

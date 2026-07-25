@@ -45,14 +45,15 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('TriageWizard destinations', () => {
-  it('My tasks: files with the enrichment edits in the same write', async () => {
+  it('My to-do: files with the enrichment edits in the same write, owed to no one', async () => {
     render(<TriageWizard onClose={vi.fn()} />);
     fireEvent.change(screen.getByDisplayValue('Capture one'), { target: { value: 'Polished title' } });
     fireEvent.change(screen.getByPlaceholderText(/context you'll need later/), { target: { value: 'ctx' } });
     fireEvent.change(document.querySelector('.wizard-card-due input')!, { target: { value: '2026-07-20' } });
-    await click(/My tasks/);
+    await click(/My to-do/);
     expect(lastUpdate()).toEqual(['work_items', 'c1', expect.objectContaining({
       title: 'Polished title', notes: 'ctx', due_date: '2026-07-20', inboxed: false, type: 'task',
+      person_id: null,
     })]);
     expect(screen.getByText('Triage complete')).toBeInTheDocument();
     expect(screen.getByText(/1 filed · 0 skipped/)).toBeInTheDocument();
@@ -160,7 +161,7 @@ describe('TriageWizard deck flow', () => {
     await click(/Skip/);
     expect(screen.getByText('Card 2 of 2')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Second')).toBeInTheDocument();
-    await click(/My tasks/);
+    await click(/My to-do/);
     expect(screen.getByText('Triage complete')).toBeInTheDocument();
     expect(screen.getByText(/1 filed · 1 skipped/)).toBeInTheDocument();
   });
@@ -193,9 +194,9 @@ describe('TriageWizard deck flow', () => {
     // Only the chosen task is in the deck — not the newest one.
     expect(screen.getByText('Card 1 of 1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('The one I picked')).toBeInTheDocument();
-    await click(/My tasks/);
+    await click(/My to-do/);
     expect(h.store.update).toHaveBeenCalledWith('work_items', 'c2',
-      expect.objectContaining({ inboxed: false, type: 'task' }));
+      expect.objectContaining({ inboxed: false, type: 'task', person_id: null }));
     // No done screen — handling the one card finishes the job.
     expect(onClose).toHaveBeenCalled();
   });

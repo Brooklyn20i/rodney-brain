@@ -30,9 +30,10 @@ export function TriageTray({ onEdit, onOpenInbox }: {
     try { await fn(); } finally { setBusyId(null); }
   };
 
-  // File as Rodney's own task (Filed Work → shows under Needs Rodney / Do now).
+  // File as Rodney's OWN to-do — owed to no one, so the counterparty is
+  // cleared (any tagged person stays in related_entities as context).
   const fileAsMine = (w: WorkItem) => act(w, async () => {
-    await update('work_items', w.id, { inboxed: false, type: 'task' } as Partial<WorkItem>);
+    await update('work_items', w.id, { inboxed: false, type: 'task', person_id: null } as Partial<WorkItem>);
     logActivity('triage_my_task', w.title);
   });
 
@@ -109,8 +110,8 @@ export function TriageTray({ onEdit, onOpenInbox }: {
                 {canEdit && (
                   <div className="triage-actions">
                     <button className="btn btn-ghost btn-sm" disabled={busy}
-                      title="File as your own task — shows under Needs Rodney / Do now"
-                      onClick={() => fileAsMine(w)}>My task</button>
+                      title="File as your own to-do — no counterparty"
+                      onClick={() => fileAsMine(w)}>My to-do</button>
 
                     <div style={{ position: 'relative' }}>
                       <button className="btn btn-ghost btn-sm" disabled={busy}

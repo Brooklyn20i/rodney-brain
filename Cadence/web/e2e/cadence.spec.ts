@@ -34,16 +34,18 @@ for (const label of ['Home', 'People', 'Meetings', 'Projects', 'Notes', 'Inbox',
   });
 }
 
-// ── Home: lanes, counts, and invisible agent provenance ─────────────────────────
-test('home shows my open work with lanes and an agent-created item in a normal lane', async ({ page }) => {
+// ── Home: the commitments board — all three columns at once ────────────────────
+test('home shows the commitments board with all three columns visible', async ({ page }) => {
   await expect(page.getByText(/1 overdue/).first()).toBeVisible();
-  await expect(page.getByText('Overdue review')).toBeVisible();     // Mine lane (default)
-  // agent:kobe is provenance only — the item renders like any other task,
-  // with no agent lane anywhere.
-  await page.locator('#sidebar'); // sidebar present
-  await expect(page.locator('.hub-seg', { hasText: 'Mine' })).toHaveClass(/active/);
-  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
-  await expect(page.getByText('Awaiting legal sign-off')).toBeVisible(); // Waiting lane
+  // My to-do: the person-less capture-turned-task.
+  await expect(page.getByTestId('col-todo').getByText('Loose idea')).toBeVisible();
+  // I owe: person-grouped; agent:kobe is provenance only — renders like any
+  // other task, no agent lane anywhere.
+  const owed = page.getByTestId('col-owed');
+  await expect(owed.getByText('Overdue review')).toBeVisible();
+  await expect(owed.getByText('Created by Kobe check')).toBeVisible();
+  // Waiting on: visible WITHOUT any lane click — the whole point.
+  await expect(page.getByTestId('col-waiting').getByText('Awaiting legal sign-off')).toBeVisible();
 });
 
 // ── Quick Add is capture-first: a capture surfaces on Home's triage tray AND
@@ -76,10 +78,9 @@ test('person detail is a two-way ledger and delegation lands in owes-me + Home W
   await give.press('Enter');
   await expect(page.getByText('Send me the Q3 numbers')).toBeVisible();
 
-  // The same record shows in Home's global Waiting lane.
+  // The same record shows in Home's Waiting-on column — no lane click needed.
   await navTo(page, 'Home');
-  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
-  await expect(page.getByText('Send me the Q3 numbers')).toBeVisible();
+  await expect(page.getByTestId('col-waiting').getByText('Send me the Q3 numbers')).toBeVisible();
 });
 
 // ── Projects: Analytical evidence-on-demand ─────────────────────────────────────

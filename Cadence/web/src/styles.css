@@ -1534,7 +1534,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .group-action-note { font-size: 11px; color: var(--text3); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .due-normal-label { font-size: 11px; color: var(--text2); }
 
-/* ── Tasks hub toolbar (group-by + date filter segmented controls) ── */
+/* ── Shared: segmented-control toolbar (Projects) + stat tiles (Dashboard) ── */
 .hub-toolbar { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center;
   padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .hub-seg-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1545,11 +1545,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   cursor: pointer; font-family: inherit; transition: all 0.12s; }
 .hub-seg:hover { color: var(--text); }
 .hub-seg.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-/* ── Task Hub: split master-detail, stat-tile filters, edit-in-place panel ── */
-.task-hub .split-panel-body { padding: 14px 16px 24px; overflow-y: auto; flex: 1; }
-.task-hub-left { width: 44%; min-width: 320px; }
-.hub-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
 .hub-stat { display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 4px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; font-family: inherit; transition: all 0.12s; }
@@ -1560,8 +1555,44 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .hub-stat-num.orange { color: var(--orange); }
 .hub-stat-num.green { color: var(--green); }
 .hub-stat-lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text3); }
+
+/* ── Home commitments board ──────────────────────────────────────────────
+   Three dense columns — My to-do / I owe / Waiting on — answer Rodney's
+   two questions at a glance. Each column carries its natural grouping
+   (to-dos by due bucket, debts by person); the task editor is a
+   slide-over so the board keeps the full width. */
+.home-scroll { flex: 1; overflow-y: auto; padding: 14px 18px calc(40px + var(--safe-bottom)); }
+.commit-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px; align-items: start; margin-bottom: 16px; }
+.commit-col { min-width: 0; }
+.commit-col-hdr { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
+.commit-col-hdr h2 { font-size: 13px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text2); margin: 0; }
+.commit-col-sub { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text3); }
+.commit-row { margin-bottom: 6px; }
+.commit-empty { font-size: 12px; color: var(--text3); padding: 8px 2px; }
 .task-hub-row { border: 1px solid transparent; }
 .task-hub-row.selected { border-color: var(--accent); background: var(--blue-bg); }
+
+/* ── Task slide-over (detail on demand) ── */
+.slideover-backdrop { position: fixed; inset: 0; z-index: 250; background: rgba(15, 23, 42, 0.32);
+  display: flex; justify-content: flex-end; }
+.slideover-panel { width: min(520px, 100%); height: 100%; display: flex;
+  background: var(--surface); box-shadow: -10px 0 30px rgba(0, 0, 0, 0.22);
+  animation: slideover-in 0.16s ease; }
+.slideover-panel .split-right.task-detail { width: 100%; }
+@keyframes slideover-in { from { transform: translateX(28px); opacity: 0.5; } to { transform: none; opacity: 1; } }
+
+@media (max-width: 1100px) {
+  /* 2-up: Waiting drops below, full width. */
+  .commit-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .commit-col[data-testid='col-waiting'] { grid-column: 1 / -1; }
+}
+@media (max-width: 768px) {
+  .commit-board { grid-template-columns: 1fr; }
+  .slideover-panel { width: 100%; }
+}
 
 /* ── Home: today's meetings strip + hand-picked day plan ── */
 .today-strip { margin-bottom: 14px; }
@@ -1615,7 +1646,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .task-inbox-banner-label { font-size: 12.5px; font-weight: 600; color: var(--text2); }
 .task-detail-defer { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .task-detail-meta { margin-top: 14px; font-size: 11px; color: var(--text3); }
-.task-hub-empty { align-items: center; justify-content: center; }
 
 /* ── "Who has the ball" — counterparty picker + direction ── */
 .ball-control { display: flex; flex-direction: column; gap: 6px; }
@@ -1673,8 +1703,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .task-update-del:hover { color: var(--red); }
 .task-update-text { font-size: 13px; color: var(--text); line-height: 1.45; margin-top: 2px; white-space: pre-wrap; }
 @media (max-width: 768px) {
-  .task-hub-left { width: 100%; min-width: 0; }
-  .task-hub .split-left { max-height: 45vh; }
 }
 
 /* ── Inbox triage rows: task card + a "file it" action ── */

@@ -77,8 +77,7 @@ test('Quick Add "Give to" files instantly to the ledger, skipping the Inbox', as
     page.locator('.ledger-section', { hasText: 'Anna owes me' }).getByText('Anna to send the market scan'),
   ).toBeVisible();
   await navTo(page, 'Home');
-  await page.locator('.hub-seg', { hasText: 'Waiting' }).click();
-  await expect(page.getByText('Anna to send the market scan')).toBeVisible();
+  await expect(page.getByTestId('col-waiting').getByText('Anna to send the market scan')).toBeVisible();
 });
 
 // ── Quick Add captures to the Inbox, even when tagged with a person/project ──

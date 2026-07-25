@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   getWaitingOnOthers, getHotThisWeek, getPersonLedger, getPersonInvolved,
+  getCommitments,
   getLoadSummary, ACTIVE_LOAD_CAP,
   horizonBucket, getHorizonMarkers, getProjectTopActions, inferHealthReason,
   groupProjectsByPortfolio, getHealthEvidence,
@@ -44,6 +45,56 @@ const dec = (o: Partial<Decision>): Decision => ({
   id: 'd1', owner_id: 'o', title: 'Decision', status: 'pending', due_date: null,
   context: '', outcome: '', created_at: '2026-06-01', updated_at: '2026-06-01', deleted_at: null, ...o,
 }) as Decision;
+
+// ── getCommitments ─────────────────────────────────────────────────────────────
+describe('getCommitments', () => {
+  it("splits Rodney's own to-dos from tasks owed to people from waiting-on-others", () => {
+    const items = [
+      wi({ id: 'own', title: 'Just mine' }),
+      wi({ id: 'owed', title: 'For Anna', person_id: 'pA' }),
+      wi({ id: 'theirs', title: 'From Anna', person_id: 'pA', type: 'waitingFor' }),
+      wi({ id: 'nobody', title: 'Waiting, no one specific', type: 'waitingFor' }),
+    ];
+    const c = getCommitments(items);
+    expect(c.todo.map((w) => w.id)).toEqual(['own']);
+    expect(c.owedByMe.map((w) => w.id)).toEqual(['owed']);
+    expect(c.waiting.map((w) => w.id).sort()).toEqual(['nobody', 'theirs']);
+  });
+
+  it('excludes inboxed, done, deleted and delegated-to-agent items; keeps agent-created ones', () => {
+    const items = [
+      wi({ id: 'in', inboxed: true }),
+      wi({ id: 'done', done: true }),
+      wi({ id: 'gone', deleted_at: '2026-06-10' }),
+      wi({ id: 'kobe', source: 'for:kobe' }),
+      wi({ id: 'fromAgent', source: 'agent:kobe' }),
+    ];
+    const c = getCommitments(items);
+    expect(c.todo.map((w) => w.id)).toEqual(['fromAgent']);
+    expect(c.open).toBe(1);
+  });
+
+  it('counts open/overdue/dueToday over MY load only — waiting is not my burden', () => {
+    const items = [
+      wi({ id: 'a', due_date: addDaysStr(-1) }),                       // overdue todo
+      wi({ id: 'b', person_id: 'pA', due_date: todayStr() }),          // due-today owed
+      wi({ id: 'c', type: 'waitingFor', due_date: addDaysStr(-3) }),   // overdue waiting
+    ];
+    const c = getCommitments(items);
+    expect(c.open).toBe(2);
+    expect(c.overdue).toBe(1);
+    expect(c.dueToday).toBe(1);
+  });
+
+  it('sorts each list by due date then priority', () => {
+    const items = [
+      wi({ id: 'later', due_date: addDaysStr(5) }),
+      wi({ id: 'soonLow', due_date: addDaysStr(1), priority: 'low' }),
+      wi({ id: 'soonHigh', due_date: addDaysStr(1), priority: 'high' }),
+    ];
+    expect(getCommitments(items).todo.map((w) => w.id)).toEqual(['soonHigh', 'soonLow', 'later']);
+  });
+});
 
 // ── getPersonLedger ────────────────────────────────────────────────────────────
 describe('getPersonLedger', () => {
