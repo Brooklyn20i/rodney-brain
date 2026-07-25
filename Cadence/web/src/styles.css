@@ -452,7 +452,8 @@ body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro
 .split-panel-body { flex: 1; overflow-y: auto; padding: 12px; }
 
 /* Focus mode: sidebar hidden, editor fills screen */
-.notes-focus .split-left { width: 0; min-width: 0; overflow: hidden; border-right: none; }
+/* Extra specificity so focus-collapse beats the .rail-split fixed width. */
+.split-view.notes-focus .split-left { width: 0; min-width: 0; overflow: hidden; border-right: none; }
 
 /* Toggle button: always visible in note header */
 .notes-list-toggle { background: none; border: none; color: var(--text3); font-size: 16px;
@@ -530,7 +531,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .proj-roll { display: inline-flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
 
 /* ── Projects hub: split master-detail ── */
-.proj-hub-left { width: 40%; min-width: 300px; }
+/* Fixed picker width, like .rail-split — a touch wider for the two-column
+   rows (health dot + name/next-action + right-aligned counts). */
+.proj-hub-left { width: 320px; min-width: 300px; flex-shrink: 0; }
 .proj-hub .split-panel-body { padding: 12px 14px 24px; overflow-y: auto; flex: 1; }
 .proj-fullwidth { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .proj-list-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
@@ -1222,7 +1225,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   .split-view { flex-direction: column; }
   .split-left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); max-height: 240px; }
   /* The People rail's fixed desktop width must yield to the stacked layout. */
-  .people-split .split-left { width: 100%; }
+  .rail-split .split-left { width: 100%; }
 }
 
 /* ── Rich Text Editor (TipTap) ── */
@@ -1451,20 +1454,21 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .person-list-row { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
 .person-list-row .person-item { flex: 1; min-width: 0; }
 
-/* ── People rail: compact master-detail list ──────────────────────────────
-   The rail is a NAME PICKER, not a workspace — a fixed ~300px master-list
+/* ── Compact master-detail rail (People, Meetings, Notes) ─────────────────
+   These rails are PICKERS, not workspaces — a fixed ~300px master-list
    width (the platform convention) keeps every full name + counts readable
-   while the ledger detail absorbs all the freed width. Scoped so the
-   Home/Projects/Notes split views keep their proportional rails. */
-.people-split .split-left { width: 300px; min-width: 260px; flex-shrink: 0; }
-.people-split .person-item { padding: 7px 10px; margin-bottom: 4px; gap: 9px; }
-.people-split .person-item .avatar { width: 26px; height: 26px; font-size: 10px; }
+   while the detail pane absorbs all the freed width. Scoped so Home's
+   inverted layout (cockpit on the left, inspector on the right) keeps its
+   proportional rail. */
+.rail-split .split-left { width: 300px; min-width: 260px; flex-shrink: 0; }
+.rail-split .person-item { padding: 7px 10px; margin-bottom: 4px; gap: 9px; }
+.rail-split .person-item .avatar { width: 26px; height: 26px; font-size: 10px; }
 /* Without min-width:0 a flex child refuses to shrink below its nowrap text,
    so long meta lines would push the card past the rail edge. */
-.people-split .person-item .project-info { flex: 1; min-width: 0; }
-.people-split .project-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.people-split .project-meta { font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.people-split .person-list-row { padding-right: 4px; }
+.rail-split .person-item .project-info { flex: 1; min-width: 0; }
+.rail-split .project-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail-split .project-meta { font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail-split .person-list-row { padding-right: 4px; }
 .person-reorder-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .person-reorder-btn { background: none; border: 1px solid var(--border); border-radius: 4px;
   width: 22px; height: 22px; cursor: pointer; font-size: 11px; color: var(--text2);

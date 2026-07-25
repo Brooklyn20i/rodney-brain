@@ -587,7 +587,7 @@ export function People({ onMenu, initialSelectedId }: { onMenu?: () => void; ini
   return (
     <>
       <ScreenHeader title="People" onMenu={onMenu} />
-      <div className="split-view people-split">
+      <div className="split-view rail-split">
         <div className="split-left">
           <div className="split-panel-header">
             <h3>{sorted.length} {sorted.length === 1 ? 'person' : 'people'}</h3>
