@@ -1,7 +1,7 @@
 import { useCadence } from '../lib/store';
 import type { CadenceData } from '../lib/types';
 import { readMergedMeetingDates, MTG_FOLDER_PREFIX } from '../lib/meetings';
-import { readAgendaQueue } from '../lib/agendaQueue';
+import { readRaiseList } from '../lib/raiseList';
 import { readPrepTopics } from '../lib/prepTopics';
 import { getPersonLedger } from '../lib/selectors';
 import type { Note, Person } from '../lib/types';
@@ -70,10 +70,11 @@ function buildDays(data: Pick<CadenceData, 'notes' | 'people' | 'work_items'>) {
         const ready = topics.filter((t) => t.status === 'ready').length;
         chip = topics.length ? `${ready} ready / ${topics.length} topics` : 'No topics yet';
       } else {
-        // 1:1 prep = the ledger + the to-raise list; the meeting itself is a doc.
+        // 1:1 prep = the ledger, with raised tasks counted separately — the
+        // raise list holds ids of REAL ledger records, never copies.
         const ledger = getPersonLedger(data.work_items, person.id);
         const open = ledger.iOwe.length + ledger.theyOwe.length;
-        const toRaise = readAgendaQueue(data.notes, person.id).length;
+        const toRaise = readRaiseList(data.notes, data.work_items, person.id).length;
         chip = open + toRaise
           ? `${open} open${toRaise ? ` · ${toRaise} to raise` : ''}`
           : 'All square';

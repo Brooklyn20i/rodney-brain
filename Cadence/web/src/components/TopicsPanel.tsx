@@ -13,11 +13,9 @@ const STATUS_META: Record<TopicStatus, { label: string; cls: string }> = {
 
 // One topic card: title, why-it's-on-the-agenda, ready toggle, links, and the
 // live prep-task trail (real work_items — tick them here or anywhere).
-function TopicCard({ topic, group, onAddToAgenda, agendaHasTopic }: {
+function TopicCard({ topic, group }: {
   topic: PrepTopic;
   group: Person;
-  onAddToAgenda?: (topic: PrepTopic) => void;
-  agendaHasTopic?: (topicId: string) => boolean;
 }) {
   const { data, update } = useCadence();
   const { updateTopic, removeTopic, addPrepTask } = usePrepTopics(group.id);
@@ -48,8 +46,6 @@ function TopicCard({ topic, group, onAddToAgenda, agendaHasTopic }: {
     setLinkDraft('');
   };
 
-  const alreadyOnAgenda = agendaHasTopic?.(topic.id) ?? false;
-
   return (
     <div className={`prep-topic-card${topic.status === 'covered' ? ' covered' : ''}`}>
       <div className="prep-topic-head">
@@ -63,11 +59,6 @@ function TopicCard({ topic, group, onAddToAgenda, agendaHasTopic }: {
           title="Tap to cycle building → ready → covered">
           {STATUS_META[topic.status].label}
         </button>
-        {onAddToAgenda && topic.status === 'ready' && (
-          alreadyOnAgenda
-            ? <span className="topic-on-agenda">On agenda ✓</span>
-            : <button className="btn btn-primary btn-sm" onClick={() => onAddToAgenda(topic)}>+ Agenda</button>
-        )}
         <button className="btn-icon" title="Delete topic" onClick={() => {
           if (window.confirm('Delete this topic (prep tasks stay)?')) void removeTopic(topic.id);
         }}>✕</button>
@@ -128,13 +119,8 @@ function TopicCard({ topic, group, onAddToAgenda, agendaHasTopic }: {
 }
 
 // The topics board for a meeting series (CLT, ADX…). Used as the default tab
-// on the Meetings screen and as the in-meeting panel (where `onAddToAgenda`
-// puts a ready topic straight onto the open occurrence's agenda).
-export function TopicsPanel({ group, onAddToAgenda, agendaHasTopic }: {
-  group: Person;
-  onAddToAgenda?: (topic: PrepTopic) => void;
-  agendaHasTopic?: (topicId: string) => boolean;
-}) {
+// on the Meetings screen and as the in-meeting panel.
+export function TopicsPanel({ group }: { group: Person }) {
   const { topics, addTopic } = usePrepTopics(group.id);
   const [draft, setDraft] = useState('');
   const active = topics.filter((t) => t.status !== 'covered');
@@ -153,8 +139,7 @@ export function TopicsPanel({ group, onAddToAgenda, agendaHasTopic }: {
         <p className="ledger-empty">No topics yet — what are you bringing to the next {group.name}?</p>
       )}
       {active.map((t) => (
-        <TopicCard key={t.id} topic={t} group={group}
-          onAddToAgenda={onAddToAgenda} agendaHasTopic={agendaHasTopic} />
+        <TopicCard key={t.id} topic={t} group={group} />
       ))}
       <input
         className="task-group-quickadd"

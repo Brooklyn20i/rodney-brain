@@ -1,18 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { readMeetingDates, readMergedMeetingDates } from '../meetings';
+import { readMergedMeetingDates } from '../meetings';
 
 const rec = (map: Record<string, string>, updated_at: string, deleted_at: string | null = null) =>
   ({ title: '__meeting_dates__', body: JSON.stringify(map), updated_at, deleted_at });
 
 describe('readMergedMeetingDates', () => {
   it('merges every copy so a date in an older record is not lost', () => {
-    // The single-record reader would take only the newest and drop Anna.
+    // A single-newest-record reader would take only the newest and drop Anna.
     const notes = [
       rec({ nAnna: '2026-06-20' }, '2026-05-01'),
       rec({ nBob: '2026-06-21' }, '2026-06-05'),
     ];
-    expect(readMeetingDates(notes)).toEqual({ nBob: '2026-06-21' });      // old behaviour: Anna lost
-    expect(readMergedMeetingDates(notes)).toEqual({                        // recovered
+    expect(readMergedMeetingDates(notes)).toEqual({
       nAnna: '2026-06-20', nBob: '2026-06-21',
     });
   });

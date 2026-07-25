@@ -53,14 +53,14 @@ describe('Notes search', () => {
     setStore([
       mkNote({ id: 'n1', title: 'Roadmap', body: '<p>quarterly <b>pricing</b> plan</p>' }),
       mkNote({ id: 'n2', title: 'Journal', body: '<p>gym schedule</p>' }),
-      mkNote({ id: 'n3', title: '__agenda__p1', body: 'pricing' }),
+      mkNote({ id: 'n3', title: '__raise__p1', body: 'pricing' }),
       mkNote({ id: 'n4', title: 'Old minutes', folder: '__mtg__p1', body: 'pricing' }),
     ]);
     renderNotes();
     fireEvent.change(screen.getByPlaceholderText('Search notes…'), { target: { value: 'pricing' } });
     expect(screen.getByText('Roadmap')).toBeInTheDocument();
     expect(screen.queryByText('Journal')).not.toBeInTheDocument();
-    expect(screen.queryByText('__agenda__p1')).not.toBeInTheDocument();
+    expect(screen.queryByText('__raise__p1')).not.toBeInTheDocument();
     expect(screen.queryByText('Old minutes')).not.toBeInTheDocument();
 
     // Clearing the query restores the folder tree.

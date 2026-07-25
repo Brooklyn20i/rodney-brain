@@ -18,26 +18,6 @@ export const MEETING_DATES_NOTE_TITLE = '__meeting_dates__';
 export const MTG_FOLDER_PREFIX = '__mtg__';
 export type MeetingDates = Record<string, string>;
 
-export function readMeetingDates(
-  notes: { title: string; body: string; updated_at?: string }[],
-): MeetingDates {
-  const note = notes
-    .filter((n) => n.title === MEETING_DATES_NOTE_TITLE)
-    .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))[0];
-  if (!note) return {};
-  try {
-    const parsed = JSON.parse(note.body || '{}');
-    if (parsed && typeof parsed === 'object') {
-      const out: MeetingDates = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === 'string' && v) out[k] = v;
-      }
-      return out;
-    }
-  } catch { /* unparseable */ }
-  return {};
-}
-
 // Recovery-oriented read: merge EVERY `__meeting_dates__` record (oldest →
 // newest, newest value wins per key) instead of only the newest one. A second
 // copy of the record — created by an offline save or a two-device race — would
@@ -62,29 +42,6 @@ export function readMergedMeetingDates(
     } catch { /* skip unparseable copy */ }
   }
   return out;
-}
-
-// Returns the note ID of the nearest upcoming meeting for a person, i.e. the
-// note whose meeting date is the smallest date >= today. This is the correct
-// target for task routing — tasks/agenda items meant for "the next 1:1" should
-// go here, not into the most recently created or most recently dated note.
-export function getUpcomingNoteId(
-  personId: string,
-  allNotes: Note[],
-  dateMap: MeetingDates,
-): string | null {
-  const today = todayStr();
-  const folder = `${MTG_FOLDER_PREFIX}${personId}`;
-  let best: { date: string; id: string } | null = null;
-
-  for (const note of allNotes) {
-    if (note.folder !== folder) continue;
-    const d = dateMap[note.id];
-    if (!d || d < today) continue;
-    if (!best || d < best.date) best = { date: d, id: note.id };
-  }
-
-  return best?.id ?? null;
 }
 
 // Returns the earliest upcoming date for a person, considering only meeting
