@@ -66,6 +66,28 @@ describe('Quick Add captures to the Inbox', () => {
     expect(row.person_id).toBe('amy');
   });
 
+  it('parses "Anna to …" delegation phrasing as waitingFor — they owe it', async () => {
+    setStore({ people: [person({ id: 'amy', name: 'Amy Jones' })] });
+    render(<QuickAdd onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Amy to send the market scan' } });
+    fireEvent.click(screen.getByText('Add to Inbox →'));
+    await waitFor(() => expect(h.store.insert).toHaveBeenCalledTimes(1));
+    const [, row] = h.store.insert.mock.calls[0];
+    expect(row.type).toBe('waitingFor');
+    expect(row.person_id).toBe('amy');
+    expect(row.inboxed).toBe(true); // still capture-first — triage confirms it
+  });
+
+  it('"Talk to Amy" is NOT delegation — the sentence must START with the name', async () => {
+    setStore({ people: [person({ id: 'amy', name: 'Amy Jones' })] });
+    render(<QuickAdd onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Talk to Amy about Apollo' } });
+    fireEvent.click(screen.getByText('Add to Inbox →'));
+    await waitFor(() => expect(h.store.insert).toHaveBeenCalledTimes(1));
+    const [, row] = h.store.insert.mock.calls[0];
+    expect(row.type).toBe('task');
+  });
+
   it('offers no Give button without a person', () => {
     render(<QuickAdd onClose={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/Try/), { target: { value: 'Loose thought' } });

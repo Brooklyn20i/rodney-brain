@@ -99,6 +99,15 @@ function parseInput(
     }
   }
 
+  // Delegation phrasing: a capture that STARTS with a known person's name
+  // followed by "to" ("Anna to confirm the venue") means THEY owe it — file
+  // as waitingFor up front so triage becomes confirm-not-choose. Only when no
+  // explicit type keyword already decided otherwise.
+  if (person_id && type === 'task') {
+    const first = (personName || '').split(' ')[0];
+    if (first && new RegExp(`^\\s*${esc(first)}\\s+to\\b`, 'i').test(raw)) type = 'waitingFor';
+  }
+
   // Project — word match on active projects
   for (const p of projects.filter((p) => p.status === 'active')) {
     const words = (p.name || '').split(/\s+/).filter((w) => w.length >= 4);

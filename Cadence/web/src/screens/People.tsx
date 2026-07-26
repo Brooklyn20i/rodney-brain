@@ -11,6 +11,7 @@ import { isAgentTask } from '../lib/tasks';
 import { getPersonLedger, getPersonInvolved } from '../lib/selectors';
 import { readRaiseList, useRaiseList } from '../lib/raiseList';
 import { htmlToPlain } from '../lib/richText';
+import { daysQuiet, QUIET_CHIP_DAYS, STALE_DAYS } from '../lib/staleness';
 import type { Comment } from '../lib/types';
 
 // A work item belongs to a person if it's their primary person or links to them
@@ -254,6 +255,14 @@ function TopicCard({ w, onEdit, raise, flipFor }: {
   const toggle = () => update('work_items', w.id, { done: !w.done, completed_at: !w.done ? new Date().toISOString() : null } as Partial<WorkItem>);
   const notesPreview = w.notes ? htmlToPlain(w.notes) : '';
 
+  // Owed-to-me rows carry the follow-up instrument: how long since any
+  // movement, and a one-tap chase that logs onto the task's history.
+  const quiet = w.type === 'waitingFor' && !w.done ? daysQuiet(w, data.comments) : 0;
+  const chaseIt = () => {
+    insert('comments', { work_item_id: w.id, text: '👉 Chased' } as Partial<Comment>);
+    logActivity('chase', w.title);
+  };
+
   const flip = () => {
     if (!flipFor) return;
     const nowTheirs = w.type !== 'waitingFor';
@@ -272,12 +281,22 @@ function TopicCard({ w, onEdit, raise, flipFor }: {
           <TypeTag type={w.type} /><PriTag priority={w.priority} />
           {proj && <span className="tag tag-info">{proj.name}</span>}
           <Due date={w.due_date} />
+          {quiet >= QUIET_CHIP_DAYS && (
+            <span className={`quiet-chip${quiet >= STALE_DAYS ? ' stale' : ''}`}
+              title={`No movement for ${quiet} days — no edits or updates`}>
+              {quiet}d quiet
+            </span>
+          )}
         </div>
         {notesPreview && <div className="topic-notes">{notesPreview.slice(0, 140)}{notesPreview.length > 140 ? '…' : ''}</div>}
       </div>
       {flipFor && (
         <button className="btn-icon topic-flip" onClick={flip}
           title={w.type === 'waitingFor' ? `Now I owe ${flipFor.name.split(' ')[0]}` : `Now ${flipFor.name.split(' ')[0]} owes me`}>⇄</button>
+      )}
+      {w.type === 'waitingFor' && !w.done && (
+        <button className="btn-icon chase-btn" onClick={chaseIt}
+          title="Chase — log a nudge on the task's history">👉</button>
       )}
       {raise && raise.variant === 'flag' && (
         <button className={`btn-icon raise-flag${raise.raised ? ' active' : ''}`}

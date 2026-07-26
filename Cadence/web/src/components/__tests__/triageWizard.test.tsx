@@ -96,6 +96,29 @@ describe('TriageWizard destinations', () => {
     expect(h.raise).toHaveBeenCalledWith('pA', 'c1');
   });
 
+  it('a person-tagged capture shows one-tap suggestions that file directly', async () => {
+    setStore({ work_items: [wi({ id: 'c1', title: 'Numbers pack', person_id: 'pA' })], people: [anna] });
+    render(<TriageWizard onClose={vi.fn()} />);
+    // No picker stages — the tagged person is one tap from either ledger side.
+    await click(/Anna owes me/);
+    expect(lastUpdate()).toEqual(['work_items', 'c1', expect.objectContaining({
+      inboxed: false, type: 'waitingFor', person_id: 'pA',
+    })]);
+  });
+
+  it('a "waiting on" capture leads with the owes-me suggestion', () => {
+    setStore({ work_items: [wi({ id: 'c1', type: 'waitingFor', person_id: 'pA' })], people: [anna] });
+    render(<TriageWizard onClose={vi.fn()} />);
+    const row = document.querySelector('.wizard-suggest-row')!;
+    const labels = [...row.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels[0]).toMatch(/Anna owes me/);
+  });
+
+  it('untagged captures get no suggestion row', () => {
+    render(<TriageWizard onClose={vi.fn()} />);
+    expect(document.querySelector('.wizard-suggest')).toBeNull();
+  });
+
   it('meeting groups are not offered in the person picker', async () => {
     setStore({ work_items: [wi({ id: 'c1' })], people: [
       anna, { id: 'gC', name: 'CLT', type: 'meeting_group', color: '#0E7490', role: '' },

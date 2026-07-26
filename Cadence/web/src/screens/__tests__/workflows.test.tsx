@@ -139,6 +139,51 @@ describe('Home workflow', () => {
     expect(within(screen.getByTestId('col-todo')).getByText('Just mine')).toBeInTheDocument();
   });
 
+  it('a quiet waiting item shows its age, counts as "to chase", and Chase logs an update', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' })],
+      work_items: [
+        // 10 days without movement — past the stale threshold.
+        wi({ id: 'q1', title: 'Silent sign-off', person_id: 'pA', type: 'waitingFor', updated_at: '2026-06-10T00:00:00Z' }),
+        // Fresh — no chip.
+        wi({ id: 'q2', title: 'Fresh ask', person_id: 'pA', type: 'waitingFor', updated_at: '2026-06-19T00:00:00Z' }),
+      ],
+    }});
+    render(<Home onMenu={() => {}} />);
+    const waiting = within(screen.getByTestId('col-waiting'));
+    expect(waiting.getByText('10d quiet')).toBeInTheDocument();
+    expect(waiting.getByText('1 to chase')).toBeInTheDocument(); // column header tally
+    expect(waiting.queryByText(/1d quiet/)).toBeNull();
+    // One tap logs the nudge onto the task's own thread — that IS the movement.
+    fireEvent.click(waiting.getAllByTitle(/Chase — log a nudge/)[0]);
+    expect(h.store.insert).toHaveBeenCalledWith('comments',
+      expect.objectContaining({ work_item_id: 'q1', text: '👉 Chased' }));
+  });
+
+  it('an update on the thread resets the quiet clock', () => {
+    setStore({ data: {
+      people: [person({ id: 'pA', name: 'Anna' })],
+      work_items: [wi({ id: 'q1', title: 'Silent sign-off', person_id: 'pA', type: 'waitingFor', updated_at: '2026-06-01T00:00:00Z' })],
+      comments: [{ id: 'cm1', owner_id: 'me', work_item_id: 'q1', text: '👉 Chased', author: 'you',
+        created_at: '2026-06-18T00:00:00Z', updated_at: '', deleted_at: null }],
+    }});
+    render(<Home onMenu={() => {}} />);
+    const waiting = within(screen.getByTestId('col-waiting'));
+    expect(waiting.queryByText(/d quiet/)).toBeNull();
+    expect(waiting.queryByText(/to chase/)).toBeNull();
+  });
+
+  it('an undated to-do that has sat for weeks wears its age', () => {
+    setStore({ data: { work_items: [
+      wi({ id: 'old1', title: 'Dusty idea', created_at: '2026-05-01T00:00:00Z' }), // ~7 weeks
+      wi({ id: 'new1', title: 'Fresh idea', created_at: '2026-06-15T00:00:00Z' }),
+    ]}});
+    render(<Home onMenu={() => {}} />);
+    const todo = within(screen.getByTestId('col-todo'));
+    expect(todo.getByText('7w old')).toBeInTheDocument();
+    expect(todo.queryAllByText(/w old/)).toHaveLength(1); // fresh one stays clean
+  });
+
   it('the column quick-add inserts a person-less filed to-do', () => {
     const insert = vi.fn();
     setStore({ insert, data: {} });

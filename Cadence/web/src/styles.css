@@ -718,6 +718,13 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .wizard-dest:hover { border-color: var(--accent); }
 .wizard-dest-bin { color: var(--red); }
 .wizard-dest-skip { color: var(--text3); }
+/* Confirm-not-choose: one-tap suggestions when the capture tagged a person. */
+.wizard-suggest { margin-top: 4px; padding: 10px; border-radius: var(--radius-sm);
+  border: 1px dashed var(--accent); background: var(--blue-bg); }
+.wizard-suggest-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--accent); margin-bottom: 8px; }
+.wizard-suggest-row { margin-top: 0; }
+.wizard-dest-suggest { background: var(--surface); }
 .wizard-picker { display: flex; flex-direction: column; gap: 6px; }
 .wizard-picker-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
 .wizard-new-person { display: flex; gap: 6px; align-items: center; padding: 4px 0; }
@@ -1574,6 +1581,15 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .commit-empty { font-size: 12px; color: var(--text3); padding: 8px 2px; }
 .task-hub-row { border: 1px solid transparent; }
 .task-hub-row.selected { border-color: var(--accent); background: var(--blue-bg); }
+/* Follow-up instruments: quiet-days on waiting items, age on undated to-dos. */
+.quiet-chip { font-size: 10px; font-weight: 700; color: var(--orange); background: var(--orange-bg, rgba(224, 125, 0, 0.12));
+  border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.quiet-chip.stale { color: var(--red); background: var(--red-bg, rgba(217, 48, 37, 0.1)); }
+.age-chip { font-size: 10px; font-weight: 600; color: var(--text3); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.chase-btn { background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1;
+  padding: 2px 6px; border-radius: 6px; flex-shrink: 0; align-self: center; filter: grayscale(1); opacity: 0.55; }
+.chase-btn:hover { filter: none; opacity: 1; background: var(--hover); }
 
 /* ── Task slide-over (detail on demand) ── */
 .slideover-backdrop { position: fixed; inset: 0; z-index: 250; background: rgba(15, 23, 42, 0.32);
