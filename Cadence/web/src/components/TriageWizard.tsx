@@ -54,6 +54,13 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
   const people = data.people.filter((p) => !p.type || p.type === 'person');
   const projects = data.projects.filter((p) => p.status === 'active' && !p.deleted_at);
 
+  // Confirm-not-choose: the capture parser usually tagged the person already,
+  // so surface one-tap ledger destinations instead of the two-stage picker.
+  const tagged = item
+    ? people.find((p) => p.id === item.person_id)
+      || people.find((p) => p.id === item.related_entities?.find((r) => r.type === 'person')?.id)
+    : undefined;
+
   const advance = (outcome: 'filed' | 'skipped') => {
     // Single-item mode: the job is done the moment this card is handled.
     if (itemId) { onClose(); return; }
@@ -168,6 +175,35 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
             <label className="wizard-card-due">
               Due <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
             </label>
+
+            {stage === 'main' && tagged && (() => {
+              const first = tagged.name.split(' ')[0];
+              const owes = (
+                <button key="owes" className="wizard-dest wizard-dest-suggest" disabled={busy}
+                  onClick={() => toPerson(tagged, 'theyOwe')}>
+                  📤 {first} owes me
+                </button>
+              );
+              const iOwe = (
+                <button key="iowe" className="wizard-dest wizard-dest-suggest" disabled={busy}
+                  onClick={() => toPerson(tagged, 'iOwe')}>
+                  📥 I owe {first}
+                </button>
+              );
+              return (
+                <div className="wizard-suggest">
+                  <div className="wizard-suggest-label">Tagged at capture — one tap files it:</div>
+                  <div className="wizard-dests wizard-suggest-row">
+                    {/* "Waiting on / Anna to…" captures lead with the owes-me side. */}
+                    {item.type === 'waitingFor' ? [owes, iOwe] : [iOwe, owes]}
+                    <button className="wizard-dest wizard-dest-suggest" disabled={busy}
+                      onClick={() => toPerson(tagged, 'raise')}>
+                      🗓 Raise at {first}'s 1:1
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {stage === 'main' && (
               <div className="wizard-dests">

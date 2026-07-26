@@ -37,6 +37,17 @@ export function TriageTray({ onEdit, onOpenInbox }: {
     logActivity('triage_my_task', w.title);
   });
 
+  // I owe the tagged person — one tap onto their ledger's I-owe side.
+  const fileAsOwed = (w: WorkItem, person: { id: string; name: string }) => act(w, async () => {
+    await update('work_items', w.id, {
+      inboxed: false,
+      type: 'task',
+      person_id: person.id,
+      related_entities: reassignPrimaryPerson(w.related_entities, w.person_id, person),
+    } as Partial<WorkItem>);
+    logActivity('triage_person', `${w.title} → ${person.name}`);
+  });
+
   // Waiting / owed by others — optionally pinned to the person who owes it.
   const fileAsWaiting = (w: WorkItem, person: { id: string; name: string } | null) => act(w, async () => {
     await update('work_items', w.id, {
@@ -113,6 +124,23 @@ export function TriageTray({ onEdit, onOpenInbox }: {
                       title="File as your own to-do — no counterparty"
                       onClick={() => fileAsMine(w)}>My to-do</button>
 
+                    {person ? (
+                      // Confirm-not-choose: the capture already named the person,
+                      // so both ledger directions are one tap. (Filing to someone
+                      // ELSE goes through the row's Triage → wizard.)
+                      <>
+                        <button className="btn btn-ghost btn-sm" disabled={busy}
+                          title={`File as something you owe ${person.name}`}
+                          onClick={() => fileAsOwed(w, person)}>
+                          📥 Owe {person.name.split(' ')[0]}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" disabled={busy}
+                          title={`File as something ${person.name} owes you`}
+                          onClick={() => fileAsWaiting(w, person)}>
+                          📤 {person.name.split(' ')[0]} owes
+                        </button>
+                      </>
+                    ) : (
                     <div style={{ position: 'relative' }}>
                       <button className="btn btn-ghost btn-sm" disabled={busy}
                         title="File as Waiting / owed by others"
@@ -135,6 +163,7 @@ export function TriageTray({ onEdit, onOpenInbox }: {
                         </>
                       )}
                     </div>
+                    )}
 
                     <div style={{ position: 'relative' }}>
                       <button className="btn btn-ghost btn-sm" disabled={busy}

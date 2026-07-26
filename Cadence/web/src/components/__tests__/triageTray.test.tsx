@@ -97,6 +97,34 @@ describe('Triage actions', () => {
     expect(patch.related_entities).toEqual([{ type: 'person', id: 'amy', name: 'Amy Jones' }]);
   });
 
+  it('a person-tagged capture gets one-tap ledger buttons instead of the Waiting… picker', async () => {
+    setStore({
+      work_items: [wi({ ...capture, person_id: 'amy' })],
+      people: [person({ id: 'amy', name: 'Amy Jones' })],
+    });
+    render(<TriageTray onEdit={vi.fn()} />);
+    expect(screen.queryByText('Waiting…')).toBeNull(); // replaced by the direct pair
+    fireEvent.click(screen.getByText('📤 Amy owes'));
+    await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
+    const [, id, patch] = h.store.update.mock.calls[0];
+    expect(id).toBe('c1');
+    expect(patch).toMatchObject({ inboxed: false, type: 'waitingFor', person_id: 'amy' });
+  });
+
+  it('"📥 Owe Amy" files it as a task I owe her — person kept, not cleared', async () => {
+    setStore({
+      work_items: [wi({ ...capture, person_id: 'amy' })],
+      people: [person({ id: 'amy', name: 'Amy Jones' })],
+    });
+    render(<TriageTray onEdit={vi.fn()} />);
+    fireEvent.click(screen.getByText('📥 Owe Amy'));
+    await waitFor(() => expect(h.store.update).toHaveBeenCalledTimes(1));
+    const [, id, patch] = h.store.update.mock.calls[0];
+    expect(id).toBe('c1');
+    expect(patch).toMatchObject({ inboxed: false, type: 'task', person_id: 'amy' });
+    expect(patch.related_entities).toEqual([{ type: 'person', id: 'amy', name: 'Amy Jones' }]);
+  });
+
   it('"Waiting…" → "No one specific" still files it as waitingFor', async () => {
     setStore({ work_items: [capture] });
     render(<TriageTray onEdit={vi.fn()} />);
