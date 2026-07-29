@@ -23,6 +23,41 @@ import { identifyWatch, buildValuation, generateBuyerSummary, checkPhoto } from 
 const DB_KEY = 'tke-db-v' + SEED_VERSION
 const SESSION_KEY = 'tke-session'
 
+// Storage access throws outright in some embedded/sandboxed contexts and in
+// private-browsing modes. Degrade to an in-memory store rather than failing to
+// boot — the demo stays usable, it just doesn't survive a reload.
+const memory = new Map<string, string>()
+const safeStorage = {
+  get(key: string): string | null {
+    try {
+      return window.localStorage.getItem(key)
+    } catch {
+      return memory.get(key) ?? null
+    }
+  },
+  set(key: string, value: string) {
+    try {
+      window.localStorage.setItem(key, value)
+    } catch {
+      memory.set(key, value)
+    }
+  },
+  remove(key: string) {
+    try {
+      window.localStorage.removeItem(key)
+    } catch {
+      memory.delete(key)
+    }
+  },
+  keys(): string[] {
+    try {
+      return Object.keys(window.localStorage)
+    } catch {
+      return [...memory.keys()]
+    }
+  },
+}
+
 class Store {
   db: Db
   currentUserId: string | null
@@ -31,7 +66,7 @@ class Store {
 
   constructor() {
     this.db = this.load()
-    this.currentUserId = localStorage.getItem(SESSION_KEY)
+    this.currentUserId = safeStorage.get(SESSION_KEY)
     if (this.currentUserId && !this.db.users.find((u) => u.id === this.currentUserId)) {
       this.currentUserId = null
     }
@@ -39,7 +74,7 @@ class Store {
 
   private load(): Db {
     try {
-      const raw = localStorage.getItem(DB_KEY)
+      const raw = safeStorage.get(DB_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as Db
         if (parsed.version === SEED_VERSION) return parsed
@@ -52,9 +87,9 @@ class Store {
 
   resetDemo() {
     // Clear any older seed versions too.
-    Object.keys(localStorage)
+    safeStorage.keys()
       .filter((k) => k.startsWith('tke-db'))
-      .forEach((k) => localStorage.removeItem(k))
+      .forEach((k) => safeStorage.remove(k))
     this.db = seedDb()
     this.commit()
   }
@@ -68,7 +103,7 @@ class Store {
   private commit() {
     this.snapshotVersion++
     try {
-      localStorage.setItem(DB_KEY, JSON.stringify(this.db))
+      safeStorage.set(DB_KEY, JSON.stringify(this.db))
     } catch {
       /* storage full — keep in-memory state so the demo continues */
     }
@@ -135,7 +170,7 @@ class Store {
 
   signIn(userId: string) {
     this.currentUserId = userId
-    localStorage.setItem(SESSION_KEY, userId)
+    safeStorage.set(SESSION_KEY, userId)
     this.audit('sign_in', 'user', userId)
     this.commit()
   }
@@ -143,7 +178,7 @@ class Store {
   signOut() {
     if (this.currentUserId) this.audit('sign_out', 'user', this.currentUserId)
     this.currentUserId = null
-    localStorage.removeItem(SESSION_KEY)
+    safeStorage.remove(SESSION_KEY)
     this.commit()
   }
 
@@ -153,7 +188,7 @@ class Store {
     this.db.sellerProfiles.push({ userId: u.id, location, state, kycStatus: 'not_started' })
     this.audit('register', 'user', u.id, 'Seller account created')
     this.currentUserId = u.id
-    localStorage.setItem(SESSION_KEY, u.id)
+    safeStorage.set(SESSION_KEY, u.id)
     this.commit()
     return u
   }
