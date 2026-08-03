@@ -19,6 +19,20 @@ export function isIncome(category: PropertyLedgerCategory): boolean {
   return INCOME_CATEGORIES.has(category);
 }
 
+export const SCHEDULED_PROPERTY_LEDGER_NOTE =
+  'Scheduled by instalment due date/payment timing. No payment or external action taken.';
+const LEGACY_SCHEDULED_PATTERN = /scheduled by instalment due date\/payment timing/i;
+const LEGACY_UNCONFIRMED_PATTERN = /no payment or external action taken/i;
+
+export function isScheduledEntry(entry: PropertyLedgerEntry): boolean {
+  if (entry.status !== undefined) return entry.status === 'scheduled';
+  return LEGACY_SCHEDULED_PATTERN.test(entry.notes) && LEGACY_UNCONFIRMED_PATTERN.test(entry.notes);
+}
+
+export function isActualEntry(entry: PropertyLedgerEntry): boolean {
+  return !isScheduledEntry(entry);
+}
+
 // Expense categories in the order they should render on a statement.
 export const EXPENSE_CATEGORIES: PropertyLedgerCategory[] = [
   'interest',
@@ -65,7 +79,9 @@ function entriesFor(
   propertyId: string,
   period: string
 ): PropertyLedgerEntry[] {
-  return entries.filter((e) => e.property_id === propertyId && e.period === period);
+  return entries.filter(
+    (e) => e.property_id === propertyId && e.period === period && isActualEntry(e)
+  );
 }
 
 export function monthlyPnL(
@@ -152,9 +168,27 @@ export function portfolioMonth(
   };
 }
 
-// Sorted unique 'YYYY-MM' periods present in the ledger, most recent last.
-export function availablePeriods(entries: PropertyLedgerEntry[]): string[] {
+function uniquePeriods(entries: PropertyLedgerEntry[]): string[] {
   return [...new Set(entries.map((e) => e.period))].sort();
+}
+
+// Sorted unique realised 'YYYY-MM' periods, most recent last. Scheduled
+// obligations are deliberately excluded from P&L selectors and history.
+export function availablePeriods(entries: PropertyLedgerEntry[]): string[] {
+  return uniquePeriods(entries.filter(isActualEntry));
+}
+
+export function scheduledObligations(
+  entries: PropertyLedgerEntry[],
+  propertyId: string
+): PropertyLedgerEntry[] {
+  return entries
+    .filter((e) => e.property_id === propertyId && isScheduledEntry(e))
+    .sort((a, b) => {
+      const aKey = a.entry_date ?? `${a.period}-01`;
+      const bKey = b.entry_date ?? `${b.period}-01`;
+      return aKey.localeCompare(bKey) || a.id.localeCompare(b.id);
+    });
 }
 
 export interface TrailingAverages {
@@ -221,13 +255,15 @@ function avgBillAnnualised(rows: PropertyLedgerEntry[], multiplier: number): num
 }
 
 function monthlyAccrualAnnualised(rows: PropertyLedgerEntry[]): number {
-  const periods = availablePeriods(rows);
+  const periods = uniquePeriods(rows);
   if (periods.length === 0) return 0;
   const totalC = rows.reduce((s, e) => s + toCents(e.amount), 0);
   return centsToDollars(Math.round((totalC / periods.length) * 12));
 }
 
-// Converts actual property-ledger lines into a sensible annual run-rate.
+// Converts known property cost evidence into a forward annual run-rate.
+// Confirmed rows feed actual P&L/history. Known scheduled obligations may inform
+// this forecast but remain excluded from actual selectors, P&L and averages.
 // Important: not every ledger row is monthly. Water/council/body-corp bills are
 // usually quarterly; insurance/land tax are often annual; repairs are one-off.
 // The old trailing.avgNet × 12 approach treated one quarterly water bill as if
@@ -267,6 +303,9 @@ export function propertyAnnualRunRate(
   const notes: string[] = [];
   if (months < 3) notes.push(`Only ${months} ledger month${months === 1 ? '' : 's'} on file.`);
   if (weeklyRent <= 0 && trailing.avgIncome <= 0) notes.push('No rent baseline on file.');
+  if (rows.some(isScheduledEntry)) {
+    notes.push('Known scheduled costs inform this forward run-rate; they remain excluded from actual results.');
+  }
   notes.push('Quarterly bills are annualised ×4; annual bills ×1; repairs are treated as one-off.');
 
   return {

@@ -7,9 +7,10 @@ import {
   propertyAnnualRunRate,
   propertyFinancials,
   propertyYields,
+  scheduledObligations,
   trailingAverages,
 } from '../propertyCalc';
-import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerEntry } from '../types';
+import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerEntry, PropertyLedgerStatus } from '../types';
 
 // Fictional fixtures only -- see CadenceFinancial/AGENTS.md.
 let seq = 0;
@@ -17,7 +18,8 @@ function entry(
   property_id: string,
   period: string,
   category: PropertyLedgerCategory,
-  amount: number
+  amount: number,
+  status: PropertyLedgerStatus = 'actual'
 ): PropertyLedgerEntry {
   return {
     id: `e-${++seq}`,
@@ -27,6 +29,7 @@ function entry(
     entry_date: `${period}-05`,
     category,
     amount,
+    status,
     grade: 'statement',
     source: '',
     notes: '',
@@ -106,6 +109,32 @@ describe('monthlyPnL', () => {
     expect(pnl.totalExpenses).toBe(0);
     expect(pnl.netCashflow).toBe(0);
   });
+
+  it('excludes scheduled obligations from realised P&L', () => {
+    const rows = [
+      entry('A', '2026-07', 'rent', 2_000),
+      entry('A', '2026-08', 'council_rates', 900, 'scheduled'),
+    ];
+    expect(monthlyPnL(rows, 'A', '2026-08')).toMatchObject({
+      totalIncome: 0,
+      totalExpenses: 0,
+      netCashflow: 0,
+    });
+  });
+
+  it('recognises current production scheduled rows before migration 0047 is applied', () => {
+    const legacyScheduled = {
+      ...entry('A', '2026-08', 'council_rates', 900),
+      status: undefined,
+      notes: 'Scheduled by instalment due date/payment timing. No payment or external action taken by Kobe.',
+    };
+    expect(monthlyPnL([legacyScheduled], 'A', '2026-08').totalExpenses).toBe(0);
+    expect(scheduledObligations([legacyScheduled], 'A')).toHaveLength(1);
+
+    const confirmed = { ...legacyScheduled, status: 'actual' as const };
+    expect(monthlyPnL([confirmed], 'A', '2026-08').totalExpenses).toBeCloseTo(900, 2);
+    expect(scheduledObligations([confirmed], 'A')).toHaveLength(0);
+  });
 });
 
 describe('portfolioMonth', () => {
@@ -135,6 +164,14 @@ describe('availablePeriods', () => {
   it('returns sorted unique periods', () => {
     expect(availablePeriods(ledger)).toEqual(['2025-05', '2025-06']);
   });
+
+  it('does not promote future scheduled obligations into actual history', () => {
+    const rows = [
+      entry('A', '2026-07', 'rent', 2_000),
+      entry('A', '2027-05', 'council_rates', 900, 'scheduled'),
+    ];
+    expect(availablePeriods(rows)).toEqual(['2026-07']);
+  });
 });
 
 describe('trailingAverages', () => {
@@ -149,6 +186,33 @@ describe('trailingAverages', () => {
 
   it('is empty for a property with no ledger', () => {
     expect(trailingAverages(ledger, 'Z').months).toBe(0);
+  });
+
+  it('excludes scheduled months from the realised average', () => {
+    const rows = [
+      entry('A', '2026-07', 'rent', 12_000),
+      entry('A', '2026-07', 'management_fees', 500),
+      entry('A', '2026-08', 'council_rates', 900, 'scheduled'),
+      entry('A', '2026-11', 'council_rates', 900, 'scheduled'),
+      entry('A', '2027-02', 'council_rates', 900, 'scheduled'),
+      entry('A', '2027-05', 'council_rates', 900, 'scheduled'),
+    ];
+    const t = trailingAverages(rows, 'A');
+    expect(t.months).toBe(1);
+    expect(t.avgIncome).toBeCloseTo(12_000, 2);
+    expect(t.avgExpenses).toBeCloseTo(500, 2);
+    expect(t.avgNet).toBeCloseTo(11_500, 2);
+  });
+});
+
+describe('scheduledObligations', () => {
+  it('returns scheduled rows separately in due-date order', () => {
+    const rows = [
+      entry('A', '2027-05', 'council_rates', 900, 'scheduled'),
+      entry('A', '2026-07', 'rent', 2_000),
+      entry('A', '2026-11', 'council_rates', 900, 'scheduled'),
+    ];
+    expect(scheduledObligations(rows, 'A').map((row) => row.period)).toEqual(['2026-11', '2027-05']);
   });
 });
 
@@ -189,6 +253,23 @@ describe('propertyAnnualRunRate', () => {
     ];
     const runRate = propertyAnnualRunRate(rows, p);
     expect(runRate.annualExpenses).toBeCloseTo(3600, 2); // 300 monthly accrual × 12
+  });
+
+  it('uses known scheduled costs in forward run-rate but not actual results', () => {
+    const p = property('F', 700_000);
+    const rows = [
+      entry('F', '2026-07', 'rent', 2_000),
+      entry('F', '2026-08', 'council_rates', 900, 'scheduled'),
+    ];
+
+    expect(availablePeriods(rows)).toEqual(['2026-07']);
+    expect(monthlyPnL(rows, 'F', '2026-08').totalExpenses).toBe(0);
+    expect(trailingAverages(rows, 'F')).toMatchObject({ months: 1, avgExpenses: 0 });
+
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.months).toBe(1);
+    expect(runRate.annualExpenses).toBeCloseTo(3_600, 2);
+    expect(runRate.notes.join(' ')).toContain('scheduled costs inform this forward run-rate');
   });
 });
 
