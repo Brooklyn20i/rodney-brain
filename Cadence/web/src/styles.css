@@ -1965,6 +1965,30 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .cf-table tr.cf-total td { font-weight: 700; border-top: 2px solid var(--border); }
 .cf-table-wrap { overflow-x: auto; }
 
+@media (max-width: 480px) {
+  .cf-property-history-table th {
+    padding: 6px 4px;
+    font-size: 10px;
+  }
+
+  .cf-property-history-table td {
+    padding: 8px 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .cf-property-history-table th:first-child,
+  .cf-property-history-table td:first-child {
+    padding-left: 0;
+    white-space: normal;
+  }
+
+  .cf-property-history-table th:last-child,
+  .cf-property-history-table td:last-child {
+    padding-right: 0;
+  }
+}
+
 /* ── Investment performance screen ── */
 .inv-hero { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .inv-perf-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px; min-width: 0; }

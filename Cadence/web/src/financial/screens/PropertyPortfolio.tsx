@@ -9,10 +9,11 @@ import {
   portfolioMonth,
   propertyAnnualRunRate,
   propertyFinancials,
+  SCHEDULED_PROPERTY_LEDGER_NOTE,
   scheduledObligations,
   trailingAverages,
 } from '../lib/propertyCalc';
-import type { Loan, Property, PropertyLedgerCategory, PropertyType } from '../lib/types';
+import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerStatus, PropertyType } from '../lib/types';
 import { ThesisDossier } from '../components/ThesisDossier';
 import {
   EVIDENCE_GRADE_LABEL,
@@ -438,7 +439,7 @@ function PropertyDetailPage({
         {propPeriods.length > 0 && (
           <Card title="Actual monthly history">
             <div className="cf-table-wrap">
-              <table className="cf-table">
+              <table className="cf-table cf-property-history-table">
                 <thead>
                   <tr>
                     <th>Month</th>
@@ -596,7 +597,7 @@ function EditPropertyForm({
 }
 
 // ── Log a monthly statement ─────────────────────────────────────────────
-function StatementForm({
+export function StatementForm({
   properties,
   defaultPeriod,
   defaultPropertyId,
@@ -611,6 +612,7 @@ function StatementForm({
 }) {
   const [propertyId, setPropertyId] = useState(defaultPropertyId || properties[0]?.id || '');
   const [period, setPeriod] = useState(defaultPeriod);
+  const [status, setStatus] = useState<PropertyLedgerStatus>('actual');
   const [grade, setGrade] = useState('statement');
   const [source, setSource] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -632,9 +634,10 @@ function StatementForm({
           entry_date: `${period}-01`,
           category: line.category,
           amount: line.amount,
+          status,
           grade: grade as never,
           source: source.trim(),
-          notes: '',
+          notes: status === 'scheduled' ? SCHEDULED_PROPERTY_LEDGER_NOTE : '',
         });
       }
     } catch (e) {
@@ -661,6 +664,20 @@ function StatementForm({
         <div className="form-group">
           <label className="field">Period (YYYY-MM)</label>
           <input type="text" value={period} onChange={(e) => setPeriod(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="field">Entry basis</label>
+          <select
+            aria-label="Entry basis"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as PropertyLedgerStatus)}
+          >
+            <option value="actual">Actual — confirmed</option>
+            <option value="scheduled">Scheduled — future obligation</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+            Actual requires statement or payment evidence. Scheduled stays out of P&amp;L until confirmed.
+          </span>
         </div>
         <div className="form-group">
           <label className="field">Evidence grade</label>
@@ -691,7 +708,14 @@ function StatementForm({
               <tr key={c}>
                 <td style={{ textAlign: 'left', color: c === 'rent' || c === 'other_income' ? 'var(--green)' : undefined }}>{PROPERTY_CATEGORY_LABEL[c]}</td>
                 <td>
-                  <input type="text" style={{ width: 120, textAlign: 'right' }} value={amounts[c] ?? ''} placeholder="0" onChange={(e) => setAmounts((a) => ({ ...a, [c]: e.target.value }))} />
+                  <input
+                    aria-label={`${PROPERTY_CATEGORY_LABEL[c]} amount`}
+                    type="text"
+                    style={{ width: 120, textAlign: 'right' }}
+                    value={amounts[c] ?? ''}
+                    placeholder="0"
+                    onChange={(e) => setAmounts((a) => ({ ...a, [c]: e.target.value }))}
+                  />
                 </td>
               </tr>
             ))}

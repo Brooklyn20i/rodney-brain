@@ -19,6 +19,8 @@ export function isIncome(category: PropertyLedgerCategory): boolean {
   return INCOME_CATEGORIES.has(category);
 }
 
+export const SCHEDULED_PROPERTY_LEDGER_NOTE =
+  'Scheduled by instalment due date/payment timing. No payment or external action taken.';
 const LEGACY_SCHEDULED_PATTERN = /scheduled by instalment due date\/payment timing/i;
 const LEGACY_UNCONFIRMED_PATTERN = /no payment or external action taken/i;
 

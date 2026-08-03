@@ -472,7 +472,8 @@ export interface PropertyLedgerEntry {
   category: PropertyLedgerCategory;
   amount: number; // always positive; category determines income vs expense
   // Rows created before migration 0047 may arrive without status during a rolling deploy.
-  // Missing status is therefore treated as actual by propertyCalc.ts.
+  // propertyCalc.ts recognises the explicit legacy scheduled/no-action note; every
+  // other missing-status row is treated as actual.
   status?: PropertyLedgerStatus;
   grade: EvidenceGrade;
   source: string; // e.g. "May agent rent statement", "Q2 council rates notice"
