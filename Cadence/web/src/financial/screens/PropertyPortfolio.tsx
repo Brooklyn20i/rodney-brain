@@ -239,9 +239,9 @@ function PortfolioOverview({
                 </table>
               </div>
               <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
-                Weekly cashflow and yields use an annual run-rate: weekly rent where known, monthly costs as monthly,
-                quarterly bills as quarterly, annual bills as annual, and repairs as one-off. Tap a
-                property for its full returns dashboard, acquisition history and lease detail.
+                Weekly cashflow and yields use a forward annual run-rate: weekly rent where known, monthly costs as monthly,
+                quarterly bills as quarterly, annual bills as annual, and repairs as one-off. Known scheduled costs may inform
+                that forecast; actual P&amp;L, history and averages exclude them until confirmed. Tap a property for detail.
               </p>
             </Card>
           </>
@@ -315,8 +315,8 @@ function PropertyDetailPage({
         <div className="cf-metric-grid">
           <Metric label="Current value" value={formatMoney(f.value, true)} />
           <Metric label="Equity" value={formatMoney(f.equity, true)} delta={f.lvr !== null ? `${formatPercent(f.lvr)} LVR` : undefined} />
-          <Metric label="Net yield" value={pct(f.netYield)} delta={`gross ${pct(f.grossYield)}`} />
-          <Metric label="Weekly cashflow" value={`${formatMoney(f.weeklyCashflow)}/wk`} tone={f.weeklyCashflow >= 0 ? 'good' : 'bad'} />
+          <Metric label="Run-rate net yield" value={pct(f.netYield)} delta={`gross ${pct(f.grossYield)}`} />
+          <Metric label="Run-rate weekly cashflow" value={`${formatMoney(f.weeklyCashflow)}/wk`} tone={f.weeklyCashflow >= 0 ? 'good' : 'bad'} />
           <Metric label="Capital growth p.a." value={f.cagr === null ? '—' : pct(f.cagr)} delta={f.capitalGrowth ? `${formatMoney(f.capitalGrowth, true)} total` : undefined} tone={f.capitalGrowth >= 0 ? 'good' : 'bad'} />
           <Metric label="Total return" value={pct(f.totalReturnPct)} delta="income + growth" />
         </div>

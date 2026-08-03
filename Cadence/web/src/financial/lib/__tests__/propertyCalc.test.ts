@@ -254,6 +254,23 @@ describe('propertyAnnualRunRate', () => {
     const runRate = propertyAnnualRunRate(rows, p);
     expect(runRate.annualExpenses).toBeCloseTo(3600, 2); // 300 monthly accrual × 12
   });
+
+  it('uses known scheduled costs in forward run-rate but not actual results', () => {
+    const p = property('F', 700_000);
+    const rows = [
+      entry('F', '2026-07', 'rent', 2_000),
+      entry('F', '2026-08', 'council_rates', 900, 'scheduled'),
+    ];
+
+    expect(availablePeriods(rows)).toEqual(['2026-07']);
+    expect(monthlyPnL(rows, 'F', '2026-08').totalExpenses).toBe(0);
+    expect(trailingAverages(rows, 'F')).toMatchObject({ months: 1, avgExpenses: 0 });
+
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.months).toBe(1);
+    expect(runRate.annualExpenses).toBeCloseTo(3_600, 2);
+    expect(runRate.notes.join(' ')).toContain('scheduled costs inform this forward run-rate');
+  });
 });
 
 describe('propertyFinancials', () => {

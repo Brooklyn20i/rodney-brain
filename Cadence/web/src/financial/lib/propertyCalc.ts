@@ -261,7 +261,9 @@ function monthlyAccrualAnnualised(rows: PropertyLedgerEntry[]): number {
   return centsToDollars(Math.round((totalC / periods.length) * 12));
 }
 
-// Converts actual property-ledger lines into a sensible annual run-rate.
+// Converts known property cost evidence into a forward annual run-rate.
+// Confirmed rows feed actual P&L/history. Known scheduled obligations may inform
+// this forecast but remain excluded from actual selectors, P&L and averages.
 // Important: not every ledger row is monthly. Water/council/body-corp bills are
 // usually quarterly; insurance/land tax are often annual; repairs are one-off.
 // The old trailing.avgNet × 12 approach treated one quarterly water bill as if
@@ -301,6 +303,9 @@ export function propertyAnnualRunRate(
   const notes: string[] = [];
   if (months < 3) notes.push(`Only ${months} ledger month${months === 1 ? '' : 's'} on file.`);
   if (weeklyRent <= 0 && trailing.avgIncome <= 0) notes.push('No rent baseline on file.');
+  if (rows.some(isScheduledEntry)) {
+    notes.push('Known scheduled costs inform this forward run-rate; they remain excluded from actual results.');
+  }
   notes.push('Quarterly bills are annualised ×4; annual bills ×1; repairs are treated as one-off.');
 
   return {
