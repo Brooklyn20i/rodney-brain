@@ -461,6 +461,8 @@ export type PropertyLedgerCategory =
   | 'utilities'
   | 'other_expense';
 
+export type PropertyLedgerStatus = 'actual' | 'scheduled';
+
 export interface PropertyLedgerEntry {
   id: string;
   owner_id: string;
@@ -469,6 +471,9 @@ export interface PropertyLedgerEntry {
   entry_date: string | null; // 'YYYY-MM-DD', optional actual date on the statement
   category: PropertyLedgerCategory;
   amount: number; // always positive; category determines income vs expense
+  // Rows created before migration 0047 may arrive without status during a rolling deploy.
+  // Missing status is therefore treated as actual by propertyCalc.ts.
+  status?: PropertyLedgerStatus;
   grade: EvidenceGrade;
   source: string; // e.g. "May agent rent statement", "Q2 council rates notice"
   notes: string;

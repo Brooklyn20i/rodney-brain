@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import {
@@ -9,6 +9,7 @@ import {
   portfolioMonth,
   propertyAnnualRunRate,
   propertyFinancials,
+  scheduledObligations,
   trailingAverages,
 } from '../lib/propertyCalc';
 import type { Loan, Property, PropertyLedgerCategory, PropertyType } from '../lib/types';
@@ -51,10 +52,14 @@ export function PropertyPortfolio({ onMenu }: { onMenu: () => void }) {
   const properties = data.properties;
   const loansFor = (id: string) => data.loans.filter((l) => l.property_id === id);
 
-  const periods = availablePeriods(ledger);
+  const periods = useMemo(() => availablePeriods(ledger), [ledger]);
   const latest = periods.length ? periods[periods.length - 1] : thisMonth();
   const [period, setPeriod] = useState(latest);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (periods.length > 0 && !periods.includes(period)) setPeriod(periods[periods.length - 1]);
+  }, [period, periods]);
 
   const selected = selectedId ? properties.find((p) => p.id === selectedId) ?? null : null;
 
@@ -275,6 +280,7 @@ function PropertyDetailPage({
   const f = propertyFinancials(property, loans, trailing, new Date(), runRate);
   const pnl = monthlyPnL(ledger, property.id, period);
   const propPeriods = availablePeriods(ledger.filter((e) => e.property_id === property.id));
+  const upcoming = scheduledObligations(ledger, property.id);
 
   const physical = [
     property.property_type ? PROPERTY_TYPE_LABEL[property.property_type] : null,
@@ -361,7 +367,7 @@ function PropertyDetailPage({
           </Card>
         </div>
 
-        <Card title={`P&L — ${monthLabel(period)}`}>
+        <Card title={`Actual P&L — ${monthLabel(period)}`}>
           {periods.length > 1 && (
             <select value={period} onChange={(e) => onPeriod(e.target.value)} style={{ width: 'auto', marginBottom: 12 }}>
               {periods.map((p) => (
@@ -401,8 +407,36 @@ function PropertyDetailPage({
           </div>
         </Card>
 
+        {upcoming.length > 0 && (
+          <Card title="Upcoming obligations">
+            <p style={{ fontSize: 12, color: 'var(--text2)', margin: '0 0 10px' }}>
+              Scheduled only — excluded from actual P&amp;L, history and averages until payment is confirmed.
+            </p>
+            <div className="cf-table-wrap">
+              <table className="cf-table">
+                <thead>
+                  <tr>
+                    <th>Due</th>
+                    <th>Item</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcoming.map((row) => (
+                    <tr key={row.id}>
+                      <td style={{ textAlign: 'left' }}>{row.entry_date ? fmtDMY(row.entry_date) : monthLabel(row.period)}</td>
+                      <td style={{ textAlign: 'left' }}>{PROPERTY_CATEGORY_LABEL[row.category]}</td>
+                      <td style={{ color: 'var(--orange)', fontWeight: 600 }}>{formatMoney(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
         {propPeriods.length > 0 && (
-          <Card title="Monthly history">
+          <Card title="Actual monthly history">
             <div className="cf-table-wrap">
               <table className="cf-table">
                 <thead>
@@ -428,7 +462,7 @@ function PropertyDetailPage({
                 </tbody>
                 <tfoot>
                   <tr className="cf-total">
-                    <td>Avg / mo ({trailing.months})</td>
+                    <td>Actual avg / mo ({trailing.months})</td>
                     <td>{formatMoney(trailing.avgIncome)}</td>
                     <td>{formatMoney(trailing.avgExpenses)}</td>
                     <td>{formatMoney(trailing.avgNet)}</td>
