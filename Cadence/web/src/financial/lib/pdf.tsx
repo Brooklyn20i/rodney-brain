@@ -189,16 +189,25 @@ export function MonthlyAssessmentDocument({ sections }: { sections: MonthlyAsses
   );
 }
 
-export async function exportMonthlyAssessmentPdf(
-  data: CadenceFinancialData,
-  targetWindow: Window | null = null
-): Promise<void> {
+export interface PreparedMonthlyAssessmentPdf {
+  blob: Blob;
+  filename: string;
+}
+
+export async function prepareMonthlyAssessmentPdf(
+  data: CadenceFinancialData
+): Promise<PreparedMonthlyAssessmentPdf | null> {
   const sections = buildMonthlyAssessmentSections(data);
-  if (!sections) return;
+  if (!sections) return null;
   const blob = await pdf(<MonthlyAssessmentDocument sections={sections} />).toBlob();
-  deliverPdfBlob(
+  return {
     blob,
-    `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`,
-    targetWindow
-  );
+    filename: `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`,
+  };
+}
+
+export async function exportMonthlyAssessmentPdf(data: CadenceFinancialData): Promise<void> {
+  const prepared = await prepareMonthlyAssessmentPdf(data);
+  if (!prepared) return;
+  deliverPdfBlob(prepared.blob, prepared.filename);
 }
