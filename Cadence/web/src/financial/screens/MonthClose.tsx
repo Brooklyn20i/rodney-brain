@@ -1,29 +1,77 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { MonthCloseWizard } from '../components/MonthCloseWizard';
 import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
-import { preparePdfDeliveryTarget } from '../lib/pdfDelivery';
+import { deliverPdfBlob, requiresInteractivePdfDelivery, sharePdfBlob } from '../lib/pdfDelivery';
+
+type PreparedPdf = { blob: Blob; filename: string };
 
 export function MonthClose({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
   const [showWizard, setShowWizard] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [preparedPdf, setPreparedPdf] = useState<PreparedPdf | null>(null);
+  const [preparedPdfUrl, setPreparedPdfUrl] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const months = data.monthly_metrics;
+
+  useEffect(() => {
+    return () => {
+      if (preparedPdfUrl) URL.revokeObjectURL(preparedPdfUrl);
+    };
+  }, [preparedPdfUrl]);
+
+  useEffect(() => {
+    setPreparedPdf(null);
+    setPreparedPdfUrl(null);
+    setPdfError(null);
+  }, [data]);
+
+  const clearPreparedPdf = () => {
+    setPreparedPdfUrl(null);
+    setPreparedPdf(null);
+  };
 
   // The PDF renderer (@react-pdf, ~220 KB gzip) is loaded ONLY when someone
   // actually exports — not baked into the Month Close chunk — so viewing this
-  // screen stays light. Dynamic import; the chunk is cached after first use.
+  // screen stays light. iPhone/iPad get a prepared file and a fresh explicit
+  // share/save tap; this avoids iOS leaving an asynchronously opened tab blank.
   const downloadPdf = async () => {
     if (exporting) return;
-    const targetWindow = preparePdfDeliveryTarget();
     setExporting(true);
+    setPdfError(null);
     try {
-      const { exportMonthlyAssessmentPdf } = await import('../lib/pdf');
-      await exportMonthlyAssessmentPdf(data, targetWindow);
+      const { prepareMonthlyAssessmentPdf } = await import('../lib/pdf');
+      const prepared = await prepareMonthlyAssessmentPdf(data);
+      if (!prepared) throw new Error('No monthly close is available to export.');
+
+      if (requiresInteractivePdfDelivery()) {
+        clearPreparedPdf();
+        setPreparedPdf(prepared);
+        setPreparedPdfUrl(URL.createObjectURL(prepared.blob));
+      } else {
+        deliverPdfBlob(prepared.blob, prepared.filename);
+      }
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : 'The monthly PDF could not be prepared.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const sharePreparedPdf = async () => {
+    if (!preparedPdf) return;
+    setPdfError(null);
+    try {
+      const shared = await sharePdfBlob(preparedPdf.blob, preparedPdf.filename);
+      if (!shared) {
+        setPdfError('Native sharing is unavailable here. Use “Open PDF directly” below.');
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setPdfError('Sharing did not open. Use “Open PDF directly” below.');
     }
   };
 
@@ -59,6 +107,31 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
         </button>
       </ScreenHeader>
       <div className="screen-content">
+        {preparedPdf && preparedPdfUrl && (
+          <div className="cf-callout" role="status">
+            <strong>Your monthly PDF is ready.</strong>{' '}
+            Tap the button below to open the iPhone/iPad share sheet, then choose Save to Files,
+            AirDrop, Mail or another destination.
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <button className="btn btn-primary btn-sm" onClick={sharePreparedPdf}>
+                Share or save PDF
+              </button>
+              <a
+                className="btn btn-secondary btn-sm"
+                href={preparedPdfUrl}
+                download={preparedPdf.filename}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open PDF directly
+              </a>
+              <button className="btn btn-secondary btn-sm" onClick={clearPreparedPdf}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+        {pdfError && <div className="cf-callout" role="alert">{pdfError}</div>}
         {showWizard && <MonthCloseWizard prior={current} onDone={() => setShowWizard(false)} />}
         <div className="cf-callout">{buildExecutiveSummary(bridge, label)}</div>
 

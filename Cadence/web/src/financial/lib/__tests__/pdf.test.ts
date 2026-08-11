@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pdf } from '@react-pdf/renderer';
-import { buildMonthlyAssessmentSections, MonthlyAssessmentDocument } from '../pdf';
-import { deliverPdfBlob, preparePdfDeliveryTarget } from '../pdfDelivery';
+import {
+  buildMonthlyAssessmentSections,
+  MonthlyAssessmentDocument,
+  prepareMonthlyAssessmentPdf,
+} from '../pdf';
+import { deliverPdfBlob, requiresInteractivePdfDelivery, sharePdfBlob } from '../pdfDelivery';
 import { loadDemoData } from '../demoData';
 import { emptyData } from '../types';
 import { monthLabel } from '../util';
@@ -44,6 +48,16 @@ describe('MonthlyAssessmentDocument', () => {
     expect(out.length).toBeGreaterThan(0);
     expect(out.subarray(0, 4).toString('ascii')).toBe('%PDF');
   });
+
+  it('prepares the rendered file without trying to deliver it', async () => {
+    const prepared = await prepareMonthlyAssessmentPdf(loadDemoData());
+
+    expect(prepared).not.toBeNull();
+    expect(prepared!.filename).toContain('Cadence Financial Monthly Assessment');
+    expect(prepared!.filename).toContain(monthLabel('2025-07'));
+    expect(prepared!.blob.type).toBe('application/pdf');
+    expect(prepared!.blob.size).toBeGreaterThan(0);
+  });
 });
 
 describe('PDF delivery', () => {
@@ -53,32 +67,55 @@ describe('PDF delivery', () => {
     vi.restoreAllMocks();
   });
 
-  it('opens an iOS delivery target synchronously before PDF rendering starts', () => {
-    const target = { location: { href: 'about:blank' }, close: vi.fn() };
+  it('keeps iOS delivery inside the app until the user explicitly shares or saves it', () => {
     vi.stubGlobal('navigator', {
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
       platform: 'iPhone',
       maxTouchPoints: 1,
     });
-    const open = vi.spyOn(window, 'open').mockReturnValue(target as unknown as Window);
+    const open = vi.spyOn(window, 'open');
 
-    expect(preparePdfDeliveryTarget()).toBe(target);
-    expect(open).toHaveBeenCalledWith('', '_blank');
+    expect(requiresInteractivePdfDelivery()).toBe(true);
+    expect(open).not.toHaveBeenCalled();
   });
 
-  it('navigates the pre-opened iOS target to the PDF and keeps the blob URL alive', () => {
-    vi.useFakeTimers();
-    const target = { location: { href: 'about:blank' }, close: vi.fn() };
-    const createObjectURL = vi.fn(() => 'blob:cadence-report');
-    const revokeObjectURL = vi.fn();
-    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+  it('shares a prepared PDF from a fresh iOS user gesture', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    const canShare = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+      platform: 'iPhone',
+      maxTouchPoints: 1,
+      share,
+      canShare,
+    });
 
-    deliverPdfBlob(new Blob(['pdf'], { type: 'application/pdf' }), 'August.pdf', target as unknown as Window);
+    const shared = await sharePdfBlob(
+      new Blob(['pdf'], { type: 'application/pdf' }),
+      'August.pdf'
+    );
 
-    expect(target.location.href).toBe('blob:cadence-report');
-    expect(revokeObjectURL).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(20_000);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:cadence-report');
+    expect(shared).toBe(true);
+    expect(canShare).toHaveBeenCalledOnce();
+    expect(share).toHaveBeenCalledWith({
+      files: [expect.any(File)],
+      title: 'August.pdf',
+    });
+    const sharedFile = share.mock.calls[0][0].files[0] as File;
+    expect(sharedFile.name).toBe('August.pdf');
+    expect(sharedFile.type).toBe('application/pdf');
+  });
+
+  it('reports when native file sharing is unavailable so the UI can show a direct link', async () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+      platform: 'iPhone',
+      maxTouchPoints: 1,
+    });
+
+    await expect(
+      sharePdfBlob(new Blob(['pdf'], { type: 'application/pdf' }), 'August.pdf')
+    ).resolves.toBe(false);
   });
 
   it('uses an anchor download on non-iOS browsers', () => {
@@ -91,7 +128,7 @@ describe('PDF delivery', () => {
     const revokeObjectURL = vi.fn();
     vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:desktop-report'), revokeObjectURL });
 
-    deliverPdfBlob(new Blob(['pdf'], { type: 'application/pdf' }), 'August.pdf', null);
+    deliverPdfBlob(new Blob(['pdf'], { type: 'application/pdf' }), 'August.pdf');
 
     expect(anchor.download).toBe('August.pdf');
     expect(click).toHaveBeenCalledOnce();
