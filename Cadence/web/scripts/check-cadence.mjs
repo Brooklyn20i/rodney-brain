@@ -18,6 +18,14 @@ const vercelConfig = read('vercel.json');
 for (const header of ['Content-Security-Policy', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'X-Frame-Options']) {
   assert(vercelConfig.includes(header), `vercel.json must set ${header}.`);
 }
+assert(
+  vercelConfig.includes("script-src 'self' 'wasm-unsafe-eval'"),
+  "Content-Security-Policy must permit WebAssembly compilation for the client-side PDF renderer.",
+);
+assert(
+  vercelConfig.includes("connect-src 'self' data:"),
+  "Content-Security-Policy must permit the PDF renderer to fetch its embedded WebAssembly data URL.",
+);
 
 const workflow = read('../../.github/workflows/cadence-web.yml');
 const productionWatchdog = read('../../.github/workflows/cadence-production-watchdog.yml');
