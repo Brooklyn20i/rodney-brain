@@ -4,6 +4,7 @@ import { ScreenHeader, Card, Metric } from '../components/bits';
 import { MonthCloseWizard } from '../components/MonthCloseWizard';
 import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
+import { preparePdfDeliveryTarget } from '../lib/pdfDelivery';
 
 export function MonthClose({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
@@ -16,10 +17,11 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
   // screen stays light. Dynamic import; the chunk is cached after first use.
   const downloadPdf = async () => {
     if (exporting) return;
+    const targetWindow = preparePdfDeliveryTarget();
     setExporting(true);
     try {
       const { exportMonthlyAssessmentPdf } = await import('../lib/pdf');
-      await exportMonthlyAssessmentPdf(data);
+      await exportMonthlyAssessmentPdf(data, targetWindow);
     } finally {
       setExporting(false);
     }

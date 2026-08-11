@@ -14,6 +14,7 @@ import {
   summarizePeriod,
 } from './financeCalc';
 import { EVIDENCE_GRADE_LABEL, formatMoney, monthLabel, periodRange } from './util';
+import { deliverPdfBlob } from './pdfDelivery';
 
 export interface MonthlyAssessmentSections {
   periodLabel: string;
@@ -188,16 +189,16 @@ export function MonthlyAssessmentDocument({ sections }: { sections: MonthlyAsses
   );
 }
 
-export async function exportMonthlyAssessmentPdf(data: CadenceFinancialData): Promise<void> {
+export async function exportMonthlyAssessmentPdf(
+  data: CadenceFinancialData,
+  targetWindow: Window | null = null
+): Promise<void> {
   const sections = buildMonthlyAssessmentSections(data);
   if (!sections) return;
   const blob = await pdf(<MonthlyAssessmentDocument sections={sections} />).toBlob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  deliverPdfBlob(
+    blob,
+    `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`,
+    targetWindow
+  );
 }
