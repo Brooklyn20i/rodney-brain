@@ -2190,16 +2190,16 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 }
 
 /* rest timer */
-.rest-timer { position: sticky; top: 0; z-index: 5; background: var(--sidebar-bg); color: #fff; border-radius: 14px; padding: 12px 14px 10px; margin-bottom: 14px; box-shadow: var(--shadow-md); }
-.rest-timer-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rest-timer-label { font-size: 11px; font-weight: 600; letter-spacing: 0.4px; opacity: 0.7; text-transform: uppercase; }
-.rest-timer-time { flex: 1 1 auto; min-width: 58px; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
-.rest-timer-state { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.14); }
+.rest-timer { position: sticky; top: 0; z-index: 5; background: var(--sidebar-bg); color: #fff; border-radius: 16px; padding: 12px 16px 12px; margin-bottom: 14px; box-shadow: var(--shadow-md); }
+.rest-timer-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rest-timer-label { font-size: 10px; font-weight: 700; letter-spacing: 1px; opacity: 0.55; text-transform: uppercase; }
+.rest-timer-time { flex: 1 1 auto; min-width: 58px; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -1px; line-height: 1; }
+.rest-timer-state { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.12); }
 .rest-timer-state.warn { background: rgba(251,191,36,0.22); color: #FEF3C7; }
 .rest-timer-state.saved { background: rgba(74,222,128,0.18); color: #DCFCE7; }
-.rest-timer-skip { background: rgba(255,255,255,0.14); color: #fff; border: none; border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
-.rest-timer-track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.14); margin-top: 10px; overflow: hidden; }
-.rest-timer-fill { height: 100%; border-radius: 3px; background: var(--accent-lt); transition: width 1s linear; }
+.rest-timer-skip { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.rest-timer-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.12); margin-top: 10px; overflow: hidden; }
+.rest-timer-fill { height: 100%; border-radius: 2px; background: var(--accent-lt); transition: width 1s linear; }
 .rest-timer.done { background: #14532D; }
 .rest-timer.done .rest-timer-time { color: #4ADE80; }
 .rest-timer.done .rest-timer-fill { background: #4ADE80; }
@@ -2211,7 +2211,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 /* The button is a 44px tap target; the visible segment is a thin inner bar so
    the navigator stays slim while remaining reachable one-handed. */
 .gym-seg-item { flex: 1; min-height: 44px; border: none; padding: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
-.gym-seg-bar { width: 100%; height: 7px; border-radius: 4px; background: var(--border); transition: background 0.2s; }
+.gym-seg-bar { width: 100%; height: 5px; border-radius: 3px; background: var(--border); transition: background 0.2s; }
 .gym-seg-glyph { font-size: 11px; line-height: 1; height: 12px; font-weight: 800; color: var(--text3); }
 .gym-seg-item.complete .gym-seg-bar { background: var(--green); }
 .gym-seg-item.complete .gym-seg-glyph { color: var(--green); }
@@ -2220,21 +2220,50 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-head-label { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text2); }
 .gym-head-label strong { color: var(--text); font-weight: 800; }
 .gym-head-done { color: var(--green); font-weight: 700; }
-.wo-exercise.gym { padding: 20px 18px; border-radius: 18px; }
-.wo-exercise.gym .wo-exercise-name { font-size: 23px; }
+/* Gym Focus visual language: the screen IS the card. The exercise block goes
+   full-bleed (no box-in-box), each set is ONE soft block with bare numbers and
+   ghost circular steppers — no triple-nested borders. Hit targets stay ≥44px
+   (the layout e2e measures them); only the chrome slims down. */
+.wo-exercise.gym { padding: 6px 0 2px; border: none; border-radius: 0; background: transparent; box-shadow: none; }
+.wo-exercise.gym .wo-exercise-name { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.wo-exercise.gym .wo-chips { align-items: center; gap: 8px; margin-bottom: 14px; }
+/* Target + last-time read as quiet metadata, not a row of boxes; only the
+   rest picker keeps button chrome (it's tappable). */
+.wo-exercise.gym .wo-chip-target { background: none; border: none; padding: 0; color: var(--accent); font-weight: 700; }
+.wo-exercise.gym .wo-chip-btn { border-radius: 999px; background: var(--surface2); border-color: transparent; padding: 5px 12px; }
+.wo-exercise.gym .wo-chip-last { flex-basis: 100%; background: none; border: none; padding: 0; color: var(--text3); font-weight: 500; }
 /* Gym Focus set rows stack vertically: a number/check header line, then each
    stepper on its own full-width row — so the value is always readable and every
    touch target clears 44px, even on a 320px phone, where a single side-by-side
    row (weight ± / reps ± / check) collapsed the inputs to a few pixels. */
 .wo-exercise.gym .wo-set-labels { display: none; }
-.wo-exercise.gym .wo-set-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+.wo-exercise.gym .wo-set-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+  padding: 14px 14px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.wo-exercise.gym .wo-set-row.wo-set-done { background: var(--green-bg); border-color: transparent; box-shadow: none; }
 .wo-set-row-head { display: flex; align-items: center; justify-content: space-between; }
-.wo-set-fields { display: flex; flex-direction: column; gap: 8px; }
-.wo-exercise.gym .wo-step-group { width: 100%; gap: 6px; }
-.wo-exercise.gym .wo-step-group input { flex: 1; min-width: 0; padding: 12px 4px; font-size: 18px; }
-.wo-exercise.gym .wo-set-check { flex-shrink: 0; width: 46px; height: 46px; font-size: 22px; border-radius: 12px; }
-.wo-exercise.gym .wo-step { flex-shrink: 0; width: 46px; height: 46px; font-size: 22px; border-radius: 10px; }
-.wo-step-label { flex: 0 0 28px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text3); }
+.wo-set-fields { display: flex; flex-direction: column; gap: 2px; }
+.wo-exercise.gym .wo-step-group { width: 100%; gap: 8px; align-items: center; }
+/* Bare number, no input box — the block is the surface. Focus gets a soft pad. */
+.wo-exercise.gym .wo-step-group input { flex: 1; min-width: 0; padding: 8px 4px; font-size: 26px;
+  font-weight: 800; letter-spacing: -0.5px; border: none; background: transparent; border-radius: 10px; }
+.wo-exercise.gym .wo-step-group input:focus { background: var(--surface2); box-shadow: none; }
+.wo-exercise.gym .wo-set-row.wo-set-done input { color: var(--text2); }
+/* Set number: quiet index, not a badge. */
+.wo-exercise.gym .wo-set-num { width: auto; height: auto; margin: 0; border: none; background: none;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.6px; color: var(--text3); }
+.wo-exercise.gym .wo-set-num::before { content: 'SET\00a0'; }
+.wo-exercise.gym .wo-set-row.wo-set-done .wo-set-num { color: var(--green); }
+/* Check + steppers: ghost circles — one accent moment (the green check). */
+.wo-exercise.gym .wo-set-check { flex-shrink: 0; width: 46px; height: 46px; font-size: 20px; border-radius: 999px; border-width: 1.5px; }
+.wo-exercise.gym .wo-step { flex-shrink: 0; width: 46px; height: 46px; font-size: 22px; border-radius: 999px;
+  border: none; background: var(--surface2); color: var(--text2); }
+.wo-exercise.gym .wo-set-row.wo-set-done .wo-step { opacity: 0.3; }
+.wo-step-label { flex: 0 0 34px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); }
+/* The rep-range placeholder is a HINT, never a value — keep it clearly smaller
+   and dimmer than a real number so "5–8" can't be misread as logged reps. */
+.wo-set-row input::placeholder { color: var(--text3); opacity: 0.5; font-weight: 600; font-size: 0.65em; letter-spacing: 0; }
+.wo-exercise.gym .wo-add-set { border-radius: 999px; }
 /* Docked footer for Gym Focus: the rest timer (only while one is running) and
    Prev/Next pin to the bottom of the scrollport, so mid-set nothing overlays
    the exercise card and the nav is never cut off by the home indicator. Sticky
@@ -2245,7 +2274,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-dock .rest-timer { position: static; margin-bottom: 10px; }
 .gym-dock .gym-nav { margin-top: 0; padding: 0; }
 .gym-nav { position: static; display: flex; gap: 10px; margin-top: 16px; padding: 12px 0 calc(6px + var(--safe-bottom)); }
-.gym-nav .btn { flex: 1; justify-content: center; padding: 16px; font-size: 15px; font-weight: 700; border-radius: 14px; }
+.gym-nav .btn { flex: 1; justify-content: center; padding: 16px; font-size: 15px; font-weight: 700; border-radius: 999px; }
 /* The Next button names the next exercise — keep long names on one tidy line. */
 .gym-nav .gym-nav-next { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .rest-timer-icon { padding: 8px 10px; font-size: 15px; line-height: 1; }
@@ -2287,7 +2316,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
     margin-bottom: 6px;
   }
   body.gym-focus-orientation-active .screen-content.gym-mode .wo-exercise.gym {
-    padding: 14px;
+    padding: 4px 0;
   }
   body.gym-focus-orientation-active .screen-content.gym-mode .wo-exercise.gym .wo-exercise-name {
     font-size: 20px;
