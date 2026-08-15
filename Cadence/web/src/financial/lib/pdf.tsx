@@ -14,6 +14,7 @@ import {
   summarizePeriod,
 } from './financeCalc';
 import { EVIDENCE_GRADE_LABEL, formatMoney, monthLabel, periodRange } from './util';
+import { deliverPdfBlob } from './pdfDelivery';
 
 export interface MonthlyAssessmentSections {
   periodLabel: string;
@@ -188,16 +189,25 @@ export function MonthlyAssessmentDocument({ sections }: { sections: MonthlyAsses
   );
 }
 
-export async function exportMonthlyAssessmentPdf(data: CadenceFinancialData): Promise<void> {
+export interface PreparedMonthlyAssessmentPdf {
+  blob: Blob;
+  filename: string;
+}
+
+export async function prepareMonthlyAssessmentPdf(
+  data: CadenceFinancialData
+): Promise<PreparedMonthlyAssessmentPdf | null> {
   const sections = buildMonthlyAssessmentSections(data);
-  if (!sections) return;
+  if (!sections) return null;
   const blob = await pdf(<MonthlyAssessmentDocument sections={sections} />).toBlob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  return {
+    blob,
+    filename: `Cadence Financial Monthly Assessment - ${sections.periodLabel}.pdf`,
+  };
+}
+
+export async function exportMonthlyAssessmentPdf(data: CadenceFinancialData): Promise<void> {
+  const prepared = await prepareMonthlyAssessmentPdf(data);
+  if (!prepared) return;
+  deliverPdfBlob(prepared.blob, prepared.filename);
 }

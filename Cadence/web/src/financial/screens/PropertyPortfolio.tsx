@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import {
@@ -9,9 +9,11 @@ import {
   portfolioMonth,
   propertyAnnualRunRate,
   propertyFinancials,
+  SCHEDULED_PROPERTY_LEDGER_NOTE,
+  scheduledObligations,
   trailingAverages,
 } from '../lib/propertyCalc';
-import type { Loan, Property, PropertyLedgerCategory, PropertyType } from '../lib/types';
+import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerStatus, PropertyType } from '../lib/types';
 import { ThesisDossier } from '../components/ThesisDossier';
 import {
   EVIDENCE_GRADE_LABEL,
@@ -51,10 +53,14 @@ export function PropertyPortfolio({ onMenu }: { onMenu: () => void }) {
   const properties = data.properties;
   const loansFor = (id: string) => data.loans.filter((l) => l.property_id === id);
 
-  const periods = availablePeriods(ledger);
+  const periods = useMemo(() => availablePeriods(ledger), [ledger]);
   const latest = periods.length ? periods[periods.length - 1] : thisMonth();
   const [period, setPeriod] = useState(latest);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (periods.length > 0 && !periods.includes(period)) setPeriod(periods[periods.length - 1]);
+  }, [period, periods]);
 
   const selected = selectedId ? properties.find((p) => p.id === selectedId) ?? null : null;
 
@@ -233,9 +239,9 @@ function PortfolioOverview({
                 </table>
               </div>
               <p style={{ fontSize: 12, color: 'var(--text2)', marginTop: 10 }}>
-                Weekly cashflow and yields use an annual run-rate: weekly rent where known, monthly costs as monthly,
-                quarterly bills as quarterly, annual bills as annual, and repairs as one-off. Tap a
-                property for its full returns dashboard, acquisition history and lease detail.
+                Weekly cashflow and yields use a forward annual run-rate: weekly rent where known, monthly costs as monthly,
+                quarterly bills as quarterly, annual bills as annual, and repairs as one-off. Known scheduled costs may inform
+                that forecast; actual P&amp;L, history and averages exclude them until confirmed. Tap a property for detail.
               </p>
             </Card>
           </>
@@ -275,6 +281,7 @@ function PropertyDetailPage({
   const f = propertyFinancials(property, loans, trailing, new Date(), runRate);
   const pnl = monthlyPnL(ledger, property.id, period);
   const propPeriods = availablePeriods(ledger.filter((e) => e.property_id === property.id));
+  const upcoming = scheduledObligations(ledger, property.id);
 
   const physical = [
     property.property_type ? PROPERTY_TYPE_LABEL[property.property_type] : null,
@@ -308,8 +315,8 @@ function PropertyDetailPage({
         <div className="cf-metric-grid">
           <Metric label="Current value" value={formatMoney(f.value, true)} />
           <Metric label="Equity" value={formatMoney(f.equity, true)} delta={f.lvr !== null ? `${formatPercent(f.lvr)} LVR` : undefined} />
-          <Metric label="Net yield" value={pct(f.netYield)} delta={`gross ${pct(f.grossYield)}`} />
-          <Metric label="Weekly cashflow" value={`${formatMoney(f.weeklyCashflow)}/wk`} tone={f.weeklyCashflow >= 0 ? 'good' : 'bad'} />
+          <Metric label="Run-rate net yield" value={pct(f.netYield)} delta={`gross ${pct(f.grossYield)}`} />
+          <Metric label="Run-rate weekly cashflow" value={`${formatMoney(f.weeklyCashflow)}/wk`} tone={f.weeklyCashflow >= 0 ? 'good' : 'bad'} />
           <Metric label="Capital growth p.a." value={f.cagr === null ? '—' : pct(f.cagr)} delta={f.capitalGrowth ? `${formatMoney(f.capitalGrowth, true)} total` : undefined} tone={f.capitalGrowth >= 0 ? 'good' : 'bad'} />
           <Metric label="Total return" value={pct(f.totalReturnPct)} delta="income + growth" />
         </div>
@@ -361,7 +368,7 @@ function PropertyDetailPage({
           </Card>
         </div>
 
-        <Card title={`P&L — ${monthLabel(period)}`}>
+        <Card title={`Actual P&L — ${monthLabel(period)}`}>
           {periods.length > 1 && (
             <select value={period} onChange={(e) => onPeriod(e.target.value)} style={{ width: 'auto', marginBottom: 12 }}>
               {periods.map((p) => (
@@ -401,10 +408,38 @@ function PropertyDetailPage({
           </div>
         </Card>
 
-        {propPeriods.length > 0 && (
-          <Card title="Monthly history">
+        {upcoming.length > 0 && (
+          <Card title="Upcoming obligations">
+            <p style={{ fontSize: 12, color: 'var(--text2)', margin: '0 0 10px' }}>
+              Scheduled only — excluded from actual P&amp;L, history and averages until payment is confirmed.
+            </p>
             <div className="cf-table-wrap">
               <table className="cf-table">
+                <thead>
+                  <tr>
+                    <th>Due</th>
+                    <th>Item</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcoming.map((row) => (
+                    <tr key={row.id}>
+                      <td style={{ textAlign: 'left' }}>{row.entry_date ? fmtDMY(row.entry_date) : monthLabel(row.period)}</td>
+                      <td style={{ textAlign: 'left' }}>{PROPERTY_CATEGORY_LABEL[row.category]}</td>
+                      <td style={{ color: 'var(--orange)', fontWeight: 600 }}>{formatMoney(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
+        {propPeriods.length > 0 && (
+          <Card title="Actual monthly history">
+            <div className="cf-table-wrap">
+              <table className="cf-table cf-property-history-table">
                 <thead>
                   <tr>
                     <th>Month</th>
@@ -428,7 +463,7 @@ function PropertyDetailPage({
                 </tbody>
                 <tfoot>
                   <tr className="cf-total">
-                    <td>Avg / mo ({trailing.months})</td>
+                    <td>Actual avg / mo ({trailing.months})</td>
                     <td>{formatMoney(trailing.avgIncome)}</td>
                     <td>{formatMoney(trailing.avgExpenses)}</td>
                     <td>{formatMoney(trailing.avgNet)}</td>
@@ -562,7 +597,7 @@ function EditPropertyForm({
 }
 
 // ── Log a monthly statement ─────────────────────────────────────────────
-function StatementForm({
+export function StatementForm({
   properties,
   defaultPeriod,
   defaultPropertyId,
@@ -577,6 +612,7 @@ function StatementForm({
 }) {
   const [propertyId, setPropertyId] = useState(defaultPropertyId || properties[0]?.id || '');
   const [period, setPeriod] = useState(defaultPeriod);
+  const [status, setStatus] = useState<PropertyLedgerStatus>('actual');
   const [grade, setGrade] = useState('statement');
   const [source, setSource] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -598,9 +634,10 @@ function StatementForm({
           entry_date: `${period}-01`,
           category: line.category,
           amount: line.amount,
+          status,
           grade: grade as never,
           source: source.trim(),
-          notes: '',
+          notes: status === 'scheduled' ? SCHEDULED_PROPERTY_LEDGER_NOTE : '',
         });
       }
     } catch (e) {
@@ -627,6 +664,20 @@ function StatementForm({
         <div className="form-group">
           <label className="field">Period (YYYY-MM)</label>
           <input type="text" value={period} onChange={(e) => setPeriod(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="field">Entry basis</label>
+          <select
+            aria-label="Entry basis"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as PropertyLedgerStatus)}
+          >
+            <option value="actual">Actual — confirmed</option>
+            <option value="scheduled">Scheduled — future obligation</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+            Actual requires statement or payment evidence. Scheduled stays out of P&amp;L until confirmed.
+          </span>
         </div>
         <div className="form-group">
           <label className="field">Evidence grade</label>
@@ -657,7 +708,14 @@ function StatementForm({
               <tr key={c}>
                 <td style={{ textAlign: 'left', color: c === 'rent' || c === 'other_income' ? 'var(--green)' : undefined }}>{PROPERTY_CATEGORY_LABEL[c]}</td>
                 <td>
-                  <input type="text" style={{ width: 120, textAlign: 'right' }} value={amounts[c] ?? ''} placeholder="0" onChange={(e) => setAmounts((a) => ({ ...a, [c]: e.target.value }))} />
+                  <input
+                    aria-label={`${PROPERTY_CATEGORY_LABEL[c]} amount`}
+                    type="text"
+                    style={{ width: 120, textAlign: 'right' }}
+                    value={amounts[c] ?? ''}
+                    placeholder="0"
+                    onChange={(e) => setAmounts((a) => ({ ...a, [c]: e.target.value }))}
+                  />
                 </td>
               </tr>
             ))}
