@@ -60,6 +60,7 @@ const control = {
 };
 
 const STAMP = { owner_id: 't', created_at: '2026-07-01', updated_at: '2026-07-01', deleted_at: null };
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function seedStart(): CadenceFitnessData {
   const d = emptyData();
@@ -72,14 +73,14 @@ function seedStart(): CadenceFitnessData {
 
 function seedActive(): CadenceFitnessData {
   const d = seedStart();
-  d.workouts.push({ id: 'wk', date: '2026-07-01', program_id: 'prog', program_day_id: 'day1', week_number: 1, name: 'Day 1 — Push', status: 'in_progress', started_at: '2026-07-01T06:00:00.000Z', completed_at: null, notes: '', ...STAMP } as never);
+  d.workouts.push({ id: 'wk', date: TODAY, program_id: 'prog', program_day_id: 'day1', week_number: 1, name: 'Day 1 — Push', status: 'in_progress', started_at: new Date().toISOString(), completed_at: null, notes: '', ...STAMP } as never);
   d.workout_sets.push({ id: 's1', workout_id: 'wk', exercise_id: 'ex1', set_number: 1, weight_kg: 100, reps: 0, duration_seconds: 0, rpe: null, is_warmup: false, done: false, ...STAMP } as never);
   return d;
 }
 
 function seedActiveCardioOnly(): CadenceFitnessData {
   const d = emptyData();
-  d.workouts.push({ id: 'wk', date: '2026-07-01', program_id: null, program_day_id: null, week_number: null, name: 'Ad-hoc session', status: 'in_progress', started_at: '2026-07-01T06:00:00.000Z', completed_at: null, notes: '', ...STAMP } as never);
+  d.workouts.push({ id: 'wk', date: TODAY, program_id: null, program_day_id: null, week_number: null, name: 'Ad-hoc session', status: 'in_progress', started_at: new Date().toISOString(), completed_at: null, notes: '', ...STAMP } as never);
   d.cardio_sessions.push({ id: 'c1', date: '2026-07-01', workout_id: 'wk', kind: 'run', duration_min: 28, distance_km: 5, avg_hr: 0, calories: 0, notes: '', ...STAMP } as never);
   return d;
 }
@@ -154,7 +155,7 @@ function Harness({ seed }: { seed: () => CadenceFitnessData }) {
     setData((prev) => ({ ...prev, [table]: (prev[table] as Array<{ id: string }>).filter((r) => r.id !== id) }));
   };
 
-  const value = { demo: true, data, insert, insertMany, update, upsert: update, remove, saving: false, syncError: null, clearSyncError: () => {} } as unknown as Ctx;
+  const value = { demo: true, data, insert, insertMany, update, upsert: update, remove, saving: false, syncError: null, clearSyncError: () => {}, pendingCount: 0, ready: true } as unknown as Ctx;
   return (
     <CadenceFitnessCtx.Provider value={value}>
       <Workout onMenu={() => {}} onNavigate={(id) => control.navigations.push(id)} />

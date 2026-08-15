@@ -89,6 +89,8 @@ beforeEach(() => {
   h.singlePending = [];
   h.thenResult = null;
   h.rtHandlers = [];
+  // The write-ahead journal persists across mounts by design — isolate tests.
+  localStorage.removeItem('cadence_fitness_offline_queue');
 });
 
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -460,6 +462,83 @@ describe('durable offline queue (dead-spot gym sets survive and sync)', () => {
     expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
     expect(result.current.syncError).toBeNull();
   }, 15000);
+});
+
+describe('write-ahead journal (app death mid-save can never lose a tick)', () => {
+  const QKEY = 'cadence_fitness_offline_queue';
+  const qEntries = () => JSON.parse(localStorage.getItem(QKEY) ?? '[]') as Array<{ op: { op: string } }>;
+
+  it('journals a write BEFORE the network attempt and retires it on ack', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    h.deferSingle = true;
+
+    let done!: Promise<unknown>;
+    act(() => {
+      done = result.current.update('workout_sets', 's1', { done: true } as never);
+    });
+    // Journalled synchronously — before any network machinery even runs.
+    expect(qEntries().map((e) => e.op.op)).toEqual(['update']);
+
+    // Let the (serialized) request reach the wire; the entry must still be there.
+    await waitFor(() => expect(h.singlePending).toHaveLength(1));
+    expect(qEntries()).toHaveLength(1);
+
+    await act(async () => {
+      h.singlePending.forEach((p) => p.resolve({ data: { id: 's1', done: true }, error: null }));
+      h.singlePending = [];
+      await done!;
+    });
+    expect(qEntries()).toHaveLength(0); // acknowledged → journal clean
+  });
+
+  it('replays a write that was in flight when the app died', async () => {
+    // Session 1: the tick is issued but the app "dies" (unmount) before the
+    // server responds — the journal entry survives in localStorage.
+    const first = renderHook(() => useCadenceFitness(), { wrapper });
+    h.deferSingle = true;
+    act(() => {
+      void first.result.current.update('workout_sets', 's9', { done: true } as never);
+    });
+    expect(qEntries()).toHaveLength(1);
+    first.unmount();
+
+    // Session 2 (next boot, signed in): the drain replays the journalled tick.
+    // deferSingle stays ON so the dead session's request is truly never
+    // answered (the drain's replay path doesn't use .single()).
+    h.session = { user: { id: 'u1' } };
+    localStorage.setItem('cadence-fitness:seeded-exercises', '1');
+    const second = renderHook(() => useCadenceFitness(), { wrapper });
+    await waitFor(() => expect(second.result.current.pendingCount).toBe(0));
+    expect(qEntries()).toHaveLength(0);
+    // The replayed update actually reached the server layer.
+    const updates = h.calls.filter((c) => c.method === 'update');
+    expect(updates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('drops the journal entry on a PERMANENT rejection instead of replaying a doomed write', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    h.writeResults.push({ data: null, error: { code: '42501', message: 'denied' } });
+    await act(async () => {
+      await result.current.update('workout_sets', 's1', { done: true } as never);
+    });
+    expect(qEntries()).toHaveLength(0);
+    expect(result.current.syncError).toBeTruthy();
+  });
+});
+
+describe('boot readiness (cold reload mid-workout must not look like "no session")', () => {
+  it('ready is false before sign-in resolves, and flips once the first snapshot lands', async () => {
+    h.session = { user: { id: 'u1' } };
+    localStorage.setItem('cadence-fitness:seeded-exercises', '1');
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+  });
+
+  it('stays not-ready with no session (no snapshot can load)', async () => {
+    const { result } = renderHook(() => useCadenceFitness(), { wrapper });
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.ready).toBe(false);
+  });
 });
 
 describe('insertMany (atomic multi-row create)', () => {

@@ -44,11 +44,29 @@ import type { CardioKind, ProgramDay, WorkoutSet } from '../lib/types';
 // Default rest for exercises without a program slot (ad-hoc sessions).
 const REST_DEFAULT_KEY = 'cadence-fitness:rest-default';
 
+// Sticky Focus/List preference (once chosen, it survives reloads) and the
+// focused-exercise position per session (a phone lock/kill must never dump you
+// back to exercise 1).
+const GYM_MODE_KEY = 'cadence-fitness:gym-mode';
+const FOCUS_IDX_KEY = 'cadence-fitness:gym-focus-idx';
+const loadFocusIdx = (workoutId: string): number | null => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FOCUS_IDX_KEY) || 'null');
+    return raw && raw.workoutId === workoutId ? Number(raw.index) || 0 : null;
+  } catch {
+    return null;
+  }
+};
+
 export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
-  const { data, insert, insertMany, update, remove, saving, syncError, pendingCount } = useCadenceFitness();
+  const { data, insert, insertMany, update, remove, saving, syncError, pendingCount, ready } = useCadenceFitness();
   const today = todayISO();
 
-  const active = data.workouts.find((w) => w.status === 'in_progress');
+  // Most recently started session wins if duplicates ever exist (the self-heal
+  // below then closes the others) — `find` order is fetch order, not intent.
+  const active = data.workouts
+    .filter((w) => w.status === 'in_progress')
+    .sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''))[0];
   const activeProgram = data.programs.find((p) => p.status === 'active');
 
   // Rest default for slot-less exercises; user-adjustable, persisted locally.
@@ -72,11 +90,34 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     await update('programs', programId, { status: 'active', start_date: target.start_date || today });
   };
 
-  // Focus (gym) mode: default on for phones, off on desktop. Toggleable.
-  const [gymMode, setGymMode] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
-  );
+  // Focus (gym) mode: sticky once chosen; first-run default is on for phones,
+  // off on desktop.
+  const [gymMode, setGymModeState] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const stored = localStorage.getItem(GYM_MODE_KEY);
+    if (stored !== null) return stored === '1';
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+  const setGymMode = (fn: (g: boolean) => boolean) =>
+    setGymModeState((g) => {
+      const next = fn(g);
+      localStorage.setItem(GYM_MODE_KEY, next ? '1' : '0');
+      return next;
+    });
   const [focusIndex, setFocusIndex] = useState(0);
+  // Restore the focused exercise for THIS session after a reload/kill, and
+  // persist every move so mid-workout interruptions land you back where you were.
+  const focusRestoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active?.id || focusRestoredFor.current === active.id) return;
+    focusRestoredFor.current = active.id;
+    const stored = loadFocusIdx(active.id);
+    if (stored !== null) setFocusIndex(stored);
+  }, [active?.id]);
+  useEffect(() => {
+    if (!active?.id) return;
+    localStorage.setItem(FOCUS_IDX_KEY, JSON.stringify({ workoutId: active.id, index: focusIndex }));
+  }, [focusIndex, active?.id]);
   // The whole Workout screen is landscape-capable — not just an active Gym
   // Focus session. Otherwise the rotate guard intercepts the Start button when
   // the phone is already sideways, and you can't begin a session in landscape.
@@ -105,6 +146,53 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       void wl.release();
     };
   }, [gymSessionActive]);
+
+  // ── Session self-heal ─────────────────────────────────────────────────────
+  // Reality can fork: a session you forgot to Finish yesterday, a duplicate
+  // started from a stale boot screen, an `initializing` row stranded by a
+  // killed start. None of these should greet you at the gym. Once the first
+  // snapshot is in: older/duplicate open sessions auto-close (keeping their
+  // trained sets as history; genuinely empty ones are discarded), and stale
+  // initializing rows are cleaned up. Today's newest session stays active.
+  const healedIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!ready) return;
+    const open = data.workouts.filter((w) => w.status === 'in_progress');
+    const latestOpenId = [...open].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''))[0]?.id;
+    const heal = async (w: (typeof data.workouts)[number]) => {
+      const sets = data.workout_sets.filter((s) => s.workout_id === w.id);
+      const cardio = data.cardio_sessions.filter((c) => c.workout_id === w.id);
+      const trained =
+        sets.some((s) => s.done) ||
+        cardio.some((c) => Number(c.duration_min) > 0 || Number(c.distance_km) > 0 || Number(c.calories) > 0);
+      if (trained) {
+        // Close it with what was actually done — it belongs to History now.
+        await update('workouts', w.id, { status: 'completed', completed_at: new Date().toISOString() } as never);
+      } else {
+        for (const s of sets) await remove('workout_sets', s.id);
+        for (const c of cardio) await remove('cardio_sessions', c.id);
+        await remove('workouts', w.id);
+      }
+    };
+    for (const w of data.workouts) {
+      if (healedIds.current.has(w.id)) continue;
+      if (w.status === 'initializing') {
+        // A killed/failed start strands an invisible row; sweep it after an hour
+        // (never sooner — a live start is in this state for a few seconds).
+        const age = Date.now() - new Date(w.started_at || w.created_at || 0).getTime();
+        if (age > 60 * 60 * 1000) {
+          healedIds.current.add(w.id);
+          void (async () => {
+            for (const s of data.workout_sets.filter((x) => x.workout_id === w.id)) await remove('workout_sets', s.id);
+            await remove('workouts', w.id);
+          })();
+        }
+      } else if (w.status === 'in_progress' && (w.date < today || w.id !== latestOpenId)) {
+        healedIds.current.add(w.id);
+        void heal(w);
+      }
+    }
+  }, [ready, data, today, update, remove]);
 
   // Rest countdown machine (chime, mute, persistence). Its 1s tick also drives
   // the live elapsed clock in the header.
@@ -325,6 +413,25 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     await update('workout_sets', set.id, { duration_seconds: next });
   };
 
+  // Focus-mode glide: when an exercise's last set is ticked we move to the next
+  // exercise — but never mid-rest under your finger. If a rest countdown is
+  // running, the glide is DEFERRED until you acknowledge the rest bar (Done /
+  // Skip / GO); with no rest it happens immediately, as before.
+  const pendingAdvanceFrom = useRef<string | null>(null);
+  const goTo = (index: number) => {
+    pendingAdvanceFrom.current = null; // manual navigation overrides any pending glide
+    setFocusIndex(index);
+  };
+  const glideFrom = (exerciseId: string) => {
+    const i = exerciseIds.indexOf(exerciseId);
+    if (i >= 0 && i < exerciseIds.length - 1) setFocusIndex(i + 1);
+  };
+  const consumePendingAdvance = () => {
+    const from = pendingAdvanceFrom.current;
+    pendingAdvanceFrom.current = null;
+    if (from && gymMode) glideFrom(from);
+  };
+
   const toggleSet = (set: WorkoutSet) =>
     runLocked(`toggle:${set.id}`, async () => {
       const done = !set.done;
@@ -334,22 +441,26 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       // Anchor the rest timer to the TAP, before any awaited network write, so a
       // slow save/carry-forward doesn't delay the countdown. Zero/disabled rest
       // starts nothing (no bar, no GO, no chime/vibrate).
+      let restStarted = false;
       if (done) {
         const slot = daySlots.find((s) => s.exercise_id === set.exercise_id);
         const plan = planRestOnComplete(slot?.rest_seconds, restDefault);
-        if (plan.start) rest.startRest(plan.seconds, set.id);
-        else rest.stopRest();
+        if (plan.start) {
+          rest.startRest(plan.seconds, set.id);
+          restStarted = true;
+        } else rest.stopRest();
       } else {
-        // Un-ticked by mistake → the rest you started for it no longer applies.
+        // Un-ticked by mistake → the rest you started for it no longer applies,
+        // and neither does any glide it queued.
         rest.stopRest();
+        pendingAdvanceFrom.current = null;
       }
       await commitSet(set, { done });
       if (done) {
-        // In focus mode, glide to the next exercise once this one's sets are all done.
         const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
         if (gymMode && others.length > 0 && others.every((x) => x.done)) {
-          const idx = exerciseIds.indexOf(set.exercise_id);
-          if (idx >= 0 && idx < exerciseIds.length - 1) setFocusIndex(idx + 1);
+          if (restStarted) pendingAdvanceFrom.current = set.exercise_id;
+          else glideFrom(set.exercise_id);
         }
       }
     });
@@ -474,6 +585,23 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     sd.resetAll();
   };
 
+  // Boot gate: until the first snapshot lands, an empty store is
+  // indistinguishable from "no session" — NEVER show the Start screen on a
+  // cold reload mid-workout (tapping Start there forked the session and made
+  // ticked sets "disappear"). Hold a quiet restoring state instead.
+  if (!ready) {
+    return (
+      <>
+        <ScreenHeader title="Workout" subtitle="Syncing…" onMenu={onMenu} />
+        <div className="screen-content">
+          <div className="cf-callout" role="status" aria-live="polite">
+            Restoring your session…
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // Session initialization gate. While a session is being seeded the workout is
   // still `initializing` (so `active` is undefined) — show a non-interactive
   // setup state, never the start screen or a half-populated session, until the
@@ -572,8 +700,9 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
       ? runLocked(`rest-done:${restSet.id}`, async () => {
           await commitSet(restSet);
           rest.stopRest();
+          consumePendingAdvance();
         })
-      : rest.stopRest();
+      : (rest.stopRest(), consumePendingAdvance());
   const restBar = rest.restLeft !== null && (
     <RestBar
       restLeft={rest.restLeft}
@@ -619,7 +748,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
             </>
           ) : (
             <>
-              <GymProgress exerciseIds={exerciseIds} idx={idx} nameFor={exName} completeFor={allSetsDone} onFocus={setFocusIndex} />
+              <GymProgress exerciseIds={exerciseIds} idx={idx} nameFor={exName} completeFor={allSetsDone} onFocus={goTo} />
               {renderExercise(exerciseIds[idx], true)}
               {addExerciseControl('plain')}
               {cardioBlock}
@@ -632,12 +761,12 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
               <div className="gym-dock">
                 {restBar}
                 <div className="gym-nav">
-                  <button className="btn btn-secondary" disabled={idx === 0} onClick={() => setFocusIndex(idx - 1)}>
+                  <button className="btn btn-secondary" disabled={idx === 0} onClick={() => goTo(idx - 1)}>
                     ← Prev
                   </button>
                   {idx < exerciseIds.length - 1 ? (
-                    <button className="btn btn-primary" onClick={() => setFocusIndex(idx + 1)}>
-                      Next →
+                    <button className="btn btn-primary gym-nav-next" onClick={() => goTo(idx + 1)}>
+                      Next: {exName(exerciseIds[idx + 1])} →
                     </button>
                   ) : (
                     <button className="btn btn-primary" onClick={finishSession} disabled={pendingAction !== null}>
