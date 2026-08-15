@@ -2222,6 +2222,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .gym-dock .gym-nav { margin-top: 0; padding: 0; }
 .gym-nav { position: static; display: flex; gap: 10px; margin-top: 16px; padding: 12px 0 calc(6px + var(--safe-bottom)); }
 .gym-nav .btn { flex: 1; justify-content: center; padding: 16px; font-size: 15px; font-weight: 700; border-radius: 14px; }
+/* The Next button names the next exercise — keep long names on one tidy line. */
+.gym-nav .gym-nav-next { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .rest-timer-icon { padding: 8px 10px; font-size: 15px; line-height: 1; }
 .gym-add { margin-top: 14px; }
 .gym-add summary { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 6px 0; }

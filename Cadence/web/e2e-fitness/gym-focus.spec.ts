@@ -83,6 +83,39 @@ for (const vp of [
 test.describe('Gym Focus — 320×568 portrait', () => {
   test.use({ viewport: { width: 320, height: 568 }, ...MOBILE });
 
+  test('finishing an exercise mid-rest stays put; acknowledging the rest bar glides on', async ({ page }) => {
+    await openWorkoutScreen(page);
+    await startSuggestedSession(page);
+
+    const setCount = await page.locator('.wo-set-row').count();
+    for (let n = 1; n <= setCount; n++) {
+      await doneCheck(page, n).click();
+      await expect(doneCheck(page, n)).toHaveAttribute('aria-pressed', 'true');
+    }
+    // Every set is done and rest is counting — the card must NOT have been
+    // yanked away under a finger mid-rest.
+    await expect(page.locator('.gym-head-label')).toContainText('Exercise 1 of');
+    await expect(page.locator('.rest-timer')).toBeVisible();
+
+    // Acknowledging the rest bar (Skip, or Done after GO) performs the glide.
+    await page.getByRole('button', { name: /^Skip$/ }).click();
+    await expect(page.locator('.gym-head-label')).toContainText('Exercise 2 of');
+  });
+
+  test('the focused exercise survives leaving and re-entering the workout', async ({ page }) => {
+    await openWorkoutScreen(page);
+    await startSuggestedSession(page);
+
+    // Move to exercise 2 — the Next button names where you are going.
+    await page.getByRole('button', { name: /^Next: / }).click();
+    await expect(page.locator('.gym-head-label')).toContainText('Exercise 2 of');
+
+    // Detour to another screen and come back: same exercise, not reset to 1.
+    await navTo(page, 'Dashboard');
+    await navTo(page, 'Workout');
+    await expect(page.locator('.gym-head-label')).toContainText('Exercise 2 of');
+  });
+
   test('rapid stepper taps accumulate instead of collapsing', async ({ page }) => {
     await openWorkoutScreen(page);
     await startSuggestedSession(page);

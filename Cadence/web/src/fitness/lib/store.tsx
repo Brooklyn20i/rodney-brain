@@ -85,6 +85,11 @@ export interface Ctx {
   saving: boolean;
   // Offline-queued writes waiting for the connection to come back.
   pendingCount: number;
+  // First server snapshot has landed (always true offline/demo). Screens that
+  // branch on "is there an active session?" MUST wait for this — an empty
+  // just-booted store looks identical to "no session", and acting on it
+  // mid-workout (e.g. offering Start again) forks reality.
+  ready: boolean;
 }
 
 export const CadenceFitnessCtx = createContext<Ctx | null>(null);
@@ -112,6 +117,7 @@ function friendlyError(error: any): string {
 export function CadenceFitnessProvider({ children }: { children: React.ReactNode }) {
   const ownerId = useSupabaseOwnerId(OFFLINE);
   const [data, setData] = useState<CadenceFitnessData>(() => (DEMO_MODE ? loadDemoData() : emptyData()));
+  const [ready, setReady] = useState(OFFLINE);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [inflight, setInflight] = useState(0);
   const trackWrite = async <T,>(op: () => PromiseLike<T>): Promise<T> => {
@@ -200,15 +206,30 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     });
   }, []);
 
-  // ── Offline queue drain ───────────────────────────────────────────────────
-  // Replays queued writes (in order) once the connection is back, reconciling
-  // the pending-mutation ledger per entry so a racing realtime reload can't
-  // undo the replay. Runs on reconnect and on sign-in with a non-empty queue.
+  // ── Write-ahead journal ───────────────────────────────────────────────────
+  // iOS kills a backgrounded PWA without warning (lock the phone, switch to a
+  // message, drop it in a bag). A write that is merely in flight when that
+  // happens is GONE — the retry loop dies with the page — which was the
+  // "sets I ticked complete disappear" bug. So every non-strict mutation is
+  // journalled to durable storage BEFORE the network attempt and retired only
+  // on server ack (or a permanent rejection). Survivors replay on next boot
+  // via the same drain as offline writes; client-generated ids and
+  // last-write-wins patches make replay idempotent.
   const [pendingCount, setPendingCount] = useState(() => (OFFLINE ? 0 : queue.queueCount()));
-  const enqueueOp = (op: QueuedOp) => {
-    queue.enqueue(op);
+  const journal = (op: QueuedOp): string => {
+    const qid = queue.enqueue(op);
+    setPendingCount(queue.queueCount());
+    return qid;
+  };
+  const retireJournal = (qid: string) => {
+    queue.dropEntry(qid);
     setPendingCount(queue.queueCount());
   };
+  // ── Offline queue drain ───────────────────────────────────────────────────
+  // Replays queued/journalled writes (in order) once a connection exists,
+  // reconciling the pending-mutation ledger per entry so a racing realtime
+  // reload can't undo the replay. Runs on boot, on reconnect, and on sign-in
+  // with a non-empty queue.
   const drainInFlight = useRef(false);
   const drainQueue = useCallback(async () => {
     if (OFFLINE || drainInFlight.current) return;
@@ -291,7 +312,9 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
 
   useEffect(() => {
     if (OFFLINE || !ownerId) return;
-    reload();
+    // `ready` flips only after the FIRST full snapshot lands, so screens never
+    // mistake a still-empty booting store for "no active session".
+    void reload().finally(() => setReady(true));
     // Coalesce realtime echoes: our own writes each bounce back a change event,
     // and rapid set-logging fires many in a burst. Debounce per table so we
     // refetch once the dust settles instead of thrashing state mid-workout
@@ -379,13 +402,11 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // server has it.
     pendingInserts.current.set(ledgerKey, { table: table as string, row: ownedRow });
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ownedRow] }));
-    // Fully offline → skip the doomed network attempt and queue durably. The
-    // client-generated id makes the eventual replay idempotent, and the ledger
-    // entry keeps any reload from dropping the row until a fetch contains it.
-    if (netDown()) {
-      enqueueOp({ op: 'insert', table: table as string, row: ownedRow });
-      return ownedRow as Row<K>;
-    }
+    // Journal BEFORE the network attempt: if the OS kills the app mid-save the
+    // row replays on next boot (client id → replay is idempotent). Fully
+    // offline it simply stays journalled — no doomed network attempt.
+    const qid = journal({ op: 'insert', table: table as string, row: ownedRow });
+    if (netDown()) return ownedRow as Row<K>;
     // Column-drift tolerant (shared helper): strip + retry a column the DB
     // doesn't have yet, composed with the gym-wifi network retry.
     const { data: d, error } = await trackWrite(() =>
@@ -397,17 +418,18 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     );
     if (error) {
       if (isNetworkError(error)) {
-        // Connection dropped mid-save and every retry failed — queue for
-        // replay instead of rolling back; the row stays visible and syncs
-        // when the network returns.
-        enqueueOp({ op: 'insert', table: table as string, row: ownedRow });
+        // Connection dropped mid-save and every retry failed — the journal
+        // entry stays for replay; the row stays visible and syncs when the
+        // network returns.
         return ownedRow as Row<K>;
       }
+      retireJournal(qid); // permanent rejection — replaying it would fail again
       pendingInserts.current.delete(ledgerKey); // rolled back — nothing to protect
       setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== ownedRow.id) }));
       setSyncError(friendlyError(error));
       throw error;
     }
+    retireJournal(qid);
     if (d) {
       // Keep protecting with the SERVER copy until a reload actually contains
       // the row (overlayPending retires the entry when it sees the id).
@@ -435,24 +457,22 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // entries keep a concurrent reload from dropping the batch mid-flight.
     for (const r of owned) pendingInserts.current.set(`${table as string}:${r.id}`, { table: table as string, row: r });
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ...owned] }));
-    // Fully offline → queue each row (client ids make replay idempotent).
-    if (netDown()) {
-      for (const r of owned) enqueueOp({ op: 'insert', table: table as string, row: r });
-      return owned as Row<K>[];
-    }
+    // Journal every row BEFORE the network attempt (see insert); replay of a
+    // partially-landed batch is safe — duplicate keys are treated as done.
+    const qids = owned.map((r) => journal({ op: 'insert', table: table as string, row: r }));
+    if (netDown()) return owned as Row<K>[];
     const { data: d, error } = await trackWrite(() =>
       runWithRetry(() => supabase.schema('fitness').from(table as string).insert(owned).select())
     );
     if (error) {
-      if (isNetworkError(error)) {
-        for (const r of owned) enqueueOp({ op: 'insert', table: table as string, row: r });
-        return owned as Row<K>[];
-      }
+      if (isNetworkError(error)) return owned as Row<K>[]; // journalled for replay
+      for (const qid of qids) retireJournal(qid);
       for (const r of owned) pendingInserts.current.delete(`${table as string}:${r.id}`);
       setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => !ids.has(r.id)) }));
       setSyncError(friendlyError(error));
       throw error;
     }
+    for (const qid of qids) retireJournal(qid);
     if (Array.isArray(d) && d.length) {
       const byId = new Map((d as any[]).map((row) => [row.id, row]));
       for (const row of d as any[]) pendingInserts.current.set(`${table as string}:${row.id}`, { table: table as string, row });
@@ -508,13 +528,14 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       const prevEntry = pendingPatches.current.get(key);
       pendingPatches.current.set(key, { seq, patch: { ...prevEntry?.patch, ...(patch as Record<string, unknown>) } });
     }
-    // Fully offline (non-strict) → skip the doomed network attempt and queue
-    // durably; the optimistic value stays showing and syncs on reconnect.
-    // (While offline realtime is down too, so no reload can clobber it.)
+    // Journal non-strict updates BEFORE the network attempt: a tick that is in
+    // flight when the OS kills the app replays on next boot instead of
+    // silently un-ticking. Fully offline it simply stays journalled.
+    const qid = strict ? null : journal({ op: 'update', table: table as string, id, patch: patch as Record<string, unknown> });
     if (!strict && netDown()) {
+      // (While offline realtime is down too, so no reload can clobber it.)
       const offlineEntry = pendingPatches.current.get(key);
       if (offlineEntry && offlineEntry.seq === seq) pendingPatches.current.delete(key);
-      enqueueOp({ op: 'update', table: table as string, id, patch: patch as Record<string, unknown> });
       return optimistic as Row<K>;
     }
     const { data: d, error } = await enqueueWrite(key, () =>
@@ -533,11 +554,12 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       const entry = pendingPatches.current.get(key);
       if (entry && entry.seq === seq) pendingPatches.current.delete(key);
       if (!strict && isNetworkError(error)) {
-        // Every retry failed on a dead connection — queue for replay. Not an
-        // error from the user's point of view: the change is safe on-device.
-        enqueueOp({ op: 'update', table: table as string, id, patch: patch as Record<string, unknown> });
+        // Every retry failed on a dead connection — the journal entry stays
+        // for replay. Not an error from the user's point of view: the change
+        // is safe on-device.
         return optimistic as Row<K>;
       }
+      if (qid) retireJournal(qid); // permanent rejection — don't replay it
       setSyncError(friendlyError(error));
       // STRICT: propagate so the caller can preserve its invariant (roll back the
       // staged row). Local state was never optimistically changed, so no false
@@ -549,8 +571,10 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
       // and realtime reconciles later.
       return optimistic as Row<K>;
     }
-    // Acknowledged: keep the ledger entry briefly (a refetch whose query ran
-    // pre-commit may still be applying), then retire it.
+    // Acknowledged: the journal entry has served its purpose.
+    if (qid) retireJournal(qid);
+    // Keep the ledger entry briefly (a refetch whose query ran pre-commit may
+    // still be applying), then retire it.
     if (strict) {
       const prevEntry = pendingPatches.current.get(key);
       pendingPatches.current.set(key, { seq, patch: { ...prevEntry?.patch, ...(patch as Record<string, unknown>) } });
@@ -637,12 +661,10 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     pendingPatches.current.delete(ledgerKey);
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (OFFLINE) return;
-    // Fully offline → queue the soft-delete; the tombstone keeps any reload
-    // from resurrecting the row until the replay lands.
-    if (netDown()) {
-      enqueueOp({ op: 'remove', table: table as string, id });
-      return;
-    }
+    // Journal BEFORE the network attempt (see insert/update); the tombstone
+    // keeps any reload from resurrecting the row until the delete lands.
+    const qid = journal({ op: 'remove', table: table as string, id });
+    if (netDown()) return;
     const { error } = await trackWrite(() =>
       runWithRetry(() =>
         supabase
@@ -657,15 +679,16 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // delete is noted but never thrown, so it can't spam the rejection banner.
     if (error) {
       if (isNetworkError(error)) {
-        // Dead connection — queue for replay; the tombstone stays so the row
-        // doesn't flicker back meanwhile.
-        enqueueOp({ op: 'remove', table: table as string, id });
+        // Dead connection — the journal entry stays for replay; the tombstone
+        // stays so the row doesn't flicker back meanwhile.
         return;
       }
+      retireJournal(qid); // permanent rejection — don't replay it
       pendingDeletes.current.delete(ledgerKey); // server still has it — let reload resurrect honestly
       setSyncError(friendlyError(error));
       return;
     }
+    retireJournal(qid);
     // Committed: fetches now exclude the row; keep the tombstone through one
     // more refetch window, then retire it.
     setTimeout(() => pendingDeletes.current.delete(ledgerKey), RETIRE_MS);
@@ -687,6 +710,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
         clearSyncError,
         saving: inflight > 0,
         pendingCount,
+        ready,
       }}
     >
       {children}
