@@ -6,3 +6,6 @@ node_modules/
 # Supabase CLI local temp state can include project refs / connection strings.
 Cadence/supabase/.temp/
 **/.temp/
+
+# Playwright run scratch output (screenshots/traces on failure)
+**/test-results/
