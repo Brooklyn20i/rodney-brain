@@ -456,6 +456,11 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
         pendingAdvanceFrom.current = null;
       }
       await commitSet(set, { done });
+      // Drop keyboard focus once the set is committed. iOS interprets a bump
+      // (phone tossed on a towel) as shake-to-undo and offers "Undo Typing"
+      // whenever a text field is still first responder — a tick is the natural
+      // end of typing, so nothing should keep focus past it.
+      if (typeof document !== 'undefined') (document.activeElement as HTMLElement | null)?.blur?.();
       if (done) {
         const others = sessionSets.filter((x) => x.exercise_id === set.exercise_id && x.id !== set.id);
         if (gymMode && others.length > 0 && others.every((x) => x.done)) {
@@ -695,14 +700,20 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
   const restSet = rest.restSetId ? sessionSets.find((s) => s.id === rest.restSetId) : null;
   const restSetHasUnsavedDraft = restSet ? sd.setHasDraft(restSet.id) : false;
+  // Same shake-to-undo hygiene as toggleSet: acknowledging the rest bar ends
+  // the typing turn, so nothing should keep keyboard focus past it.
+  const blurTyping = () => {
+    if (typeof document !== 'undefined') (document.activeElement as HTMLElement | null)?.blur?.();
+  };
   const completeRest = () =>
     restSet && restSetHasUnsavedDraft
       ? runLocked(`rest-done:${restSet.id}`, async () => {
           await commitSet(restSet);
           rest.stopRest();
+          blurTyping();
           consumePendingAdvance();
         })
-      : (rest.stopRest(), consumePendingAdvance());
+      : (rest.stopRest(), blurTyping(), consumePendingAdvance());
   const restBar = rest.restLeft !== null && (
     <RestBar
       restLeft={rest.restLeft}
