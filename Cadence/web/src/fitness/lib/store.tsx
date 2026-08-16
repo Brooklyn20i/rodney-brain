@@ -30,6 +30,31 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const queue = createOfflineQueue('cadence_fitness_offline_queue');
 const netDown = (): boolean => typeof navigator !== 'undefined' && !navigator.onLine;
 
+// Rows the user touched within this window are shielded from refetch
+// snapshots — see the "recently-touched row guard" note inside the provider.
+const TOUCH_GUARD_MS = 30_000;
+function guardRecent(touched: Map<string, number>, t: string, fetched: any[], prevRows: any[]): any[] {
+  const fresh = (id: string): boolean => {
+    const ts = touched.get(`${t}:${id}`);
+    return ts !== undefined && Date.now() - ts < TOUCH_GUARD_MS;
+  };
+  const localById = new Map(prevRows.map((r: any) => [r.id, r]));
+  const out: any[] = [];
+  for (const r of fetched) {
+    if (fresh(r.id)) {
+      const local = localById.get(r.id);
+      if (local) out.push(local); // keep the user's copy, not the snapshot's
+      // else: recently deleted here — do not resurrect it
+    } else out.push(r);
+  }
+  const present = new Set(out.map((r: any) => r.id));
+  for (const r of prevRows) {
+    // A recently-inserted row a stale snapshot doesn't contain yet must not vanish.
+    if (!present.has(r.id) && fresh(r.id)) out.push(r);
+  }
+  return out;
+}
+
 // A gym has terrible wifi. A single dropped request should not throw a scary
 // red banner — retry a few times with backoff first, and only give up (surface
 // an error) if it's a *permanent* failure (auth/RLS/constraint) or every retry
@@ -120,11 +145,16 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
   const [ready, setReady] = useState(OFFLINE);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [inflight, setInflight] = useState(0);
+  // Ref twin of `inflight` so non-React callbacks (the realtime reload
+  // scheduler) can ask "is a write in flight right now?" without re-binding.
+  const inflightRef = useRef(0);
   const trackWrite = async <T,>(op: () => PromiseLike<T>): Promise<T> => {
+    inflightRef.current += 1;
     setInflight((n) => n + 1);
     try {
       return await op();
     } finally {
+      inflightRef.current = Math.max(0, inflightRef.current - 1);
       setInflight((n) => Math.max(0, n - 1));
     }
   };
@@ -193,14 +223,36 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     return out;
   };
 
+  // ── Recently-touched row guard ────────────────────────────────────────────
+  // The pending ledger protects a write until shortly after its ack — but a
+  // refetch on gym wifi can take LONGER than that window: a snapshot whose
+  // query ran before the tick can apply seconds later and revert it (the last
+  // hiding place of the "set unticks itself" bug). So every row the user
+  // touches is remembered for a generous window, and a reload can never
+  // replace (or resurrect / drop) a recently-touched row — the local copy,
+  // which already carries the user's intent, wins. Single-user app: masking a
+  // row you just edited from cross-device echoes for 30s is harmless.
+  const lastTouched = useRef(new Map<string, number>());
+  const noteTouched = (t: string, id: string) => lastTouched.current.set(`${t}:${id}`, Date.now());
+
+  // Reload responses must apply in issue order: two refetches race on gym
+  // wifi, and an older snapshot landing after a newer one would silently roll
+  // the table back. Each issue claims a sequence per table; only the newest
+  // response may apply.
+  const reloadSeq = useRef(new Map<string, number>());
+  const reloadCounter = useRef(0);
   const reload = useCallback(async (table?: Table) => {
     if (OFFLINE) return;
     const tables = (table ? [table] : TABLES) as string[];
+    const stamp = (reloadCounter.current += 1);
+    for (const t of tables) reloadSeq.current.set(t, stamp);
     const results = await fetchSchemaTables('fitness', tables);
     setData((prev) => {
       const next = { ...prev };
       results.forEach(({ t, error, data }) => {
-        if (!error && data) (next as any)[t] = overlayPending(t, data);
+        if (error || !data) return;
+        if (reloadSeq.current.get(t) !== stamp) return; // a newer refetch owns this table
+        (next as any)[t] = guardRecent(lastTouched.current, t, overlayPending(t, data), (prev as any)[t]);
       });
       return next;
     });
@@ -324,7 +376,16 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     const scheduleReload = (t: Table) => {
       const existing = timers.get(t as string);
       if (existing) clearTimeout(existing);
-      timers.set(t as string, setTimeout(() => reload(t), 700));
+      const fire = () => {
+        // A refetch snapshot taken mid-write is stale by construction; wait
+        // for the write burst to finish, then sync once.
+        if (inflightRef.current > 0) {
+          timers.set(t as string, setTimeout(fire, 700));
+          return;
+        }
+        void reload(t);
+      };
+      timers.set(t as string, setTimeout(fire, 700));
     };
     const ch = supabase.channel('cadence-fitness-rt');
     TABLES.forEach((t) =>
@@ -401,6 +462,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // ledger entry keeps a concurrent reload from dropping the row before the
     // server has it.
     pendingInserts.current.set(ledgerKey, { table: table as string, row: ownedRow });
+    noteTouched(table as string, ownedRow.id);
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ownedRow] }));
     // Journal BEFORE the network attempt: if the OS kills the app mid-save the
     // row replays on next boot (client id → replay is idempotent). Fully
@@ -455,7 +517,10 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // Optimistic: show every row immediately so the UI never stalls; reconcile
     // (or roll the WHOLE batch back) once the single insert lands. Ledger
     // entries keep a concurrent reload from dropping the batch mid-flight.
-    for (const r of owned) pendingInserts.current.set(`${table as string}:${r.id}`, { table: table as string, row: r });
+    for (const r of owned) {
+      pendingInserts.current.set(`${table as string}:${r.id}`, { table: table as string, row: r });
+      noteTouched(table as string, r.id);
+    }
     setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], ...owned] }));
     // Journal every row BEFORE the network attempt (see insert); replay of a
     // partially-landed batch is safe — duplicate keys are treated as done.
@@ -496,6 +561,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     // (non-strict) updates keep the optimistic-first, never-throw gym contract.
     const strict = opts?.strict === true;
     if (!strict) {
+      noteTouched(table as string, id);
       setData((prev) => ({
         ...prev,
         [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
@@ -573,6 +639,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     }
     // Acknowledged: the journal entry has served its purpose.
     if (qid) retireJournal(qid);
+    if (strict) noteTouched(table as string, id);
     // Keep the ledger entry briefly (a refetch whose query ran pre-commit may
     // still be applying), then retire it.
     if (strict) {
@@ -659,6 +726,7 @@ export function CadenceFitnessProvider({ children }: { children: React.ReactNode
     pendingDeletes.current.add(ledgerKey);
     pendingInserts.current.delete(ledgerKey);
     pendingPatches.current.delete(ledgerKey);
+    noteTouched(table as string, id);
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
     if (OFFLINE) return;
     // Journal BEFORE the network attempt (see insert/update); the tombstone

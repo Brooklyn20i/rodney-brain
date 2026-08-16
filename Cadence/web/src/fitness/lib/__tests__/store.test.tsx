@@ -25,6 +25,10 @@ const h = vi.hoisted(() => ({
   // Result for the `.select()`-terminated path (insertMany, reload fetches).
   // null → default.
   thenResult: null as WriteResult | null,
+  // When true, `.then()`-terminated fetches (reloads) are held open so tests
+  // can resolve them out of order — the gym-wifi race, made deterministic.
+  deferThen: false,
+  thenPending: [] as Array<{ resolve: (v: WriteResult) => void }>,
   // Realtime handlers registered via channel.on, so tests can fire a
   // postgres_changes echo and drive the debounced reload path for real.
   rtHandlers: [] as Array<{ table: string; fn: () => void }>,
@@ -50,8 +54,12 @@ vi.mock('../../../lib/supabase', () => {
       }
       return Promise.resolve(h.writeResults.shift() ?? { data: null, error: null });
     };
-    b.then = (onF: (v: WriteResult) => unknown, onR?: (e: unknown) => unknown) =>
-      Promise.resolve(h.thenResult ?? { data: [], error: null }).then(onF, onR);
+    b.then = (onF: (v: WriteResult) => unknown, onR?: (e: unknown) => unknown) => {
+      if (h.deferThen) {
+        return new Promise<WriteResult>((resolve) => h.thenPending.push({ resolve })).then(onF, onR);
+      }
+      return Promise.resolve(h.thenResult ?? { data: [], error: null }).then(onF, onR);
+    };
     return b;
   };
   const channel = {
@@ -88,6 +96,8 @@ beforeEach(() => {
   h.deferSingle = false;
   h.singlePending = [];
   h.thenResult = null;
+  h.deferThen = false;
+  h.thenPending = [];
   h.rtHandlers = [];
   // The write-ahead journal persists across mounts by design — isolate tests.
   localStorage.removeItem('cadence_fitness_offline_queue');
@@ -461,6 +471,121 @@ describe('durable offline queue (dead-spot gym sets survive and sync)', () => {
     expect(qOps()).toEqual(['insert']);
     expect(result.current.data.workout_sets as unknown[]).toHaveLength(1);
     expect(result.current.syncError).toBeNull();
+  }, 15000);
+});
+
+describe('stale refetches cannot regress fresh taps (the LAST unticking path)', () => {
+  const signIn = () => {
+    h.session = { user: { id: 'u1' } };
+    localStorage.setItem('cadence-fitness:seeded-exercises', '1');
+  };
+  const mount = async () => {
+    signIn();
+    const rendered = renderHook(() => useCadenceFitness(), { wrapper });
+    await waitFor(() => expect(h.rtHandlers.length).toBeGreaterThan(0));
+    return rendered;
+  };
+  const fireEcho = (table: string) => {
+    act(() => {
+      h.rtHandlers.find((r) => r.table === table)!.fn();
+    });
+  };
+  const rideDebounce = async (ms = 800) => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  };
+  const done0 = (result: { current: ReturnType<typeof useCadenceFitness> }) =>
+    (result.current.data.workout_sets as Array<{ done: boolean }>)[0].done;
+
+  it('a refetch landing AFTER the ledger retires still cannot untick a just-ticked set', async () => {
+    const { result } = await mount();
+    h.writeResults.push({ data: { id: 's1', done: false }, error: null });
+    await act(async () => {
+      await result.current.insert('workout_sets', { id: 's1', done: false } as never);
+    });
+    // Tick; the write acks immediately.
+    await act(async () => {
+      await result.current.update('workout_sets', 's1', { done: true } as never);
+    });
+    // Ride PAST the 2.5s pending-ledger retirement — the old protection is gone.
+    await rideDebounce(2700);
+    // A refetch whose SELECT ran pre-tick now applies (slow gym wifi): the
+    // snapshot says done:false. The touched-row guard must keep the tick.
+    h.thenResult = { data: [{ id: 's1', done: false }], error: null };
+    fireEcho('workout_sets');
+    await rideDebounce();
+    h.thenResult = null;
+    expect(done0(result)).toBe(true);
+  }, 15000);
+
+  it('an older reload response landing after a newer one is dropped (no rollback)', async () => {
+    const { result } = await mount();
+    // Seed via snapshot only — no local writes, so the touched-row guard is
+    // inert and the sequence guard is the ONLY protection under test.
+    h.thenResult = { data: [{ id: 's1', done: false }], error: null };
+    fireEcho('workout_sets');
+    await rideDebounce();
+    h.thenResult = null;
+    expect(done0(result)).toBe(false);
+
+    // Two refetches race: A (older) is held open, B (newer) resolves first.
+    h.deferThen = true;
+    fireEcho('workout_sets');
+    await rideDebounce();
+    await waitFor(() => expect(h.thenPending).toHaveLength(1));
+    fireEcho('workout_sets');
+    await rideDebounce();
+    await waitFor(() => expect(h.thenPending).toHaveLength(2));
+
+    await act(async () => {
+      h.thenPending[1].resolve({ data: [{ id: 's1', done: true }], error: null }); // newer truth
+      await Promise.resolve();
+    });
+    expect(done0(result)).toBe(true);
+    await act(async () => {
+      h.thenPending[0].resolve({ data: [{ id: 's1', done: false }], error: null }); // stale straggler
+      await Promise.resolve();
+    });
+    expect(done0(result)).toBe(true); // the rollback never happens
+    h.deferThen = false;
+  }, 15000);
+
+  it('realtime refetches wait for in-flight writes instead of racing them', async () => {
+    const { result } = await mount();
+    h.thenResult = { data: [{ id: 's1', done: false }], error: null };
+    fireEcho('workout_sets');
+    await rideDebounce();
+    h.thenResult = null;
+
+    // Hold a tick's save open (slow gym wifi)…
+    h.deferSingle = true;
+    let tick!: Promise<unknown>;
+    act(() => {
+      tick = result.current.update('workout_sets', 's1', { done: true } as never);
+    });
+    await waitFor(() => expect(h.singlePending).toHaveLength(1));
+
+    // …then let a realtime echo try to refetch: it must hold off while the
+    // write is in flight.
+    h.deferThen = true;
+    fireEcho('workout_sets');
+    await rideDebounce(900);
+    expect(h.thenPending).toHaveLength(0); // deferred, not racing
+
+    // The write lands → the deferred refetch finally runs on the next beat.
+    await act(async () => {
+      h.singlePending.shift()!.resolve({ data: { id: 's1', done: true }, error: null });
+      await tick;
+    });
+    await rideDebounce(900);
+    await waitFor(() => expect(h.thenPending.length).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      h.thenPending.forEach((p) => p.resolve({ data: [{ id: 's1', done: true }], error: null }));
+      await Promise.resolve();
+    });
+    expect(done0(result)).toBe(true);
+    h.deferThen = false;
   }, 15000);
 });
 
