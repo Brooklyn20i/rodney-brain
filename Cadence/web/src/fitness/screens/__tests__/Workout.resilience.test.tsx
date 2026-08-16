@@ -205,6 +205,23 @@ describe('focus-mode glide waits for rest', () => {
     expect(screen.getByRole('button', { name: /Next: Squat/ })).toBeTruthy();
   });
 
+  it('ticking a set drops keyboard focus (no field left for iOS shake-to-undo)', async () => {
+    localStorage.setItem('cadence-fitness:gym-mode', '1');
+    render(<Harness seed={seedTwoExercises} />);
+
+    const reps = screen.getByRole('spinbutton', { name: /Bench, set 1, reps/i });
+    reps.focus();
+    fireEvent.change(reps, { target: { value: '8' } });
+    expect(document.activeElement).toBe(reps);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Bench, set 1, mark done/i }));
+    });
+    // The tick ends the typing turn — nothing may keep first-responder status,
+    // or a phone bump ("shake") pops iOS's Undo Typing dialog mid-workout.
+    expect(document.activeElement).not.toBe(reps);
+  });
+
   it('un-ticking cancels a queued glide', async () => {
     localStorage.setItem('cadence-fitness:gym-mode', '1');
     render(<Harness seed={seedTwoExercises} />);
