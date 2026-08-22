@@ -25,25 +25,19 @@ const Search = lazy(() => import('./screens/Search').then((m) => ({ default: m.S
 const Settings = lazy(() => import('./screens/Settings').then((m) => ({ default: m.Settings })));
 
 // ── Financial domain ──────────────────────────────────────────────────────
-const FinOverview = lazy(() => import('./financial/screens/Overview').then((m) => ({ default: m.Overview })));
-const FinGoals = lazy(() => import('./financial/screens/Goals').then((m) => ({ default: m.Goals })));
+// Consolidated hubs (Overview/Cashflow/Risk) with old screen ids routed in as
+// deep links to the matching view; Investments / Property / Watches /
+// Conviction are deliberately untouched standalone screens.
+const FinOverviewHub = lazy(() => import('./financial/screens/hubs').then((m) => ({ default: m.OverviewHub })));
+const FinCashflowHub = lazy(() => import('./financial/screens/hubs').then((m) => ({ default: m.CashflowHub })));
+const FinRiskHub = lazy(() => import('./financial/screens/hubs').then((m) => ({ default: m.RiskHub })));
 const FinStrategy = lazy(() => import('./financial/screens/Strategy').then((m) => ({ default: m.Strategy })));
-const FinBudget = lazy(() => import('./financial/screens/Budget').then((m) => ({ default: m.Budget })));
 const FinMonthClose = lazy(() => import('./financial/screens/MonthClose').then((m) => ({ default: m.MonthClose })));
-const FinFreeCashEngine = lazy(() => import('./financial/screens/FreeCashEngine').then((m) => ({ default: m.FreeCashEngine })));
-const FinNetWorthBridge = lazy(() => import('./financial/screens/NetWorthBridge').then((m) => ({ default: m.NetWorthBridge })));
 const FinDebtOffsetControl = lazy(() => import('./financial/screens/DebtOffsetControl').then((m) => ({ default: m.DebtOffsetControl })));
 const FinInvestmentDeployment = lazy(() => import('./financial/screens/InvestmentDeployment').then((m) => ({ default: m.InvestmentDeployment })));
 const FinWatches = lazy(() => import('./financial/screens/Watches').then((m) => ({ default: m.Watches })));
 const FinPropertyPortfolio = lazy(() => import('./financial/screens/PropertyPortfolio').then((m) => ({ default: m.PropertyPortfolio })));
-const FinAssetAllocation = lazy(() => import('./financial/screens/AssetAllocation').then((m) => ({ default: m.AssetAllocation })));
-const FinPerformance = lazy(() => import('./financial/screens/Performance').then((m) => ({ default: m.Performance })));
 const FinConviction = lazy(() => import('./financial/screens/Conviction').then((m) => ({ default: m.Conviction })));
-const FinRiskDashboard = lazy(() => import('./financial/screens/RiskDashboard').then((m) => ({ default: m.RiskDashboard })));
-const FinStressTests = lazy(() => import('./financial/screens/StressTests').then((m) => ({ default: m.StressTests })));
-const FinProtection = lazy(() => import('./financial/screens/Protection').then((m) => ({ default: m.Protection })));
-const FinEvidenceRegister = lazy(() => import('./financial/screens/EvidenceRegister').then((m) => ({ default: m.EvidenceRegister })));
-const FinDecisions = lazy(() => import('./financial/screens/Decisions').then((m) => ({ default: m.Decisions })));
 const FinKobe = lazy(() => import('./financial/screens/Kobe').then((m) => ({ default: m.Kobe })));
 
 // ── Fitness domain ────────────────────────────────────────────────────────
@@ -218,27 +212,31 @@ export function App() {
     if (domain === 'financial') {
       const s = screen.slice('financial:'.length);
       switch (s) {
-        case 'overview': return <FinOverview onMenu={onMenu} onNavigate={financialNavigate} />;
-        case 'goals': return <FinGoals onMenu={onMenu} />;
+        // Hubs. Old screen ids stay routable as deep links into the matching
+        // hub view, so in-app navigation and muscle memory keep working.
+        case 'overview': return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} />;
+        case 'net-worth-bridge': return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} initialView="bridge" />;
+        case 'performance': return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} initialView="performance" />;
+        case 'allocation': return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} initialView="allocation" />;
+        case 'goals': return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} initialView="goals" />;
+        case 'cashflow': return <FinCashflowHub onMenu={onMenu} />;
+        case 'budget': return <FinCashflowHub onMenu={onMenu} />;
+        case 'free-cash-engine': return <FinCashflowHub onMenu={onMenu} initialView="freecash" />;
+        case 'risk': return <FinRiskHub onMenu={onMenu} />;
+        case 'stress': return <FinRiskHub onMenu={onMenu} initialView="stress" />;
+        case 'protection': return <FinRiskHub onMenu={onMenu} initialView="protection" />;
         case 'strategy': return <FinStrategy onMenu={onMenu} />;
-        case 'budget': return <FinBudget onMenu={onMenu} />;
+        case 'decisions': return <FinStrategy onMenu={onMenu} initialView="decisions" />;
         case 'month-close': return <FinMonthClose onMenu={onMenu} />;
-        case 'free-cash-engine': return <FinFreeCashEngine onMenu={onMenu} />;
-        case 'net-worth-bridge': return <FinNetWorthBridge onMenu={onMenu} />;
+        case 'evidence': return <FinMonthClose onMenu={onMenu} initialView="evidence" />;
+        // Standalone screens (untouched).
         case 'debt-offset': return <FinDebtOffsetControl onMenu={onMenu} />;
         case 'investments': return <FinInvestmentDeployment onMenu={onMenu} />;
         case 'watches': return <FinWatches onMenu={onMenu} />;
         case 'property': return <FinPropertyPortfolio onMenu={onMenu} />;
-        case 'allocation': return <FinAssetAllocation onMenu={onMenu} />;
-        case 'performance': return <FinPerformance onMenu={onMenu} />;
         case 'conviction': return <FinConviction onMenu={onMenu} />;
-        case 'risk': return <FinRiskDashboard onMenu={onMenu} />;
-        case 'stress': return <FinStressTests onMenu={onMenu} />;
-        case 'protection': return <FinProtection onMenu={onMenu} />;
-        case 'evidence': return <FinEvidenceRegister onMenu={onMenu} />;
-        case 'decisions': return <FinDecisions onMenu={onMenu} />;
         case 'kobe': return <FinKobe onMenu={onMenu} />;
-        default: return <FinOverview onMenu={onMenu} onNavigate={financialNavigate} />;
+        default: return <FinOverviewHub onMenu={onMenu} onNavigate={financialNavigate} />;
       }
     }
     if (domain === 'fitness') {

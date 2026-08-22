@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { APPROVAL_STATUS_LABEL, OWNER_LENS_LABEL, fmtDMY, todayLocalISO } from '../lib/util';
 import type { DecisionApprovalStatus, OwnerLens } from '../lib/types';
 
-export function Decisions({ onMenu }: { onMenu: () => void }) {
+// Rendered inside Strategy — decisions are the plan's approval queue.
+export function DecisionsView() {
   const { data, insert, update } = useCadenceFinancial();
   const [showForm, setShowForm] = useState(false);
   const [question, setQuestion] = useState('');
@@ -38,12 +39,15 @@ export function Decisions({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Needs you" subtitle="Decisions, missing approvals and evidence gates." onMenu={onMenu}>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowForm((s) => !s)}>
-          {showForm ? 'Cancel' : '+ New decision'}
-        </button>
-      </ScreenHeader>
       <div className="screen-content">
+        <div className="cf-view-bar">
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>
+            Decisions, missing approvals and evidence gates.
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowForm((s) => !s)}>
+            {showForm ? 'Cancel' : '+ New decision'}
+          </button>
+        </div>
         {showForm && (
           <Card title="New decision">
             <div className="form-group">

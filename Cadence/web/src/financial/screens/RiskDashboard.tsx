@@ -1,5 +1,5 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import { computeRiskMetrics } from '../lib/riskCalc';
 import { formatPercent, monthLabel } from '../lib/util';
@@ -11,17 +11,13 @@ const STATUS_CLASS: Record<string, string> = {
   na: 'grade-tag',
 };
 
-export function RiskDashboard({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Risk & Protection hub — the hub owns the ScreenHeader.
+export function RiskDashboardView() {
   const { data } = useCadenceFinancial();
   const current = data.monthly_metrics.length ? latestMonth(data.monthly_metrics) : null;
 
   return (
     <>
-      <ScreenHeader
-        title="Risk Dashboard"
-        subtitle="Live risk metrics against your thresholds — computed, never carried forward."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!current ? (
           <Card>No monthly metrics loaded yet.</Card>

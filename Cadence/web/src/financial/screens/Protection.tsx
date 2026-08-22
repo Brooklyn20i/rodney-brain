@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import {
   ESTATE_ITEM_PRESETS,
   ESTATE_STATUS_LABEL,
@@ -26,7 +26,8 @@ const INSURANCE_STATUS_CLASS: Record<string, string> = {
   lapsed: 'status-blocked',
 };
 
-export function Protection({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Risk & Protection hub — the hub owns the ScreenHeader.
+export function ProtectionView() {
   const { data, insert, update } = useCadenceFinancial();
   const [form, setForm] = useState<'policy' | 'estate' | null>(null);
 
@@ -130,31 +131,30 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader
-        title="Protection"
-        subtitle="Insurance register and estate readiness — record only, never advice."
-        onMenu={onMenu}
-      >
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            setFormError(null);
-            setForm(form === 'estate' ? null : 'estate');
-          }}
-        >
-          {form === 'estate' ? 'Cancel' : '+ Estate item'}
-        </button>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => {
-            setFormError(null);
-            setForm(form === 'policy' ? null : 'policy');
-          }}
-        >
-          {form === 'policy' ? 'Cancel' : '+ Policy'}
-        </button>
-      </ScreenHeader>
       <div className="screen-content">
+        <div className="cf-view-bar">
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>
+            Insurance register and estate readiness — record only, never advice.
+          </span>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setFormError(null);
+              setForm(form === 'estate' ? null : 'estate');
+            }}
+          >
+            {form === 'estate' ? 'Cancel' : '+ Estate item'}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setFormError(null);
+              setForm(form === 'policy' ? null : 'policy');
+            }}
+          >
+            {form === 'policy' ? 'Cancel' : '+ Policy'}
+          </button>
+        </div>
         {form === 'policy' && (
           <Card title="New insurance policy">
             <div className="wizard-grid">

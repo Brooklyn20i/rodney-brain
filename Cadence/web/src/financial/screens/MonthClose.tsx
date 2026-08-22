@@ -5,10 +5,12 @@ import { MonthCloseWizard } from '../components/MonthCloseWizard';
 import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod, priorMonthOf } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
 import { deliverPdfBlob, requiresInteractivePdfDelivery, sharePdfBlob } from '../lib/pdfDelivery';
+import { EvidenceView } from './EvidenceRegister';
 
 type PreparedPdf = { blob: Blob; filename: string };
 
-export function MonthClose({ onMenu }: { onMenu: () => void }) {
+export function MonthClose({ onMenu, initialView = 'close' }: { onMenu: () => void; initialView?: 'close' | 'evidence' }) {
+  const [view, setView] = useState<'close' | 'evidence'>(initialView);
   const { data } = useCadenceFinancial();
   const [wizardMode, setWizardMode] = useState<null | 'next' | 'edit-latest'>(null);
   const [exporting, setExporting] = useState(false);
@@ -103,18 +105,29 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
   return (
     <>
       <ScreenHeader title="Month Close" subtitle={`${label} — financial control room`} onMenu={onMenu}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'next' ? null : 'next'))}>
-          {wizardMode === 'next' ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
-        </button>
-        {canCorrect && (
-          <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'edit-latest' ? null : 'edit-latest'))}>
-            {wizardMode === 'edit-latest' ? 'Cancel' : `✎ Correct ${label}`}
-          </button>
+        {view === 'close' && (
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'next' ? null : 'next'))}>
+              {wizardMode === 'next' ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
+            </button>
+            {canCorrect && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'edit-latest' ? null : 'edit-latest'))}>
+                {wizardMode === 'edit-latest' ? 'Cancel' : `✎ Correct ${label}`}
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={downloadPdf} disabled={exporting}>
+              {exporting ? 'Preparing…' : 'Download monthly PDF'}
+            </button>
+          </>
         )}
-        <button className="btn btn-primary btn-sm" onClick={downloadPdf} disabled={exporting}>
-          {exporting ? 'Preparing…' : 'Download monthly PDF'}
-        </button>
       </ScreenHeader>
+      <div className="hub-toolbar">
+        <div className="hub-seg-group">
+          <button className={`hub-seg ${view === 'close' ? 'active' : ''}`} onClick={() => setView('close')}>Close</button>
+          <button className={`hub-seg ${view === 'evidence' ? 'active' : ''}`} onClick={() => setView('evidence')}>Evidence register</button>
+        </div>
+      </div>
+      {view === 'evidence' ? <EvidenceView /> : (
       <div className="screen-content">
         {preparedPdf && preparedPdfUrl && (
           <div className="cf-callout" role="status">
@@ -234,6 +247,7 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
           )}
         </Card>
       </div>
+      )}
     </>
   );
 }

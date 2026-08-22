@@ -1,19 +1,15 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { netWorthBridge } from '../lib/financeCalc';
 import { formatMoney, monthLabel } from '../lib/util';
 
-export function NetWorthBridge({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Overview hub — the hub owns the ScreenHeader.
+export function BridgeView() {
   const { data } = useCadenceFinancial();
   const sorted = [...data.monthly_metrics].sort((a, b) => a.period.localeCompare(b.period));
 
   return (
     <>
-      <ScreenHeader
-        title="Net Worth Bridge"
-        subtitle="What you controlled this month vs. what markets did."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {sorted.length < 2 ? (
           <Card>Need at least two months of data to build a bridge.</Card>

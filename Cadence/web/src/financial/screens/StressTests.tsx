@@ -1,20 +1,16 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import { computeStressTests } from '../lib/riskCalc';
 import { formatMoney, formatPercent, monthLabel } from '../lib/util';
 
-export function StressTests({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Risk & Protection hub — the hub owns the ScreenHeader.
+export function StressTestsView() {
   const { data } = useCadenceFinancial();
   const current = data.monthly_metrics.length ? latestMonth(data.monthly_metrics) : null;
 
   return (
     <>
-      <ScreenHeader
-        title="Stress Tests"
-        subtitle="Scenario impacts computed live from current balances."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!current ? (
           <Card>No monthly metrics loaded yet.</Card>

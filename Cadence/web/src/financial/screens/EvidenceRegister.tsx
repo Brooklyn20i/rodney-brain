@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES, fmtDMY } from '../lib/util';
 import type { EvidenceGrade, EvidenceStatus } from '../lib/types';
 
 const STATUSES: EvidenceStatus[] = ['received', 'partial', 'missing', 'accepted'];
 
-export function EvidenceRegister({ onMenu }: { onMenu: () => void }) {
+// Rendered inside Month Close — evidence is only ever about a close period.
+export function EvidenceView() {
   const { data, insert, update } = useCadenceFinancial();
   const [showForm, setShowForm] = useState(false);
   const [item, setItem] = useState('');
@@ -43,13 +44,16 @@ export function EvidenceRegister({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Evidence Register" subtitle="Every number, its evidence grade, and what's missing or stale." onMenu={onMenu}>
-        {missingCount > 0 && <span className="grade-tag grade-weak">{missingCount} need attention</span>}
-        <button className="btn btn-primary btn-sm" onClick={() => setShowForm((s) => !s)}>
-          {showForm ? 'Cancel' : '+ New evidence'}
-        </button>
-      </ScreenHeader>
       <div className="screen-content">
+        <div className="cf-view-bar">
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>
+            Every number, its evidence grade, and what's missing or stale.
+          </span>
+          {missingCount > 0 && <span className="grade-tag grade-weak">{missingCount} need attention</span>}
+          <button className="btn btn-primary btn-sm" onClick={() => setShowForm((s) => !s)}>
+            {showForm ? 'Cancel' : '+ New evidence'}
+          </button>
+        </div>
         {showForm && (
           <Card title="New evidence item">
             <div className="wizard-grid">
