@@ -77,8 +77,14 @@ export function parseCsv(text: string): CsvRow[] {
 
 function num(v: string | undefined): number {
   if (!v) return 0;
-  const n = Number(v.replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  // Accounting exports write negatives as "(1,234)" and some tools emit the
+  // Unicode minus "−" — both must survive as negative, not import as +1,234.
+  const trimmed = v.trim();
+  const parenNegative = /^\(.*\)$/.test(trimmed);
+  const normalized = trimmed.replace(/\u2212/g, '-');
+  const n = Number(normalized.replace(/[^0-9.-]/g, ''));
+  if (!Number.isFinite(n)) return 0;
+  return parenNegative ? -Math.abs(n) : n;
 }
 
 const now = () => new Date().toISOString();
@@ -173,13 +179,19 @@ export function normalizeEvidenceGrade(raw: string): EvidenceGrade {
   return GRADE_ALIASES[raw.trim().toLowerCase()] ?? 'assumption';
 }
 
+const EVIDENCE_STATUSES = new Set(['received', 'missing', 'partial', 'accepted']);
+export function normalizeEvidenceStatus(raw: string): EvidenceItem['status'] {
+  const v = raw.trim().toLowerCase();
+  return (EVIDENCE_STATUSES.has(v) ? v : 'accepted') as EvidenceItem['status'];
+}
+
 export function mapEvidenceRegisterCsv(rows: CsvRow[], owner_id: string): Omit<EvidenceItem, 'id'>[] {
   return rows.map((r) => ({
     ...stub(owner_id),
     item: r.item,
     period: r.period,
     grade: normalizeEvidenceGrade(r.evidence_grade || ''),
-    status: (r.status as EvidenceItem['status']) || 'accepted',
+    status: normalizeEvidenceStatus(r.status || ''),
     source: r.source || '',
     notes: r.notes || '',
   }));
@@ -254,7 +266,7 @@ export function mapShareTransactionsCsv(rows: CsvRow[], owner_id: string): Omit<
         ...stub(owner_id),
         date: r.Date,
         ticker: r.Ticker,
-        side: (r.Side as InvestmentTransaction['side']) || 'buy',
+        side: (r.Side || 'buy').trim().toLowerCase() === 'sell' ? 'sell' : 'buy',
         currency,
         units: num(r.Shares),
         price: num(r.Price),

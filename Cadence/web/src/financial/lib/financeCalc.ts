@@ -8,7 +8,7 @@
 // and returns numbers, never storing a derived figure back onto a row.
 
 import type { BudgetFxRate, InvestmentHolding, InvestmentIncome, InvestmentTransaction, MonthlyMetric } from './types';
-import { formatMoney } from './util';
+import { currentMonth, formatMoney } from './util';
 
 const CENTS_PER_DOLLAR = 100;
 
@@ -179,6 +179,14 @@ export function latestMonth(months: MonthlyMetric[]): MonthlyMetric {
   return [...months].sort((a, b) => a.period.localeCompare(b.period))[months.length - 1];
 }
 
+// The month that comes before `period` in the data — NOT "second-from-last by
+// index", which silently picks a duplicate of the current period if one ever
+// exists. Null when `period` is the earliest month.
+export function priorMonthOf(months: MonthlyMetric[], period: string): MonthlyMetric | null {
+  const before = months.filter((m) => m.period < period).sort((a, b) => a.period.localeCompare(b.period));
+  return before.length ? before[before.length - 1] : null;
+}
+
 export interface NetWorthBridge {
   openingNetWorth: number;
   closingNetWorth: number;
@@ -300,7 +308,7 @@ export function investmentBuysSummary(
   end: string
 ): InvestmentBuysSummary {
   const buys = transactions.filter(
-    (t) => t.side === 'buy' && inPeriod(t.date.slice(0, 7), start, end)
+    (t) => !t.deleted_at && t.side === 'buy' && inPeriod(t.date.slice(0, 7), start, end)
   );
   const isBtc = (t: InvestmentTransaction) => t.ticker.toUpperCase() === 'BTC';
 
@@ -509,7 +517,7 @@ function buildBucketSummary(
   rates: Map<string, number>
 ): InvestmentBucketSummary {
   const latest = latestMetricOrNull(months);
-  const fy = financialYearForPeriod(latest?.period ?? new Date().toISOString().slice(0, 7));
+  const fy = financialYearForPeriod(latest?.period ?? currentMonth());
   const opening = metricForPeriod(months, fy.openingPeriod);
   const bucketHoldings = holdings.filter((h) => investmentBucketForHolding(h) === bucket && !h.deleted_at);
   const missing = new Set<string>();
@@ -527,15 +535,21 @@ function buildBucketSummary(
     if (h.as_of_date && (!maxAsOf || h.as_of_date > maxAsOf)) maxAsOf = h.as_of_date;
   }
 
-  const fyBuys = transactions.filter(
+  // NET buys: a sell moves value out of the bucket and must offset buys, or
+  // FY gain reads a plain divestment as a market loss (sell 10k flat → "gain
+  // −10k"). fyGain = current − opening − (buys − sells).
+  const fyTx = transactions.filter(
     (t) =>
       !t.deleted_at &&
-      t.side === 'buy' &&
+      (t.side === 'buy' || t.side === 'sell') &&
       t.date.slice(0, 7) >= fy.start &&
       (!latest || t.date.slice(0, 7) <= latest.period) &&
       investmentBucketForTransaction(t) === bucket
   );
-  const fyNetBuysC = fyBuys.reduce((sum, t) => sum + toCents(t.amount_aud), 0);
+  const fyNetBuysC = fyTx.reduce(
+    (sum, t) => sum + (t.side === 'sell' ? -1 : 1) * toCents(t.amount_aud),
+    0
+  );
   const openingValue = openingValueForBucket(bucket, opening);
   const metricCurrentValue = latestMetricValueForBucket(bucket, latest);
   // Top investment cards are ledger/reconciliation cards. They must reconcile
@@ -573,7 +587,7 @@ export function investmentPerformanceSummary(
   fxRates: BudgetFxRate[]
 ): InvestmentPerformanceSummary {
   const latest = latestMetricOrNull(months);
-  const fy = financialYearForPeriod(latest?.period ?? new Date().toISOString().slice(0, 7));
+  const fy = financialYearForPeriod(latest?.period ?? currentMonth());
   const rates = fxRateMap(fxRates);
   const shares = buildBucketSummary('shares', holdings, transactions, months, rates);
   const crypto = buildBucketSummary('crypto', holdings, transactions, months, rates);

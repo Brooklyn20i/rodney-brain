@@ -11,6 +11,7 @@ import {
   investmentBuysSummary,
   latestMonth,
   netWorthBridge,
+  priorMonthOf,
   summarizePeriod,
 } from './financeCalc';
 import { EVIDENCE_GRADE_LABEL, formatMoney, monthLabel, periodRange } from './util';
@@ -32,9 +33,8 @@ export function buildMonthlyAssessmentSections(
 ): MonthlyAssessmentSections | null {
   if (data.monthly_metrics.length === 0) return null;
 
-  const sortedMonths = [...data.monthly_metrics].sort((a, b) => a.period.localeCompare(b.period));
   const current = latestMonth(data.monthly_metrics);
-  const prior = sortedMonths.length > 1 ? sortedMonths[sortedMonths.length - 2] : current;
+  const prior = priorMonthOf(data.monthly_metrics, current.period) ?? current;
   const bridge = netWorthBridge(prior, current);
 
   const range = periodRange(data.monthly_metrics.map((m) => m.period))!;

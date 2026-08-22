@@ -158,7 +158,7 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
       label: g.label,
       target: String(g.target_net_worth),
       date: g.target_date ?? '',
-      growth: String(g.assumed_growth_rate * 100),
+      growth: String(Math.round(g.assumed_growth_rate * 100 * 1000) / 1000),
       notes: g.notes,
     });
     setEditingId(id);

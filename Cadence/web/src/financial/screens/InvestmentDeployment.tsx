@@ -258,8 +258,26 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
     setForm(null);
   };
 
+  const [buyErr, setBuyErr] = useState('');
+  const buyFormError = (): string | null => {
+    if (!buy.ticker.trim()) return 'Ticker is required';
+    // Free-text date: a DD/MM/YYYY slip would store a garbage month key that
+    // silently falls out of every FY/period window.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(buy.date)) return 'Date must be YYYY-MM-DD';
+    if (num(buy.amount) <= 0) return 'Amount must be greater than zero';
+    const currency = buy.currency.trim().toUpperCase() || 'AUD';
+    // Falling back to the native amount would silently book USD as AUD 1:1 —
+    // the exact mixing types.ts warns amount_aud exists to prevent.
+    if (currency !== 'AUD' && num(buy.amount_aud) <= 0) return 'AUD equivalent is required for non-AUD buys';
+    return null;
+  };
   const addBuy = async () => {
-    if (!buy.ticker.trim() || !buy.date) return;
+    const err = buyFormError();
+    if (err) {
+      setBuyErr(err);
+      return;
+    }
+    setBuyErr('');
     const amount = num(buy.amount);
     const currency = buy.currency.trim().toUpperCase() || 'AUD';
     await insert('investment_transactions', {
@@ -270,8 +288,8 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
       units: num(buy.units),
       price: num(buy.price),
       amount,
-      // AUD rows: native amount IS the AUD amount. Foreign rows need it entered.
-      amount_aud: currency === 'AUD' ? amount : num(buy.amount_aud) || amount,
+      // AUD rows: native amount IS the AUD amount. Foreign rows enter theirs.
+      amount_aud: currency === 'AUD' ? amount : num(buy.amount_aud),
       notes: buy.notes.trim(),
     });
     setBuy({ date: today(), ticker: '', currency: 'AUD', units: '', price: '', amount: '', amount_aud: '', notes: '' });
@@ -310,7 +328,11 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
   };
 
   const addIncome = async () => {
-    if (!income.ticker.trim() || !income.payment_date) return;
+    if (!income.ticker.trim()) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(income.payment_date)) {
+      setIncomeError('Payment date must be YYYY-MM-DD');
+      return;
+    }
     const validationError = incomeFormError(income);
     if (validationError) {
       setIncomeError(validationError);
@@ -359,6 +381,10 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
 
   const saveIncomeEdit = async () => {
     if (!editingIncomeId || !incomeEdit) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(incomeEdit.payment_date)) {
+      setIncomeError('Payment date must be YYYY-MM-DD');
+      return;
+    }
     const validationError = incomeFormError(incomeEdit);
     if (validationError) {
       setIncomeError(validationError);
@@ -439,6 +465,7 @@ export function InvestmentDeployment({ onMenu }: { onMenu: () => void }) {
                 </div>
               ))}
             </div>
+            {buyErr && <p className="form-error">{buyErr}</p>}
             <button className="btn btn-primary" onClick={addBuy}>
               Add buy
             </button>

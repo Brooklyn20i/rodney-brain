@@ -7,8 +7,8 @@ import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import type { StrategyItem, StrategySection } from '../lib/types';
+import { todayLocalISO } from '../lib/util';
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 const SECTION_META: Record<StrategySection, { label: string; color: string }> = {
@@ -39,13 +39,13 @@ export function Strategy({ onMenu }: { onMenu: () => void }) {
   const [showAllMonths, setShowAllMonths] = useState(false);
   const [draft, setDraft] = useState({ section: 'now' as StrategySection, title: '', detail: '', due: '' });
 
-  const today = todayISO();
+  const today = todayLocalISO();
   const ym = today.slice(0, 7);
   const monthName = MONTH_NAMES[Number(ym.slice(5, 7)) - 1];
 
   const open = items.filter((i) => !i.done);
   const doneCount = items.length - open.length;
-  const overdue = open.filter((i) => i.due_date && i.due_date < today && !isAutomated(i));
+  const overdue = open.filter((i) => i.section !== 'monthly' && i.due_date && i.due_date < today && !isAutomated(i));
 
   const toggle = async (i: StrategyItem) => {
     await update('strategy_items', i.id, i.done
@@ -65,9 +65,13 @@ export function Strategy({ onMenu }: { onMenu: () => void }) {
   const bucketable = items.filter((i) =>
     i.section !== 'monthly' && !isAutomated(i) && (showDone || !i.done));
   const in3Months = (() => {
-    const d = new Date(today + 'T00:00:00');
-    d.setMonth(d.getMonth() + 3);
-    return d.toISOString().slice(0, 10);
+    // Local-time month shift with day clamped to the target month's end —
+    // toISOString() would drift a day back, and Nov 30 + 3 must not overflow
+    // into March.
+    const [y, m, day] = today.split('-').map(Number);
+    const lastDay = new Date(y, m - 1 + 3 + 1, 0).getDate();
+    const d = new Date(y, m - 1 + 3, Math.min(day, lastDay));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   })();
   const buckets: { key: string; label: string; rows: StrategyItem[]; overdue?: boolean }[] = [
     { key: 'overdue', label: 'Overdue', overdue: true,
@@ -185,7 +189,7 @@ export function Strategy({ onMenu }: { onMenu: () => void }) {
         {thisMonthBuy && (
           <Card>
             <div className="cf-card-head">
-              <div className="cf-card-title">{monthName} buys — $25,000</div>
+              <div className="cf-card-title">{monthName} buys</div>
               {thisMonthBuy.done
                 ? <span className="tag tag-action">Placed ✓</span>
                 : <span className="tag tag-followUp">Due {thisMonthBuy.due_date ? fmtDue(thisMonthBuy.due_date) : ''}</span>}

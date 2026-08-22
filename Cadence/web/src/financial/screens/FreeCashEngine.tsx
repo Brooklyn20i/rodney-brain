@@ -6,7 +6,8 @@ import { formatMoney, monthLabel, periodRange } from '../lib/util';
 
 export function FreeCashEngine({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
-  const [watchAmount, setWatchAmount] = useState(0);
+  const [watchDraft, setWatchDraft] = useState('');
+  const watchAmount = Number(watchDraft.replace(/[^0-9.]/g, '')) || 0;
   const months = data.monthly_metrics;
   const range = periodRange(months.map((m) => m.period));
 
@@ -108,9 +109,9 @@ export function FreeCashEngine({ onMenu }: { onMenu: () => void }) {
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={watchAmount === 0 ? '' : watchAmount}
+                  value={watchDraft}
                   placeholder="0.00"
-                  onChange={(e) => setWatchAmount(Number(e.target.value.replace(/[^0-9.]/g, '')) || 0)}
+                  onChange={(e) => setWatchDraft(e.target.value)}
                 />
               </div>
               <div className="cf-metric-grid" style={{ marginTop: 10 }}>

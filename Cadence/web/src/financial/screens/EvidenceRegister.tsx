@@ -21,7 +21,9 @@ export function EvidenceRegister({ onMenu }: { onMenu: () => void }) {
     if (aWeak !== bWeak) return aWeak - bWeak; // weak/missing first
     return b.period.localeCompare(a.period);
   });
-  const missingCount = data.evidence_items.filter((e) => !STRONG_EVIDENCE_GRADES.has(e.grade)).length;
+  const missingCount = data.evidence_items.filter(
+    (e) => e.status === 'missing' || e.status === 'partial' || !STRONG_EVIDENCE_GRADES.has(e.grade)
+  ).length;
 
   const addEvidence = async () => {
     if (!item.trim() || !/^\d{4}-\d{2}$/.test(period.trim())) return;

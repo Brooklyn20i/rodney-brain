@@ -43,7 +43,7 @@ export function Overview({ onMenu, onNavigate }: { onMenu: () => void; onNavigat
       if (r.status === 'in_band') continue;
       flags.push({
         tone: 'amber',
-        text: `${r.label} is ${r.status === 'above_band' ? 'above' : 'below'} its policy band — ${formatPercent(r.pct)} of net worth vs ${formatPercent(r.band.min, 0)}–${formatPercent(r.band.max, 0)} target.`,
+        text: `${r.label} is ${r.status === 'above_band' ? 'above' : 'below'} its policy band — ${formatPercent(r.pct)} of total assets vs ${formatPercent(r.band.min, 0)}–${formatPercent(r.band.max, 0)} target.`,
         screen: 'allocation',
         screenLabel: 'Allocation',
       });
@@ -133,7 +133,7 @@ export function Overview({ onMenu, onNavigate }: { onMenu: () => void; onNavigat
   }
 
   const unreadAgent = data.agent_messages.filter(
-    (m) => m.sender_type === 'agent' && m.status === 'unread'
+    (m) => m.sender_type !== 'user' && m.status === 'unread'
   );
   if (unreadAgent.length > 0) {
     flags.push({
