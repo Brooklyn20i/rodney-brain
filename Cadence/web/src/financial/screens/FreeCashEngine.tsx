@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
+import { Card, Metric } from '../components/bits';
 import { summarizePeriod } from '../lib/financeCalc';
 import { formatMoney, monthLabel, periodRange } from '../lib/util';
 
-export function FreeCashEngine({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Cashflow hub — the hub owns the ScreenHeader.
+export function FreeCashView() {
   const { data } = useCadenceFinancial();
   const [watchDraft, setWatchDraft] = useState('');
   const watchAmount = Number(watchDraft.replace(/[^0-9.]/g, '')) || 0;
@@ -21,11 +22,6 @@ export function FreeCashEngine({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader
-        title="Free Cash Engine"
-        subtitle="Cash saved in accounts + share/BTC/collectible purchases. Debt reduction is a second layer."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!summary ? (
           <Card>No monthly metrics loaded yet.</Card>

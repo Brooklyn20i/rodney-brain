@@ -1,5 +1,5 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
+import { Card, Metric } from '../components/bits';
 import { performanceHistory } from '../lib/financeCalc';
 import { formatMoney, formatPercent, monthLabel } from '../lib/util';
 
@@ -10,17 +10,13 @@ import { formatMoney, formatPercent, monthLabel } from '../lib/util';
 
 const signCls = (v: number) => ({ color: v >= 0 ? 'var(--green)' : 'var(--red)' });
 
-export function Performance({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Overview hub — the hub owns the ScreenHeader.
+export function PerformanceView() {
   const { data } = useCadenceFinancial();
   const history = performanceHistory(data.monthly_metrics);
 
   return (
     <>
-      <ScreenHeader
-        title="Performance"
-        subtitle="What you did vs what markets did, month by month."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!history ? (
           <Card>Needs at least two closed months to attribute performance.</Card>

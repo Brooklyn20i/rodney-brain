@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
+import { Card, Metric } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import {
   computeRunway,
@@ -140,7 +140,8 @@ function WhatIfModeller({ current, months, defaultTarget }: { current: MonthlyMe
   );
 }
 
-export function Goals({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Overview hub — the hub owns the ScreenHeader.
+export function GoalsView() {
   const { data, insert, update } = useCadenceFinancial();
   const months = data.monthly_metrics;
   const current = months.length ? latestMonth(months) : null;
@@ -204,24 +205,23 @@ export function Goals({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader
-        title="Goals & Runway"
-        subtitle="The objective, and when you get there at your actual pace."
-        onMenu={onMenu}
-      >
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => {
-            setEditingId(null);
-            setForm({ label: '', target: '', date: '', growth: '', notes: '' });
-            setFormError(null);
-            setShowForm((s) => !s);
-          }}
-        >
-          {showForm && !editingId ? 'Cancel' : '+ Goal'}
-        </button>
-      </ScreenHeader>
       <div className="screen-content">
+        <div className="cf-view-bar">
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>
+            The objective, and when you get there at your actual pace.
+          </span>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setEditingId(null);
+              setForm({ label: '', target: '', date: '', growth: '', notes: '' });
+              setFormError(null);
+              setShowForm((s) => !s);
+            }}
+          >
+            {showForm && !editingId ? 'Cancel' : '+ Goal'}
+          </button>
+        </div>
         {showForm && (
           <Card title={editingId ? 'Edit goal' : 'New goal'}>
             <div className="wizard-grid">

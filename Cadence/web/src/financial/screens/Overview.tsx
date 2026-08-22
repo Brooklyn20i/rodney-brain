@@ -1,5 +1,5 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
+import { Card, Metric } from '../components/bits';
 import {
   buildExecutiveSummary,
   latestMonth,
@@ -25,7 +25,8 @@ interface Flag {
 
 const TONE_CLASS = { red: 'status-blocked', amber: 'grade-weak', info: 'status-clarified' };
 
-export function Overview({ onMenu, onNavigate }: { onMenu: () => void; onNavigate: (id: string) => void }) {
+// The Pulse view of the Overview hub — the hub owns the ScreenHeader.
+export function OverviewPulseView({ onNavigate }: { onNavigate: (id: string) => void }) {
   const { data } = useCadenceFinancial();
   const months = [...data.monthly_metrics].sort((a, b) => a.period.localeCompare(b.period));
   const current = months.length ? latestMonth(months) : null;
@@ -149,11 +150,6 @@ export function Overview({ onMenu, onNavigate }: { onMenu: () => void; onNavigat
 
   return (
     <>
-      <ScreenHeader
-        title="Overview"
-        subtitle={current ? `${monthLabel(current.period)} — where things stand` : 'Where things stand'}
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!current ? (
           <Card>No monthly metrics loaded yet — run your first Month Close to begin.</Card>

@@ -25,35 +25,31 @@ const WORK_FOOTER: NavItem[] = [
 // Financial's screen ids, prefixed 'financial:' so they can never collide
 // with Work's or Fitness's bare ids (e.g. both Work and Fitness have a
 // 'dashboard' and a 'kobe' screen) -- App.tsx dispatches on this prefix.
+// Eleven screens, question-first. Overview folds in the bridge, performance,
+// allocation and goals views; Cashflow = budget + free cash; Month Close
+// carries the evidence register; Strategy carries the decision queue; Risk &
+// Protection = dashboard + stress + cover. Investments, Watches, Property and
+// Conviction are deliberately standalone. Old ids still deep-link (App.tsx).
 export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
   { section: '', items: [
     { id: 'financial:overview', label: 'Overview', icon: '◎' },
-    { id: 'financial:goals', label: 'Goals & Runway', icon: '⚑' },
     { id: 'financial:strategy', label: 'Strategy', icon: '✦' },
   ]},
   { section: 'Operate', items: [
-    { id: 'financial:budget', label: 'Budget', icon: '▤' },
     { id: 'financial:month-close', label: 'Month Close', icon: '●' },
-    { id: 'financial:free-cash-engine', label: 'Free Cash Engine', icon: '$' },
-    { id: 'financial:net-worth-bridge', label: 'Net Worth Bridge', icon: '⇌' },
+    { id: 'financial:cashflow', label: 'Cashflow', icon: '$' },
     { id: 'financial:debt-offset', label: 'Debt & Offset', icon: '⛁' },
   ]},
   { section: 'Invest', items: [
     { id: 'financial:investments', label: 'Investments', icon: '▲' },
-    { id: 'financial:watches', label: 'Watches', icon: '◉' },
     { id: 'financial:property', label: 'Property Portfolio', icon: '⌂' },
-    { id: 'financial:allocation', label: 'Asset Allocation', icon: '◔' },
-    { id: 'financial:performance', label: 'Performance', icon: '↗' },
+    { id: 'financial:watches', label: 'Watches', icon: '◉' },
     { id: 'financial:conviction', label: 'Conviction', icon: '◈' },
   ]},
   { section: 'Risk', items: [
-    { id: 'financial:risk', label: 'Risk Dashboard', icon: '▣' },
-    { id: 'financial:stress', label: 'Stress Tests', icon: '≋' },
-    { id: 'financial:protection', label: 'Protection', icon: '⛨' },
+    { id: 'financial:risk', label: 'Risk & Protection', icon: '⛨' },
   ]},
   { section: 'Govern', items: [
-    { id: 'financial:evidence', label: 'Evidence Register', icon: '☑' },
-    { id: 'financial:decisions', label: 'Needs you', icon: '!' },
     { id: 'financial:kobe', label: 'Kobe', icon: '⚡' },
   ]},
 ];

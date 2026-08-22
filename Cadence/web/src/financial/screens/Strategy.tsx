@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import type { StrategyItem, StrategySection } from '../lib/types';
+import { DecisionsView } from './Decisions';
 import { todayLocalISO } from '../lib/util';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -30,7 +31,8 @@ function fmtDue(d: string): string {
   return `${day} ${MONTH_NAMES[m - 1].slice(0, 3)} ${String(y).slice(2)}`;
 }
 
-export function Strategy({ onMenu }: { onMenu: () => void }) {
+export function Strategy({ onMenu, initialView = 'plan' }: { onMenu: () => void; initialView?: 'plan' | 'decisions' }) {
+  const [view, setView] = useState<'plan' | 'decisions'>(initialView);
   const { data, insert, update } = useCadenceFinancial();
   const items = (data.strategy_items ?? []).filter((i) => !i.deleted_at);
   const [showDone, setShowDone] = useState(false);
@@ -145,15 +147,25 @@ export function Strategy({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Strategy" subtitle="The execution plan. Reviews run themselves — your moves are below." onMenu={onMenu}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowDone((s) => !s)}>
-          {showDone ? 'Hide done' : 'Show done'}
-        </button>
-        <button className="btn btn-primary btn-sm" onClick={() => setAdding((s) => !s)}>
-          {adding ? 'Close' : '+ Add'}
-        </button>
+      <ScreenHeader title="Strategy" subtitle="The execution plan, and the decisions gating it." onMenu={onMenu}>
+        {view === 'plan' && (
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowDone((s) => !s)}>
+              {showDone ? 'Hide done' : 'Show done'}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => setAdding((s) => !s)}>
+              {adding ? 'Close' : '+ Add'}
+            </button>
+          </>
+        )}
       </ScreenHeader>
-
+      <div className="hub-toolbar">
+        <div className="hub-seg-group">
+          <button className={`hub-seg ${view === 'plan' ? 'active' : ''}`} onClick={() => setView('plan')}>Plan</button>
+          <button className={`hub-seg ${view === 'decisions' ? 'active' : ''}`} onClick={() => setView('decisions')}>Needs you</button>
+        </div>
+      </div>
+      {view === 'decisions' ? <DecisionsView /> : (
       <div className="screen-content">
         <div className="cf-metric-grid">
           <Metric label="Open" value={String(open.length)} />
@@ -273,6 +285,7 @@ export function Strategy({ onMenu }: { onMenu: () => void }) {
           </p>
         </Card>
       </div>
+      )}
     </>
   );
 }

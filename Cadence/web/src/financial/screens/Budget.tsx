@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card, Metric } from '../components/bits';
+import { Card, Metric } from '../components/bits';
 import {
   fxLookup,
   fyLabel,
@@ -32,7 +32,8 @@ const slug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').r
 // (1 Jul → 30 Jun), rolled up to an annual view. Income streams in, recurring
 // payments out, free cash the bottom line — converted to an AUD base so EUR
 // income and AUD rent net correctly.
-export function Budget({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Cashflow hub — the hub owns the ScreenHeader.
+export function BudgetView() {
   const { data, insert, update, remove } = useCadenceFinancial();
 
   const thisMonth = currentMonth();
@@ -244,17 +245,20 @@ export function Budget({ onMenu }: { onMenu: () => void }) {
 
   return (
     <>
-      <ScreenHeader title="Budget" subtitle="Monthly plan across the AU financial year, in AUD." onMenu={onMenu}>
-        <div className="bg-view-toggle">
-          <button className={tab === 'month' ? 'active' : ''} onClick={() => setTab('month')}>
-            Month
-          </button>
-          <button className={tab === 'year' ? 'active' : ''} onClick={() => setTab('year')}>
-            Year
-          </button>
-        </div>
-      </ScreenHeader>
       <div className="screen-content">
+        <div className="cf-view-bar">
+          <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>
+            Monthly plan across the AU financial year, in AUD.
+          </span>
+          <div className="bg-view-toggle">
+            <button className={tab === 'month' ? 'active' : ''} onClick={() => setTab('month')}>
+              Month
+            </button>
+            <button className={tab === 'year' ? 'active' : ''} onClick={() => setTab('year')}>
+              Year
+            </button>
+          </div>
+        </div>
         <div className="bg-period">
           <button className="btn btn-secondary btn-sm" onClick={() => setFyStart(fyStart - 1)}>
             ←

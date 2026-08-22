@@ -1,22 +1,18 @@
 import { useCadenceFinancial } from '../lib/store';
-import { ScreenHeader, Card } from '../components/bits';
+import { Card } from '../components/bits';
 import { latestMonth } from '../lib/financeCalc';
 import { allocationRows } from '../lib/allocation';
 import { formatMoney, formatPercent } from '../lib/util';
 
 const STATUS_LABEL = { in_band: 'In band', below_band: 'Below band', above_band: 'Above band' };
 
-export function AssetAllocation({ onMenu }: { onMenu: () => void }) {
+// Rendered inside the Overview hub — the hub owns the ScreenHeader.
+export function AllocationView() {
   const { data } = useCadenceFinancial();
   const current = data.monthly_metrics.length ? latestMonth(data.monthly_metrics) : null;
 
   return (
     <>
-      <ScreenHeader
-        title="Asset Allocation"
-        subtitle="Where gross assets actually sit, against your policy bands."
-        onMenu={onMenu}
-      />
       <div className="screen-content">
         {!current ? (
           <Card>No monthly metrics loaded yet.</Card>
