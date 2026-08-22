@@ -239,6 +239,26 @@ export interface PropertyAnnualRunRate {
   notes: string[];
 }
 
+// ── Derived loan interest ───────────────────────────────────────────────
+// The ledger only knows interest that was TYPED into a statement — but the
+// app already knows every loan's balance, offset and rate. A partially-offset
+// loan accrues real interest every month whether or not a row was logged;
+// without this, a geared property's P&L silently reads as if borrowing were
+// free. Derived per loan as max(balance − offset, 0) × rate (rate is the
+// decimal annual rate, matching Debt & Offset's convention).
+export function expectedAnnualInterest(loans: Loan[]): number {
+  const c = loans.reduce((s, l) => {
+    if (l.deleted_at) return s;
+    const netDebtC = Math.max(0, toCents(l.balance) - toCents(l.offset_balance));
+    return s + Math.round(netDebtC * (Number(l.rate) || 0));
+  }, 0);
+  return centsToDollars(c);
+}
+
+export function expectedMonthlyInterest(loans: Loan[]): number {
+  return centsToDollars(Math.round(toCents(expectedAnnualInterest(loans)) / 12));
+}
+
 const QUARTERLY_BILL_CATEGORIES = new Set<PropertyLedgerCategory>(['strata', 'water', 'council_rates']);
 const ANNUAL_BILL_CATEGORIES = new Set<PropertyLedgerCategory>(['insurance', 'land_tax']);
 const ONE_OFF_EXPENSE_CATEGORIES = new Set<PropertyLedgerCategory>(['repairs_maintenance']);
@@ -276,16 +296,28 @@ function monthlyAccrualAnnualised(rows: PropertyLedgerEntry[]): number {
 export function propertyAnnualRunRate(
   entries: PropertyLedgerEntry[],
   property: Property,
-  trailing: TrailingAverages = trailingAverages(entries, property.id)
+  trailing: TrailingAverages = trailingAverages(entries, property.id),
+  loans: Loan[] = []
 ): PropertyAnnualRunRate {
   const rows = entries.filter((e) => e.property_id === property.id);
   const months = availablePeriods(rows).length;
   const weeklyRent = property.weekly_rent ?? 0;
   const annualIncome = weeklyRent > 0 ? weeklyRent * 52 : trailing.avgIncome * 12;
 
+  // Loan interest: LOGGED statement rows are evidence and always win, but a
+  // geared loan with no rows logged still costs money — fall back to the
+  // interest the loan terms imply so the run-rate never reads borrowing as
+  // free (the Keith St case: partially offset, paying interest monthly,
+  // nothing typed in yet).
+  const derivedInterest = expectedAnnualInterest(loans.filter((l) => l.property_id === property.id));
+
   let annualExpensesC = 0;
   for (const cat of EXPENSE_CATEGORIES) {
     const catRows = rows.filter((e) => e.category === cat);
+    if (cat === 'interest' && catRows.length === 0 && derivedInterest > 0) {
+      annualExpensesC += toCents(derivedInterest);
+      continue;
+    }
     if (catRows.length === 0) continue;
 
     let annualised = 0;
@@ -312,6 +344,12 @@ export function propertyAnnualRunRate(
   const annualIncomeC = toCents(annualIncome);
   const annualExpenses = centsToDollars(annualExpensesC);
   const notes: string[] = [];
+  const interestLogged = rows.some((e) => e.category === 'interest');
+  if (!interestLogged && derivedInterest > 0) {
+    notes.push(
+      `Loan interest derived from loan terms (net debt × rate ≈ ${Math.round(derivedInterest).toLocaleString('en-AU')}/yr) — log the statement figure to replace the estimate.`
+    );
+  }
   if (months < 3) notes.push(`Only ${months} ledger month${months === 1 ? '' : 's'} on file.`);
   if (weeklyRent <= 0 && trailing.avgIncome <= 0) notes.push('No rent baseline on file.');
   if (rows.some(isScheduledEntry)) {

@@ -4,6 +4,8 @@ import {
   isIncome,
   monthlyPnL,
   portfolioMonth,
+  expectedAnnualInterest,
+  expectedMonthlyInterest,
   propertyAnnualRunRate,
   propertyFinancials,
   propertyYields,
@@ -419,5 +421,52 @@ describe('propertyAnnualRunRate — audit regressions', () => {
     const rows = [entry('R2', '2026-06', 'rent', 2000), entry('R2', '2026-07', 'repairs_maintenance', 1200)];
     const runRate = propertyAnnualRunRate(rows, p);
     expect(runRate.annualExpenses).toBeCloseTo(1200, 2); // ÷ max(2,12) × 12
+  });
+});
+
+describe('derived loan interest (the Keith St case)', () => {
+  const keithLoan: Loan = {
+    id: 'LK', owner_id: 'demo-owner', property_id: 'K',
+    balance: 500_000, offset_balance: 200_000, rate: 0.06,
+    monthly_repayment: 3000, rate_type: 'variable', review_date: null,
+    notes: '', created_at: '', updated_at: '', deleted_at: null,
+  };
+
+  it('expectedAnnualInterest = net debt × rate, floored at zero per loan', () => {
+    expect(expectedAnnualInterest([keithLoan])).toBeCloseTo(18_000, 2); // (500k−200k)×6%
+    // Fully offset loan accrues nothing — and never subsidises another loan.
+    const fullyOffset: Loan = { ...keithLoan, id: 'LF', balance: 300_000, offset_balance: 400_000 };
+    expect(expectedAnnualInterest([fullyOffset])).toBe(0);
+    expect(expectedAnnualInterest([keithLoan, fullyOffset])).toBeCloseTo(18_000, 2);
+    expect(expectedMonthlyInterest([keithLoan])).toBeCloseTo(1500, 2);
+  });
+
+  it('a geared property with NO interest rows logged carries derived interest in the run-rate', () => {
+    const p: Property = { ...property('K', 850_000), weekly_rent: 700 };
+    const rows = [entry('K', '2026-07', 'rent', 3033.33)];
+    const runRate = propertyAnnualRunRate(rows, p, trailingAverages(rows, 'K'), [keithLoan]);
+    // Income 700×52 = 36,400; expenses = derived interest 18,000.
+    expect(runRate.annualExpenses).toBeCloseTo(18_000, 2);
+    expect(runRate.annualNet).toBeCloseTo(36_400 - 18_000, 2);
+    expect(runRate.notes.join(' ')).toMatch(/interest derived from loan terms/i);
+  });
+
+  it('LOGGED interest rows are evidence — they replace the estimate, never stack on it', () => {
+    const p: Property = { ...property('K2', 850_000), weekly_rent: 700 };
+    const rows = [
+      entry('K2', '2026-07', 'rent', 3033.33),
+      entry('K2', '2026-07', 'interest', 1450), // actual statement figure
+    ];
+    const loan: Loan = { ...keithLoan, property_id: 'K2' };
+    const runRate = propertyAnnualRunRate(rows, p, trailingAverages(rows, 'K2'), [loan]);
+    expect(runRate.annualExpenses).toBeCloseTo(1450 * 12, 2); // actuals annualised, not 18k + actuals
+    expect(runRate.notes.join(' ')).not.toMatch(/derived from loan terms/i);
+  });
+
+  it('another property’s loan never leaks interest into this one', () => {
+    const p: Property = { ...property('K3', 850_000), weekly_rent: 700 };
+    const rows = [entry('K3', '2026-07', 'rent', 3033.33)];
+    const runRate = propertyAnnualRunRate(rows, p, trailingAverages(rows, 'K3'), [keithLoan]); // loan is for 'K'
+    expect(runRate.annualExpenses).toBe(0);
   });
 });
