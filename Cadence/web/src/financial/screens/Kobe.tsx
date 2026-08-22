@@ -3,7 +3,8 @@ import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card } from '../components/bits';
 import { fmtDMY } from '../lib/util';
 
-// Message channel to Rodney's agents (Kobe/Warren/Dan). This screen is the
+// Customer-facing channel to Cadence Financial. Warren and Dan remain internal
+// investment and property lenses rather than separate products. This screen is the
 // human-facing half; the agent-facing half is a scoped Supabase grant set
 // up separately in Kobe's own environment (see AGENTS.md) -- there's no
 // live agent connected here, this just reads/writes the same table Kobe
@@ -29,10 +30,12 @@ export function Kobe({ onMenu }: { onMenu: () => void }) {
   };
 
   const markRead = (id: string) => update('agent_messages', id, { status: 'processed' });
+  const displaySenderLabel = (senderType: string, senderLabel: string) =>
+    senderType === 'user' ? senderLabel : 'Cadence Financial';
 
   return (
     <>
-      <ScreenHeader title="Kobe" subtitle="Message channel to Kobe, Warren and Dan." onMenu={onMenu}>
+      <ScreenHeader title="Cadence Financial" subtitle="Your private wealth operating agent." onMenu={onMenu}>
         {unread.length > 0 && <span className="grade-tag grade-weak">{unread.length} unread</span>}
       </ScreenHeader>
       <div className="screen-content">
@@ -49,7 +52,7 @@ export function Kobe({ onMenu }: { onMenu: () => void }) {
                 >
                   <div>{m.body}</div>
                   <div className="agent-msg-meta">
-                    {m.sender_label} · {fmtDMY(m.created_at)}
+                    {displaySenderLabel(m.sender_type, m.sender_label)} · {fmtDMY(m.created_at)}
                     {m.status === 'unread' ? ' · unread' : ''}
                   </div>
                 </div>
@@ -59,7 +62,7 @@ export function Kobe({ onMenu }: { onMenu: () => void }) {
           <div className="agent-compose">
             <textarea
               value={draft}
-              placeholder="Message Kobe..."
+              placeholder="Message Cadence Financial..."
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -73,12 +76,11 @@ export function Kobe({ onMenu }: { onMenu: () => void }) {
             </button>
           </div>
         </Card>
-        <Card title="How this connects to Kobe">
+        <Card title="How it works">
           <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
-            This is the app side of the channel only. For Kobe to actually read and reply here, it
-            needs a scoped grant on this Supabase project (a dedicated non-owner agent account with
-            row access limited to this owner_id) -- the same pattern the main Cadence app uses. That
-            grant is set up in Kobe's own environment, not in this app.
+            Messages here use the same secure Cadence Financial channel. Access is scoped to
+            portfolio analysis and decision support; trading
+            and capital movement remain outside the agent's authority.
           </p>
         </Card>
       </div>

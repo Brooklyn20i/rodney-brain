@@ -53,10 +53,10 @@ const requiredHeaders = [
 const pages = [
   ['/', 'Cadence'],
   ['/work', 'Cadence Work'],
-  ['/financial', 'Cadence Wealth'],
+  ['/financial', 'Cadence Financial'],
   ['/health', 'Cadence Health'],
   ['/tour/work', 'Work'],
-  ['/tour/wealth', 'Wealth'],
+  ['/tour/wealth', 'Financial'],
   ['/tour/health', 'Health'],
   ['/kobe', 'Kobe'],
 ];

@@ -51,7 +51,7 @@ export default defineConfig({
       input: {
         main: 'index.html', // marketing landing page (sells Cadence)
         tourWork: 'tour-work.html', // marketing: Work feature tour
-        tourWealth: 'tour-wealth.html', // marketing: Wealth feature tour
+        tourWealth: 'tour-wealth.html', // marketing: Financial feature tour
         tourHealth: 'tour-health.html', // marketing: Health feature tour
         kobe: 'kobe.html', // marketing: agent page
         work: 'work.html', // the Work app shell (root used to be this)

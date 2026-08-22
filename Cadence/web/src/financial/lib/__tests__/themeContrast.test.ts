@@ -47,7 +47,7 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('Financial theme contrast', () => {
-  it('owns its light surface and text tokens so Wealth stays readable after another domain theme', () => {
+  it('owns its light surface and text tokens so Financial stays readable after another domain theme', () => {
     const tokens = financialThemeTokens();
 
     expect(tokens['--app-bg']).toBe('#F4F4F0');
@@ -70,7 +70,7 @@ describe('Financial theme contrast', () => {
   // The deeper root cause: content text must be ANCHORED to the theme token on
   // the content root, or elements that don't set their own color inherit the
   // per-domain HTML shell's hardcoded base color (health.html is near-white).
-  // Switching domains in-app then left Wealth's white cards showing near-white
+  // Switching domains in-app then left Financial's white cards showing near-white
   // headings / big numbers. Lock the anchor so it can't be dropped again.
   it('anchors content text to the theme token so nothing inherits a shell literal', () => {
     const mainBlock = styles.match(/#main\s*\{([^}]*)\}/)?.[1] ?? '';
