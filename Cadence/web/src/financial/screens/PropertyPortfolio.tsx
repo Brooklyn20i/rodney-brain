@@ -7,6 +7,7 @@ import {
   availablePeriods,
   monthlyPnL,
   portfolioMonth,
+  expectedMonthlyInterest,
   propertyAnnualRunRate,
   propertyFinancials,
   SCHEDULED_PROPERTY_LEDGER_NOTE,
@@ -123,7 +124,7 @@ function PortfolioOverview({
 
   const fins = properties.map((p) => {
     const trailing = trailingAverages(ledger, p.id);
-    return propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing));
+    return propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing, loansFor(p.id)));
   });
   const totalValue = fins.reduce((s, f) => s + f.value, 0);
   const totalDebt = fins.reduce((s, f) => s + f.debt, 0);
@@ -203,7 +204,7 @@ function PortfolioOverview({
                   <tbody>
                     {properties.map((p) => {
                       const trailing = trailingAverages(ledger, p.id);
-                      const f = propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing));
+                      const f = propertyFinancials(p, loansFor(p.id), trailing, new Date(), propertyAnnualRunRate(ledger, p, trailing, loansFor(p.id)));
                       return (
                         <tr key={p.id}>
                           <td style={{ textAlign: 'left' }}>{p.address}</td>
@@ -277,9 +278,13 @@ function PropertyDetailPage({
 }) {
   const [tab, setTab] = useState<'none' | 'edit' | 'log'>('none');
   const trailing = trailingAverages(ledger, property.id);
-  const runRate = propertyAnnualRunRate(ledger, property, trailing);
+  const runRate = propertyAnnualRunRate(ledger, property, trailing, loans);
   const f = propertyFinancials(property, loans, trailing, new Date(), runRate);
   const pnl = monthlyPnL(ledger, property.id, period);
+  // A geared month with no interest row logged is an INCOMPLETE month, not a
+  // cheaper one — flag it with the figure the loan terms imply.
+  const impliedMonthlyInterest = expectedMonthlyInterest(loans);
+  const monthMissingInterest = pnl.expensesByCategory.interest === undefined && impliedMonthlyInterest > 0;
   const propPeriods = availablePeriods(ledger.filter((e) => e.property_id === property.id));
   const upcoming = scheduledObligations(ledger, property.id);
 
@@ -406,6 +411,14 @@ function PropertyDetailPage({
               </tfoot>
             </table>
           </div>
+          {monthMissingInterest && (
+            <p style={{ fontSize: 12, color: 'var(--orange)', marginTop: 10 }}>
+              No loan interest logged for {monthLabel(period)} — the loan terms imply
+              ≈{formatMoney(impliedMonthlyInterest)}/mo (net debt × rate), so this month's net is
+              overstated until the statement figure is logged. The run-rate figures above already
+              include the estimate.
+            </p>
+          )}
         </Card>
 
         {upcoming.length > 0 && (
