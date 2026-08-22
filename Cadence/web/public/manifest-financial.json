@@ -1,6 +1,6 @@
 {
-  "name": "Cadence Wealth",
-  "short_name": "Cadence Wealth",
+  "name": "Cadence Financial",
+  "short_name": "Cadence Financial",
   "description": "Your financial command centre — net worth, budget, runway",
   "start_url": "/financial",
   "display": "standalone",

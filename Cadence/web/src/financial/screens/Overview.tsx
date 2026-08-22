@@ -139,9 +139,9 @@ export function OverviewPulseView({ onNavigate }: { onNavigate: (id: string) => 
   if (unreadAgent.length > 0) {
     flags.push({
       tone: 'info',
-      text: `${unreadAgent.length} unread message${unreadAgent.length === 1 ? '' : 's'} from your agents.`,
+      text: `${unreadAgent.length} unread message${unreadAgent.length === 1 ? '' : 's'} from Cadence Financial.`,
       screen: 'kobe',
-      screenLabel: 'Kobe',
+      screenLabel: 'Cadence Financial',
     });
   }
 

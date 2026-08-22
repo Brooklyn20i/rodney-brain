@@ -7,7 +7,7 @@ cadence_fitness_mcp.py. It does not store credentials; the bridge reads public
 config from MCP env and the agent password from macOS Keychain.
 
 This is REAL net-worth data. Reads are broad; writes are deliberately narrow
-(log decisions, post to the Kobe chat channel) and always stamped with Rodney's
+(log decisions, post to the Cadence Financial chat channel) and always stamped with Rodney's
 owner_id so they surface in his app. It does not place trades, move money, or
 mutate balances silently.
 
@@ -672,7 +672,7 @@ def update_decision_status(decision_id: str, approval_status: str) -> dict:
 
 @mcp.tool()
 def list_agent_messages(status: str = "unread", limit: int = 20) -> list[dict]:
-    """List messages in the Kobe channel. status: unread, processed, or all."""
+    """List messages in the Cadence Financial channel. status: unread, processed, or all."""
     try:
         q = "select=*&deleted_at=is.null&order=created_at.desc"
         if status != "all":
@@ -684,12 +684,12 @@ def list_agent_messages(status: str = "unread", limit: int = 20) -> list[dict]:
 
 @mcp.tool()
 def send_agent_message(body: str, linked_period: str | None = None) -> dict:
-    """Post a message from Kobe into the app's Financial Kobe screen."""
+    """Post a message from Cadence Financial into the app's Financial agent screen."""
     try:
         row = {
             "owner_id": bridge.discover_owner_id(),
             "sender_type": "agent",
-            "sender_label": "Kobe",
+            "sender_label": "Cadence Financial",
             "body": body,
             "status": "unread",
             "linked_period": linked_period,

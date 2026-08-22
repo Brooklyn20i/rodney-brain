@@ -50,7 +50,7 @@ export const FINANCIAL_NAV: { section: string; items: NavItem[] }[] = [
     { id: 'financial:risk', label: 'Risk & Protection', icon: '⛨' },
   ]},
   { section: 'Govern', items: [
-    { id: 'financial:kobe', label: 'Kobe', icon: '⚡' },
+    { id: 'financial:kobe', label: 'Cadence Financial', icon: '⚡' },
   ]},
 ];
 

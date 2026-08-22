@@ -80,7 +80,7 @@ const DOMAIN_THEME_COLOR: Record<Domain, string> = {
 // worker serving the cached index.html shell.
 const DOMAIN_TITLE: Record<Domain, string> = {
   work: 'Cadence Work',
-  financial: 'Cadence Wealth',
+  financial: 'Cadence Financial',
   fitness: 'Cadence Health',
 };
 const DOMAIN_TAGLINE: Record<Domain, string> = {
