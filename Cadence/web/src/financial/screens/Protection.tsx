@@ -328,7 +328,7 @@ export function Protection({ onMenu }: { onMenu: () => void }) {
                 </tbody>
                 <tfoot>
                   <tr className="cf-total">
-                    <td>Total (active)</td>
+                    <td>Total (excl. lapsed)</td>
                     <td />
                     <td />
                     <td />

@@ -10,13 +10,18 @@ import type {
   Conviction as ConvictionRating, InvestmentThesis, ThesisNoteKind,
   ThesisStatus, ThesisTargetKind,
 } from '../lib/types';
+import { todayLocalISO } from '../lib/util';
 
 // ── shared helpers (exported for the Conviction screen) ────────────────────
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+export const todayISO = () => todayLocalISO();
 export function addMonths(iso: string, months: number): string {
-  const d = new Date(iso + 'T00:00:00');
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
+  // Build AND read back in local time — a toISOString() read subtracts a day
+  // in every UTC+ timezone. Day-of-month overflow clamps to month end
+  // (Jan 31 + 1 month → Feb 28/29, not Mar 2/3).
+  const [y, m, day] = iso.split('-').map(Number);
+  const lastDay = new Date(y, m - 1 + months + 1, 0).getDate();
+  const d = new Date(y, m - 1 + months, Math.min(day, lastDay));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, '')) || 0;
 const numOrNull = (s: string): number | null => {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { writeWithColumnDrift } from '../../lib/supabaseWrite';
 import { useSupabaseOwnerId, fetchSchemaTables } from '../../lib/domainStore';
@@ -62,15 +62,36 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
     });
   }, []);
 
+  // Writes in flight — realtime refetches must not race them: a snapshot whose
+  // query ran mid-write applies stale truth over the user's edit (the same
+  // clobber class the fitness store had). Refetches wait for write-quiet.
+  const writesInFlight = useRef(0);
+
   useEffect(() => {
     if (OFFLINE || !ownerId) return;
     reload();
+    // Coalesce realtime echoes per table (our own writes each bounce one back)
+    // and hold refetches while a write is still in flight.
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const scheduleReload = (t: Table) => {
+      const existing = timers.get(t as string);
+      if (existing) clearTimeout(existing);
+      const fire = () => {
+        if (writesInFlight.current > 0) {
+          timers.set(t as string, setTimeout(fire, 700));
+          return;
+        }
+        void reload(t);
+      };
+      timers.set(t as string, setTimeout(fire, 700));
+    };
     const ch = supabase.channel('cadence-financial-rt');
     TABLES.forEach((t) =>
-      ch.on('postgres_changes', { event: '*', schema: 'financial', table: t as string }, () => reload(t))
+      ch.on('postgres_changes', { event: '*', schema: 'financial', table: t as string }, () => scheduleReload(t))
     );
     ch.subscribe();
     return () => {
+      timers.forEach((h) => clearTimeout(h));
       supabase.removeChannel(ch);
     };
   }, [ownerId, reload]);
@@ -88,14 +109,25 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
     const ownedRow = ownerId ? { owner_id: ownerId, ...stamped } : stamped;
     // Column-drift tolerant: strip + retry if a column predates its migration,
     // matching the Work store (shared helper) instead of hard-failing the save.
-    const { data: d, error } = await writeWithColumnDrift(ownedRow, (p) =>
-      supabase.schema('financial').from(table as string).insert(p).select().single()
-    );
+    writesInFlight.current += 1;
+    let d: unknown, error: unknown;
+    try {
+      ({ data: d, error } = await writeWithColumnDrift(ownedRow, (p) =>
+        supabase.schema('financial').from(table as string).insert(p).select().single()
+      ));
+    } finally {
+      writesInFlight.current = Math.max(0, writesInFlight.current - 1);
+    }
     if (error) {
       setSyncError((error as { message?: string }).message || 'Save failed');
       throw error;
     }
-    setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
+    // A racing realtime reload may already hold the server row — never append
+    // a duplicate id (it would double-count in every sum until the next reload).
+    setData((prev) => ({
+      ...prev,
+      [table]: [...(prev as any)[table].filter((r: any) => r.id !== (d as any).id), d],
+    }));
     return d as unknown as Row<K>;
   };
 
@@ -103,20 +135,32 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
     // Snapshot the row before the optimistic write so a permanent (non-network)
     // failure can roll back — otherwise the UI keeps showing an edit the DB
     // rejected until the next reload silently snaps it back ("my change vanished").
-    const prevRow = (data as any)[table].find((r: any) => r.id === id);
-    setData((prev) => ({
-      ...prev,
-      [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
-    }));
+    // Captured INSIDE the updater so back-to-back edits to one row each roll
+    // back to the state they actually patched, not a stale render closure.
+    let prevRow: any = (data as any)[table].find((r: any) => r.id === id);
+    setData((prev) => {
+      const live = (prev as any)[table].find((r: any) => r.id === id);
+      if (live) prevRow = live; // prefer the CURRENT state over the render closure
+      return {
+        ...prev,
+        [table]: (prev as any)[table].map((r: any) => (r.id === id ? { ...r, ...patch } : r)),
+      };
+    });
 
     if (OFFLINE) {
       const found = (data as any)[table].find((r: any) => r.id === id);
       return { ...found, ...patch } as Row<K>;
     }
 
-    const { data: d, error } = await writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
-      supabase.schema('financial').from(table as string).update(p).eq('id', id).select().single()
-    );
+    writesInFlight.current += 1;
+    let d: unknown, error: unknown;
+    try {
+      ({ data: d, error } = await writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
+        supabase.schema('financial').from(table as string).update(p).eq('id', id).select().single()
+      ));
+    } finally {
+      writesInFlight.current = Math.max(0, writesInFlight.current - 1);
+    }
     if (error) {
       if (prevRow) setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? prevRow : r)) }));
       setSyncError((error as { message?: string }).message || 'Save failed');
@@ -127,14 +171,30 @@ export function CadenceFinancialProvider({ children }: { children: React.ReactNo
   };
 
   const remove = async (table: Table, id: string): Promise<void> => {
-    setData((prev) => ({ ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) }));
+    // Keep the row for rollback: a failed soft-delete (RLS, offline) must put
+    // it back — the DB still has it, and no realtime event will resurrect it.
+    let removedRow: any = (data as any)[table].find((r: any) => r.id === id);
+    setData((prev) => {
+      const live = (prev as any)[table].find((r: any) => r.id === id);
+      if (live) removedRow = live;
+      return { ...prev, [table]: (prev as any)[table].filter((r: any) => r.id !== id) };
+    });
     if (OFFLINE) return;
-    const { error } = await supabase
-      .schema('financial')
-      .from(table as string)
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    writesInFlight.current += 1;
+    let error: { message?: string } | null;
+    try {
+      ({ error } = await supabase
+        .schema('financial')
+        .from(table as string)
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id));
+    } finally {
+      writesInFlight.current = Math.max(0, writesInFlight.current - 1);
+    }
     if (error) {
+      if (removedRow) {
+        setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], removedRow] }));
+      }
       setSyncError(error.message || 'Delete failed');
       throw error;
     }

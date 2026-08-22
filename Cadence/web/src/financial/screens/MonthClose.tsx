@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { MonthCloseWizard } from '../components/MonthCloseWizard';
-import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod } from '../lib/financeCalc';
+import { buildExecutiveSummary, latestMonth, netWorthBridge, nextPeriod, priorMonthOf } from '../lib/financeCalc';
 import { formatMoney, monthLabel, EVIDENCE_GRADE_LABEL, STRONG_EVIDENCE_GRADES } from '../lib/util';
 import { deliverPdfBlob, requiresInteractivePdfDelivery, sharePdfBlob } from '../lib/pdfDelivery';
 
@@ -10,7 +10,7 @@ type PreparedPdf = { blob: Blob; filename: string };
 
 export function MonthClose({ onMenu }: { onMenu: () => void }) {
   const { data } = useCadenceFinancial();
-  const [showWizard, setShowWizard] = useState(false);
+  const [wizardMode, setWizardMode] = useState<null | 'next' | 'edit-latest'>(null);
   const [exporting, setExporting] = useState(false);
   const [preparedPdf, setPreparedPdf] = useState<PreparedPdf | null>(null);
   const [preparedPdfUrl, setPreparedPdfUrl] = useState<string | null>(null);
@@ -23,11 +23,15 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
     };
   }, [preparedPdfUrl]);
 
+  // Invalidate a prepared PDF only when the CLOSE DATA it was built from
+  // changes — keying on the whole `data` object meant any realtime echo on an
+  // unrelated table (another device, an agent write) silently removed the
+  // "Share or save" banner before the user could tap it.
   useEffect(() => {
     setPreparedPdf(null);
     setPreparedPdfUrl(null);
     setPdfError(null);
-  }, [data]);
+  }, [data.monthly_metrics, data.evidence_items, data.decisions]);
 
   const clearPreparedPdf = () => {
     setPreparedPdfUrl(null);
@@ -86,11 +90,11 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
     );
   }
 
-  const sorted = [...months].sort((a, b) => a.period.localeCompare(b.period));
   const current = latestMonth(months);
-  const prior = sorted.length > 1 ? sorted[sorted.length - 2] : current;
+  const prior = priorMonthOf(months, current.period) ?? current;
   const bridge = netWorthBridge(prior, current);
   const label = monthLabel(current.period);
+  const canCorrect = priorMonthOf(months, current.period) !== null;
 
   const currentEvidence = data.evidence_items.filter((e) => e.period === current.period);
   const missing = currentEvidence.filter((e) => !STRONG_EVIDENCE_GRADES.has(e.grade));
@@ -99,9 +103,14 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
   return (
     <>
       <ScreenHeader title="Month Close" subtitle={`${label} — financial control room`} onMenu={onMenu}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowWizard((s) => !s)}>
-          {showWizard ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
+        <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'next' ? null : 'next'))}>
+          {wizardMode === 'next' ? 'Cancel' : `+ Close ${monthLabel(nextPeriod(current.period))}`}
         </button>
+        {canCorrect && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setWizardMode((m) => (m === 'edit-latest' ? null : 'edit-latest'))}>
+            {wizardMode === 'edit-latest' ? 'Cancel' : `✎ Correct ${label}`}
+          </button>
+        )}
         <button className="btn btn-primary btn-sm" onClick={downloadPdf} disabled={exporting}>
           {exporting ? 'Preparing…' : 'Download monthly PDF'}
         </button>
@@ -132,7 +141,7 @@ export function MonthClose({ onMenu }: { onMenu: () => void }) {
           </div>
         )}
         {pdfError && <div className="cf-callout" role="alert">{pdfError}</div>}
-        {showWizard && <MonthCloseWizard prior={current} onDone={() => setShowWizard(false)} />}
+        {wizardMode && <MonthCloseWizard months={months} mode={wizardMode} onDone={() => setWizardMode(null)} />}
         <div className="cf-callout">{buildExecutiveSummary(bridge, label)}</div>
 
         <div className="cf-metric-grid">

@@ -177,7 +177,11 @@ function WatchForm({
     setError(null);
     if (!form.brand.trim()) return setError('Brand is required.');
     if (!form.model.trim()) return setError('Model is required.');
-    if (form.currency.trim().toUpperCase() !== 'AUD') return setError('Currency must be AUD until FX conversion is supported.');
+    const formCurrency = form.currency.trim().toUpperCase() || 'AUD';
+    const keptOriginalCurrency = formCurrency === (initial.currency.trim().toUpperCase() || 'AUD');
+    if (formCurrency !== 'AUD' && !keptOriginalCurrency) {
+      return setError('Currency must be AUD until FX conversion is supported.');
+    }
     const parsedYear = parseOptionalMoneyInput(form.year);
     if (!parsedYear.valid || (parsedYear.value !== null && !Number.isInteger(parsedYear.value))) {
       return setError('Year must be a whole number or blank.');
@@ -225,7 +229,16 @@ function WatchForm({
         </div>
         <div className="form-group">
           <label className="field">Currency</label>
-          <select aria-label="Currency" value="AUD" disabled><option value="AUD">AUD</option></select>
+          {/* Shows the row's REAL currency. Not editable: AUD is the only
+              supported entry currency; an existing non-AUD row keeps its
+              currency (and stays out of the AUD totals) rather than being
+              silently relabelled. */}
+          <select aria-label="Currency" value={form.currency.trim().toUpperCase() || 'AUD'} disabled>
+            <option value="AUD">AUD</option>
+            {(form.currency.trim().toUpperCase() || 'AUD') !== 'AUD' && (
+              <option value={form.currency.trim().toUpperCase()}>{form.currency.trim().toUpperCase()}</option>
+            )}
+          </select>
         </div>
         {input('purchase_price', 'Purchase price')}
         {input('purchase_date', 'Purchase date', 'date')}

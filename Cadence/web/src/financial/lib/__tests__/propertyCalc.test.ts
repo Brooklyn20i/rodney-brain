@@ -381,3 +381,43 @@ describe('propertyFinancials', () => {
     expect(g.grossYield).toBeCloseTo(26_000 / 500_000, 6);
   });
 });
+
+describe('propertyAnnualRunRate — audit regressions', () => {
+  it('a DD/MM/YYYY date in a bill source is NOT a monthly-accrual marker', () => {
+    const p: Property = { ...property('D', 850_000), weekly_rent: 0 };
+    // "14/3/2026" contains "/3" — the old regex read it as "÷3 accrual" and
+    // annualised one quarterly bill ×12 (A$5,861 instead of A$1,954).
+    const rows = [{ ...entry('D', '2026-07', 'water', 488.43), source: 'Water rates notice 14/3/2026' }];
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.annualExpenses).toBeCloseTo(1953.72, 2); // quarterly ×4
+  });
+
+  it('a genuine "/ 3 monthly accrual" note still reads as an accrual', () => {
+    const p = property('D2', 600_000);
+    const rows = [{ ...entry('D2', '2026-07', 'strata', 300), notes: 'levy / 3 monthly accrual booked 5/12/2025' }];
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.annualExpenses).toBeCloseTo(3600, 2);
+  });
+
+  it('one-off repairs are an annual PACE over the ledger window, not a lifetime sum', () => {
+    const p: Property = { ...property('R', 850_000), weekly_rent: 0 };
+    // 24 months of ledger history (rent rows anchor the window), one $3k
+    // repair in each year → $3k/yr pace, not $6k/yr forever.
+    const rows: PropertyLedgerEntry[] = [];
+    for (let i = 0; i < 24; i++) {
+      const period = `${2025 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
+      rows.push(entry('R', period, 'rent', 2000));
+    }
+    rows.push(entry('R', '2025-03', 'repairs_maintenance', 3000));
+    rows.push(entry('R', '2026-03', 'repairs_maintenance', 3000));
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.annualExpenses).toBeCloseTo(3000, 2); // 6000 × 12 / 24
+  });
+
+  it('short histories treat the repairs total as one year’s worth (no upward extrapolation)', () => {
+    const p: Property = { ...property('R2', 850_000), weekly_rent: 0 };
+    const rows = [entry('R2', '2026-06', 'rent', 2000), entry('R2', '2026-07', 'repairs_maintenance', 1200)];
+    const runRate = propertyAnnualRunRate(rows, p);
+    expect(runRate.annualExpenses).toBeCloseTo(1200, 2); // ÷ max(2,12) × 12
+  });
+});

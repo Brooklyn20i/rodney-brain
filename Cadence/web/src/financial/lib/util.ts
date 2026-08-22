@@ -6,7 +6,9 @@ export function formatMoney(dollars: number, compact = false): string {
   const sign = dollars < 0 ? '-' : '';
   const abs = Math.abs(dollars);
   if (compact) {
-    if (abs >= 1_000_000) return `${sign}A$${(abs / 1_000_000).toFixed(2)}m`;
+    // 999,950+ rounds to "1000.0k" in the k-branch — promote to millions at
+    // the point the k-figure would display as 1000.
+    if (abs >= 999_950) return `${sign}A$${(abs / 1_000_000).toFixed(2)}m`;
     if (abs >= 1_000) return `${sign}A$${(abs / 1_000).toFixed(1)}k`;
   }
   return `${sign}A$${abs.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -61,6 +63,14 @@ export function shiftMonth(period: string, delta: number): string {
 export function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// LOCAL calendar date as YYYY-MM-DD. Never derive "today" from toISOString():
+// that's the UTC date, which in Australia is YESTERDAY until ~10-11am — every
+// morning, due dates, decision stamps and month boundaries were off by a day.
+export function todayLocalISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export const BUDGET_INCOME_CATEGORIES: { key: string; label: string }[] = [

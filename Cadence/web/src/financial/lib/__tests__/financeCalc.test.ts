@@ -12,6 +12,7 @@ import {
   netWorthBridge,
   nextPeriod,
   performanceHistory,
+  priorMonthOf,
   summarizePeriod,
 } from '../financeCalc';
 import type { BudgetFxRate, InvestmentHolding, InvestmentIncome, InvestmentTransaction, MonthlyMetric } from '../types';
@@ -458,5 +459,59 @@ describe('investment performance summary', () => {
     expect(perf.buckets.crypto.currentValue).toBeCloseTo(290, 2);
     expect(perf.total.currentValue).toBeCloseTo(605, 2);
     expect(perf.total.currentValueBasis).toBe('month_close');
+  });
+});
+
+describe('priorMonthOf', () => {
+  const mk = (period: string, id = period) => ({ ...months[0], id, period });
+  it('returns the month strictly before the given period, not index arithmetic', () => {
+    const rows = [mk('2026-05'), mk('2026-07'), mk('2026-06')];
+    expect(priorMonthOf(rows, '2026-07')!.period).toBe('2026-06');
+  });
+  it('never returns a duplicate of the current period', () => {
+    const rows = [mk('2026-06'), mk('2026-07', 'a'), mk('2026-07', 'b')];
+    expect(priorMonthOf(rows, '2026-07')!.period).toBe('2026-06');
+  });
+  it('is null for the earliest month on record', () => {
+    expect(priorMonthOf([mk('2026-05')], '2026-05')).toBeNull();
+  });
+});
+
+describe('FY net buys must net out sells', () => {
+  it('a flat divestment reports FY gain 0, not a market loss', () => {
+    // Opening (June close) shares 100k; sell 10k at cost during FY; latest
+    // close 90k with zero price movement. Broken behaviour: fyGain −10k.
+    const perf = investmentPerformanceSummary(
+      [],
+      [tx({ date: '2026-08-10', ticker: 'WIRE', side: 'sell', amount: 10_000 })],
+      [month({ period: '2026-06', shares: 100_000 }), month({ period: '2026-08', shares: 90_000 })],
+      []
+    );
+    expect(perf.buckets.shares.fyNetBuys).toBeCloseTo(-10_000, 2);
+    expect(perf.buckets.shares.fyGain).toBeCloseTo(0, 2);
+  });
+  it('sell proceeds reinvested do not double-penalise the FY gain', () => {
+    // Sell 10k, buy 10k, no price move: net buys 0, gain 0.
+    const perf = investmentPerformanceSummary(
+      [],
+      [
+        tx({ date: '2026-08-10', ticker: 'WIRE', side: 'sell', amount: 10_000 }),
+        tx({ date: '2026-08-12', ticker: 'GOOG', side: 'buy', amount: 10_000 }),
+      ],
+      [month({ period: '2026-06', shares: 100_000 }), month({ period: '2026-08', shares: 100_000 })],
+      []
+    );
+    expect(perf.buckets.shares.fyNetBuys).toBeCloseTo(0, 2);
+    expect(perf.buckets.shares.fyGain).toBeCloseTo(0, 2);
+  });
+});
+
+describe('investmentBuysSummary soft-delete guard', () => {
+  it('excludes deleted transactions from the buys ledger', () => {
+    const rows = [
+      tx({ date: '2026-07-01', ticker: 'WIRE', side: 'buy', amount: 1_000 }),
+      { ...tx({ date: '2026-07-02', ticker: 'WIRE', side: 'buy', amount: 5_000 }), deleted_at: '2026-07-03' },
+    ];
+    expect(investmentBuysSummary(rows, '2026-07', '2026-07').shares).toBeCloseTo(1_000, 2);
   });
 });

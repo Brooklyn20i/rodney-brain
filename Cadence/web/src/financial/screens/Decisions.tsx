@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card } from '../components/bits';
-import { APPROVAL_STATUS_LABEL, OWNER_LENS_LABEL, fmtDMY } from '../lib/util';
+import { APPROVAL_STATUS_LABEL, OWNER_LENS_LABEL, fmtDMY, todayLocalISO } from '../lib/util';
 import type { DecisionApprovalStatus, OwnerLens } from '../lib/types';
 
 export function Decisions({ onMenu }: { onMenu: () => void }) {
@@ -34,7 +34,7 @@ export function Decisions({ onMenu }: { onMenu: () => void }) {
     setShowForm(false);
   };
 
-  const resolve = (id: string) => update('decisions', id, { approval_status: 'approved', decision_date: new Date().toISOString().slice(0, 10) });
+  const resolve = (id: string) => update('decisions', id, { approval_status: 'approved', decision_date: todayLocalISO() });
 
   return (
     <>

@@ -244,7 +244,12 @@ const ANNUAL_BILL_CATEGORIES = new Set<PropertyLedgerCategory>(['insurance', 'la
 const ONE_OFF_EXPENSE_CATEGORIES = new Set<PropertyLedgerCategory>(['repairs_maintenance']);
 
 function looksLikeMonthlyAccrual(e: PropertyLedgerEntry): boolean {
-  const text = `${e.source} ${e.notes}`.toLowerCase();
+  // "14/3/2026" in a bill's source must never read as a "÷3" accrual marker —
+  // one date-bearing note would flip its whole category to ×12 annualisation.
+  // Strip date-shaped tokens (D/M and D/M/Y) before testing for the markers.
+  const text = `${e.source} ${e.notes}`
+    .toLowerCase()
+    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
   return /monthly|per month|\/\s*12|\/\s*3|accrual/.test(text);
 }
 
@@ -291,7 +296,13 @@ export function propertyAnnualRunRate(
     } else if (ANNUAL_BILL_CATEGORIES.has(cat)) {
       annualised = avgBillAnnualised(catRows, 1);
     } else if (ONE_OFF_EXPENSE_CATEGORIES.has(cat)) {
-      annualised = centsToDollars(catRows.reduce((s, e) => s + toCents(e.amount), 0));
+      // One-offs accumulate forever — a raw sum grows the "annual" figure
+      // every year the ledger ages ($3k repair in each of 2 years read as
+      // $6k/yr). Normalise to an annual PACE over the ledger window; short
+      // histories (<12 months) treat the total as one year's worth rather
+      // than extrapolating a single bill upward.
+      const totalOneOffC = catRows.reduce((s, e) => s + toCents(e.amount), 0);
+      annualised = centsToDollars(Math.round((totalOneOffC * 12) / Math.max(months, 12)));
     } else {
       annualised = monthlyAccrualAnnualised(catRows);
     }
@@ -306,7 +317,7 @@ export function propertyAnnualRunRate(
   if (rows.some(isScheduledEntry)) {
     notes.push('Known scheduled costs inform this forward run-rate; they remain excluded from actual results.');
   }
-  notes.push('Quarterly bills are annualised ×4; annual bills ×1; repairs are treated as one-off.');
+  notes.push('Quarterly bills are annualised ×4; annual bills ×1; repairs are averaged over the ledger window.');
 
   return {
     months,

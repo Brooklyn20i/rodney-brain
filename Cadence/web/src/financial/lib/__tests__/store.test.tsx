@@ -26,9 +26,12 @@ vi.mock('../../../lib/supabase', () => {
       b[m] = () => b;
     }
     b.single = () => Promise.resolve(h.writeResults.shift() ?? { data: null, error: null });
-    // thenable so `await supabase.schema().from().select()...` (reload) resolves
-    b.then = (onF: (v: { data: unknown[]; error: null }) => unknown) =>
-      Promise.resolve({ data: [], error: null }).then(onF);
+    // thenable so `await supabase.schema().from().select()...` resolves.
+    // Queued results are consumed here too (the soft-delete path is awaited
+    // directly, without .single()); reloads never run in these tests
+    // (session/ownerId stays null), so an empty queue means plain success.
+    b.then = (onF: (v: { data: unknown; error: unknown }) => unknown) =>
+      Promise.resolve(h.writeResults.length ? h.writeResults.shift()! : { data: [], error: null }).then(onF);
     return b;
   };
   const channel = { on: () => channel, subscribe: () => channel };
@@ -94,6 +97,25 @@ describe('CadenceFinancialProvider write path', () => {
     });
     const row = (result.current.data.entities as Array<{ name: string }>)[0];
     expect(row.name).toBe('Original'); // rolled back, not left showing 'Edited'
+    expect(result.current.syncError).toBeTruthy();
+  });
+
+  it('a failed delete restores the row — it must not vanish for the session', async () => {
+    const { result } = renderHook(() => useCadenceFinancial(), { wrapper });
+    h.writeResults.push({ data: { id: 'L1', name: 'Big loan' }, error: null });
+    await act(async () => {
+      await result.current.insert('entities', { name: 'Big loan' } as never);
+    });
+    expect(result.current.data.entities as unknown[]).toHaveLength(1);
+
+    // Soft-delete rejected server-side (RLS/offline): the optimistic removal
+    // must roll back, or the row disappears from every aggregation until the
+    // next full reload while still existing in the DB.
+    h.writeResults.push({ data: null, error: { message: 'permission denied' } });
+    await act(async () => {
+      await expect(result.current.remove('entities', 'L1')).rejects.toBeTruthy();
+    });
+    expect(result.current.data.entities as unknown[]).toHaveLength(1);
     expect(result.current.syncError).toBeTruthy();
   });
 

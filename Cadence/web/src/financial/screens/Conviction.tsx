@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import { formatMoney } from '../lib/util';
-import { fetchLiveQuotes, yahooSymbol, type QuoteMap } from '../lib/livePrices';
+import { fetchLiveQuotes, yahooSymbol, type QuoteMap, quoteCurrencyMatchesHolding } from '../lib/livePrices';
 import {
   Chip, CONVICTION_TONE, STATUS_TONE, ThesisDossier, ThesisFieldEditor,
   blankThesisDraft, fmtPrice, priceSignal, rollReview, todayISO, addMonths,
@@ -55,8 +55,11 @@ export function Conviction({ onMenu }: { onMenu: () => void }) {
     }
     const h = holdingOf(t);
     if (!h) return null;
-    const q = quotes[yahooSymbol(h)];
-    if (q) return q.price;
+    const sym = yahooSymbol(h);
+    const q = quotes[sym];
+    if (q && quoteCurrencyMatchesHolding(sym, q.currency ?? '', h.currency ?? '')) return q.price;
+    // Fallback is the BOOK price (native_value/units) — clearly stale, never a
+    // mismatched-currency live level.
     return h.units > 0 ? h.native_value / h.units : null;
   };
 
@@ -92,9 +95,17 @@ export function Conviction({ onMenu }: { onMenu: () => void }) {
   const driverRows = [...driverMap.entries()].map(([driver, value]) => ({ driver, value })).sort((a, b) => b.value - a.value);
   const driverTotal = driverRows.reduce((s, r) => s + r.value, 0);
 
-  const assetCount = data.properties.length + data.investment_holdings.length
-    + data.liquidity_buckets.filter((b) => b.amount > 0).length;
-  const covered = new Set(active.filter((t) => t.target_id).map((t) => t.target_id)).size;
+  const countedTargetIds = new Set<string>([
+    ...data.properties.map((p) => p.id),
+    ...data.investment_holdings.map((h) => h.id),
+    ...data.liquidity_buckets.filter((b) => b.amount > 0).map((b) => b.id),
+  ]);
+  const assetCount = countedTargetIds.size;
+  // Coverage counts only theses on assets in the denominator — a thesis on a
+  // removed asset or zero bucket must not produce "7/5".
+  const covered = new Set(
+    active.filter((t) => t.target_id && countedTargetIds.has(t.target_id)).map((t) => t.target_id)
+  ).size;
 
   const thesisTargetIds = new Set(active.map((t) => t.target_id));
   const openTargets = [
@@ -119,7 +130,7 @@ export function Conviction({ onMenu }: { onMenu: () => void }) {
     <>
       <ScreenHeader title="Conviction" subtitle="Portfolio intelligence — dossiers live under each investment and property." onMenu={onMenu}>
         <button className="btn btn-secondary btn-sm" onClick={refreshQuotes} disabled={quotesState === 'loading'}>
-          {quotesState === 'loading' ? 'Fetching…' : '↻ Live prices'}
+          {quotesState === 'loading' ? 'Fetching…' : quotesState === 'error' ? '↻ Live prices (failed — retry)' : '↻ Live prices'}
         </button>
         <button className="btn btn-primary btn-sm" onClick={() => setAdding((s) => !s)}>
           {adding ? 'Close' : '+ Thesis'}

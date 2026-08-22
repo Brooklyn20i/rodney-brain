@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadenceFinancial } from '../lib/store';
 import { ScreenHeader, Card, Metric } from '../components/bits';
 import {
@@ -618,6 +618,11 @@ export function StatementForm({
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Categories already written for the current (property, period) — a retry
+  // after a mid-loop failure must not re-insert the lines that succeeded
+  // (duplicated rent/interest rows double-count in P&L and yields).
+  const savedLines = useRef(new Set<string>());
+  const savedKey = useRef('');
 
   const save = async () => {
     setError(null);
@@ -625,9 +630,15 @@ export function StatementForm({
     if (!/^\d{4}-\d{2}$/.test(period)) return setError('Period must be YYYY-MM (e.g. 2025-07).');
     const lines = FORM_CATEGORIES.map((c) => ({ category: c, amount: num(amounts[c] ?? '') })).filter((l) => l.amount > 0);
     if (lines.length === 0) return setError('Enter at least one amount.');
+    const key = `${propertyId}:${period}`;
+    if (savedKey.current !== key) {
+      savedKey.current = key;
+      savedLines.current.clear();
+    }
     setSaving(true);
     try {
       for (const line of lines) {
+        if (savedLines.current.has(line.category)) continue;
         await insert('property_ledger', {
           property_id: propertyId,
           period,
@@ -639,6 +650,7 @@ export function StatementForm({
           source: source.trim(),
           notes: status === 'scheduled' ? SCHEDULED_PROPERTY_LEDGER_NOTE : '',
         });
+        savedLines.current.add(line.category);
       }
     } catch (e) {
       setSaving(false);

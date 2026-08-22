@@ -152,3 +152,32 @@ describe('mapDecisionLogCsv', () => {
     expect(d.follow_up_action).toBe('Review quarterly');
   });
 });
+
+describe('legacy import normalisation — audit regressions', () => {
+  it('normalises capitalised Side values so buys/sells stay inside every side filter', () => {
+    const rows = parseCsv(
+      'Date,Ticker,Side,Currency,Shares,Price,Amount / proceeds,Source / caveat\n' +
+        '2020-01-10,FAKE,Buy,AUD,10,25.50,255.00,x\n' +
+        '2020-02-10,FAKE,SELL,AUD,5,30.00,150.00,x'
+    );
+    const [buy, sell] = mapShareTransactionsCsv(rows, 'owner-1');
+    expect(buy.side).toBe('buy');
+    expect(sell.side).toBe('sell');
+  });
+
+  it('normalises capitalised evidence status to the union', () => {
+    const rows = parseCsv('item,period,evidence_grade,status,source,notes\nCash,2020-01,screenshot,Received,src,');
+    const [e] = mapEvidenceRegisterCsv(rows, 'owner-1');
+    expect(e.status).toBe('received');
+  });
+
+  it('keeps accounting negatives negative: parentheses and Unicode minus', () => {
+    const rows = parseCsv(
+      'period,cash_saved,share_buys,btc_buys,debt_reduction,net_worth,cash_offsets,total_debt,net_debt,shares,btc_crypto,super,total_assets,property_value,property_equity\n' +
+        '2020-01,"(1,234)",0,0,−500,900000,50000,300000,250000,10000,5000,80000,1200000,900000,600000'
+    );
+    const [m] = mapMonthlyMetricsCsv(rows, 'owner-1');
+    expect(m.cash_saved).toBe(-1234);
+    expect(m.debt_reduction).toBe(-500);
+  });
+});
