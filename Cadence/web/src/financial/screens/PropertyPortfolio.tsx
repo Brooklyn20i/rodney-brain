@@ -14,7 +14,7 @@ import {
   scheduledObligations,
   trailingAverages,
 } from '../lib/propertyCalc';
-import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerStatus, PropertyType } from '../lib/types';
+import type { Loan, Property, PropertyLedgerCategory, PropertyLedgerEntry, PropertyLedgerStatus, PropertyType } from '../lib/types';
 import { ThesisDossier } from '../components/ThesisDossier';
 import {
   EVIDENCE_GRADE_LABEL,
@@ -93,6 +93,7 @@ export function PropertyPortfolio({ onMenu }: { onMenu: () => void }) {
       onSelect={setSelectedId}
       onMenu={onMenu}
       insert={insert}
+      update={update}
     />
   );
 }
@@ -108,6 +109,7 @@ function PortfolioOverview({
   onSelect,
   onMenu,
   insert,
+  update,
 }: {
   properties: Property[];
   loansFor: (id: string) => Loan[];
@@ -118,6 +120,7 @@ function PortfolioOverview({
   onSelect: (id: string) => void;
   onMenu: () => void;
   insert: ReturnType<typeof useCadenceFinancial>['insert'];
+  update: ReturnType<typeof useCadenceFinancial>['update'];
 }) {
   const [showForm, setShowForm] = useState(false);
   const pm = useMemo(() => portfolioMonth(ledger, properties, period), [ledger, properties, period]);
@@ -154,7 +157,7 @@ function PortfolioOverview({
 
       <div className="screen-content">
         {showForm && (
-          <StatementForm properties={properties} defaultPeriod={period} defaultPropertyId={properties[0]?.id ?? ''} insert={insert} onDone={(p) => { setShowForm(false); onPeriod(p); }} />
+          <StatementForm properties={properties} defaultPeriod={period} defaultPropertyId={properties[0]?.id ?? ''} insert={insert} update={update} ledger={ledger} onDone={(p) => { setShowForm(false); onPeriod(p); }} />
         )}
 
         {properties.length === 0 ? (
@@ -285,6 +288,29 @@ function PropertyDetailPage({
   // cheaper one — flag it with the figure the loan terms imply.
   const impliedMonthlyInterest = expectedMonthlyInterest(loans);
   const monthMissingInterest = pnl.expensesByCategory.interest === undefined && impliedMonthlyInterest > 0;
+  // One-tap history repair: write the estimate as an ASSUMPTION-grade ledger
+  // row (the evidence system's word for exactly this), so historic months
+  // stop overstating. A later statement figure replaces it (StatementForm).
+  const [backfilling, setBackfilling] = useState(false);
+  const backfillInterest = async () => {
+    if (backfilling) return;
+    setBackfilling(true);
+    try {
+      await insert('property_ledger', {
+        property_id: property.id,
+        period,
+        entry_date: `${period}-01`,
+        category: 'interest',
+        amount: impliedMonthlyInterest,
+        status: 'actual',
+        grade: 'assumption' as never,
+        source: 'Derived from loan terms (net debt × rate)',
+        notes: 'Estimated — replace with the statement figure when available.',
+      });
+    } finally {
+      setBackfilling(false);
+    }
+  };
   const propPeriods = availablePeriods(ledger.filter((e) => e.property_id === property.id));
   const upcoming = scheduledObligations(ledger, property.id);
 
@@ -313,7 +339,7 @@ function PropertyDetailPage({
       <div className="screen-content">
         {tab === 'edit' && <EditPropertyForm property={property} update={update} onDone={() => setTab('none')} />}
         {tab === 'log' && (
-          <StatementForm properties={[property]} defaultPeriod={period} defaultPropertyId={property.id} insert={insert} onDone={(p) => { setTab('none'); onPeriod(p); }} />
+          <StatementForm properties={[property]} defaultPeriod={period} defaultPropertyId={property.id} insert={insert} update={update} ledger={ledger} onDone={(p) => { setTab('none'); onPeriod(p); }} />
         )}
 
         {/* Hero metrics */}
@@ -412,12 +438,25 @@ function PropertyDetailPage({
             </table>
           </div>
           {monthMissingInterest && (
-            <p style={{ fontSize: 12, color: 'var(--orange)', marginTop: 10 }}>
-              No loan interest logged for {monthLabel(period)} — the loan terms imply
-              ≈{formatMoney(impliedMonthlyInterest)}/mo (net debt × rate), so this month's net is
-              overstated until the statement figure is logged. The run-rate figures above already
-              include the estimate.
-            </p>
+            <div style={{ marginTop: 10 }}>
+              <p style={{ fontSize: 12, color: 'var(--orange)', margin: 0 }}>
+                No loan interest logged for {monthLabel(period)} — the loan terms imply
+                ≈{formatMoney(impliedMonthlyInterest)}/mo (net debt × rate), so this month's net is
+                overstated until the statement figure is logged.
+              </p>
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ marginTop: 8 }}
+                disabled={backfilling}
+                onClick={() => void backfillInterest()}
+              >
+                {backfilling ? 'Backfilling…' : `Backfill ${formatMoney(impliedMonthlyInterest)} as assumption-grade`}
+              </button>
+              <p style={{ fontSize: 11, color: 'var(--text3)', margin: '6px 0 0' }}>
+                Writes an assumption-grade estimate into this month's ledger. Logging the real
+                statement figure later replaces it — it never double-counts.
+              </p>
+            </div>
           )}
         </Card>
 
@@ -616,12 +655,16 @@ export function StatementForm({
   defaultPropertyId,
   onDone,
   insert,
+  update,
+  ledger = [],
 }: {
   properties: Property[];
   defaultPeriod: string;
   defaultPropertyId: string;
   onDone: (period: string) => void;
   insert: ReturnType<typeof useCadenceFinancial>['insert'];
+  update?: ReturnType<typeof useCadenceFinancial>['update'];
+  ledger?: PropertyLedgerEntry[];
 }) {
   const [propertyId, setPropertyId] = useState(defaultPropertyId || properties[0]?.id || '');
   const [period, setPeriod] = useState(defaultPeriod);
@@ -652,7 +695,7 @@ export function StatementForm({
     try {
       for (const line of lines) {
         if (savedLines.current.has(line.category)) continue;
-        await insert('property_ledger', {
+        const row = {
           property_id: propertyId,
           period,
           entry_date: `${period}-01`,
@@ -662,7 +705,21 @@ export function StatementForm({
           grade: grade as never,
           source: source.trim(),
           notes: status === 'scheduled' ? SCHEDULED_PROPERTY_LEDGER_NOTE : '',
-        });
+        };
+        // A statement figure is EVIDENCE: it replaces a backfilled
+        // assumption-grade estimate for the same line, never stacks on it.
+        const estimate = update
+          ? ledger.find(
+              (e) =>
+                e.property_id === propertyId &&
+                e.period === period &&
+                e.category === line.category &&
+                e.grade === 'assumption' &&
+                !e.deleted_at
+            )
+          : undefined;
+        if (estimate && update) await update('property_ledger', estimate.id, row);
+        else await insert('property_ledger', row);
         savedLines.current.add(line.category);
       }
     } catch (e) {
