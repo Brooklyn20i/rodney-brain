@@ -322,6 +322,28 @@ export interface NutritionTarget {
   deleted_at: string | null;
 }
 
+// Which angle a progress photo was shot from. Same-pose photos are the only
+// honest comparison, so the compare view pairs within a pose.
+export type PhotoPose = 'front' | 'side' | 'back';
+
+// One progress photo for diet tracking. The image lives in the PRIVATE
+// 'progress-photos' Storage bucket at `storage_path`; this row is the
+// metadata (date, pose, the weight that day). weight_kg is a snapshot taken
+// at capture time so later edits to the weight log don't rewrite what the
+// photo showed.
+export interface ProgressPhoto {
+  id: string;
+  owner_id: string;
+  photo_date: string; // 'YYYY-MM-DD'
+  pose: PhotoPose;
+  storage_path: string; // '<owner_id>/<photo_id>.jpg'
+  weight_kg: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 // A message channel between Rodney and Kobe (running in his separate Hermes
 // agent environment -- not part of this app). Mirrors the pattern used by
 // Cadence Work and Cadence Financial. This table is the app-side half; Kobe's
@@ -358,6 +380,7 @@ export interface CadenceFitnessData {
   nutrition_logs: NutritionLog[];
   saved_meals: SavedMeal[];
   nutrition_targets: NutritionTarget[];
+  progress_photos: ProgressPhoto[];
   agent_messages: AgentMessage[];
 }
 
@@ -375,6 +398,7 @@ export const TABLES: (keyof CadenceFitnessData)[] = [
   'nutrition_logs',
   'saved_meals',
   'nutrition_targets',
+  'progress_photos',
   'agent_messages',
 ];
 
@@ -392,5 +416,6 @@ export const emptyData = (): CadenceFitnessData => ({
   nutrition_logs: [],
   saved_meals: [],
   nutrition_targets: [],
+  progress_photos: [],
   agent_messages: [],
 });
