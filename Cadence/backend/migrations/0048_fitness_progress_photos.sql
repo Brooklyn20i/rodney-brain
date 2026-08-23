@@ -73,37 +73,57 @@ end $$;
 -- Private bucket; every object path starts with the uploader's user id, and
 -- the policies only allow access inside your own folder. The app renders
 -- photos through short-lived signed URLs.
+--
+-- The storage schema is Supabase-managed and doesn't exist on plain Postgres
+-- (CI applies every migration to a vanilla container), so this whole section
+-- is conditional: a no-op there, the real setup on the live project.
 
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('progress-photos', 'progress-photos', false, 10485760, array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
-on conflict (id) do nothing;
+do $$
+begin
+  if to_regclass('storage.buckets') is null then
+    raise notice 'storage schema not present (plain Postgres) — skipping bucket setup';
+    return;
+  end if;
 
-drop policy if exists "progress_photos_storage_select" on storage.objects;
-create policy "progress_photos_storage_select" on storage.objects
-  for select using (
-    bucket_id = 'progress-photos'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('progress-photos', 'progress-photos', false, 10485760, array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+  on conflict (id) do nothing;
 
-drop policy if exists "progress_photos_storage_insert" on storage.objects;
-create policy "progress_photos_storage_insert" on storage.objects
-  for insert with check (
-    bucket_id = 'progress-photos'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );
+  execute 'drop policy if exists "progress_photos_storage_select" on storage.objects';
+  execute $sql$
+    create policy "progress_photos_storage_select" on storage.objects
+      for select using (
+        bucket_id = 'progress-photos'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $sql$;
 
-drop policy if exists "progress_photos_storage_update" on storage.objects;
-create policy "progress_photos_storage_update" on storage.objects
-  for update using (
-    bucket_id = 'progress-photos'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );
+  execute 'drop policy if exists "progress_photos_storage_insert" on storage.objects';
+  execute $sql$
+    create policy "progress_photos_storage_insert" on storage.objects
+      for insert with check (
+        bucket_id = 'progress-photos'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $sql$;
 
-drop policy if exists "progress_photos_storage_delete" on storage.objects;
-create policy "progress_photos_storage_delete" on storage.objects
-  for delete using (
-    bucket_id = 'progress-photos'
-    and (storage.foldername(name))[1] = auth.uid()::text
-  );
+  execute 'drop policy if exists "progress_photos_storage_update" on storage.objects';
+  execute $sql$
+    create policy "progress_photos_storage_update" on storage.objects
+      for update using (
+        bucket_id = 'progress-photos'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $sql$;
+
+  execute 'drop policy if exists "progress_photos_storage_delete" on storage.objects';
+  execute $sql$
+    create policy "progress_photos_storage_delete" on storage.objects
+      for delete using (
+        bucket_id = 'progress-photos'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $sql$;
+end $$;
 
 reset search_path;
