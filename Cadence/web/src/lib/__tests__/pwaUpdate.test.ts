@@ -7,11 +7,16 @@ class FakeDocument extends EventTarget {
 }
 
 class FakeWindow extends EventTarget {
-  timeoutCallback: (() => void) | null = null;
+  timeoutCallbacks: Array<() => void> = [];
   setTimeout = (callback: TimerHandler) => {
-    this.timeoutCallback = callback as () => void;
-    return 1;
+    this.timeoutCallbacks.push(callback as () => void);
+    return this.timeoutCallbacks.length;
   };
+  runTimeouts() {
+    const pending = this.timeoutCallbacks;
+    this.timeoutCallbacks = [];
+    for (const cb of pending) cb();
+  }
 }
 
 class FakeServiceWorkerContainer extends EventTarget {
@@ -35,7 +40,7 @@ function storage() {
   };
 }
 
-function setup(controller: unknown) {
+function setup(controller: unknown, isUpdateSafe?: () => boolean) {
   const serviceWorker = new FakeServiceWorkerContainer(controller);
   const documentRef = new FakeDocument();
   const windowRef = new FakeWindow();
@@ -48,6 +53,7 @@ function setup(controller: unknown) {
     storage: session,
     reload,
     buildCommit: 'abc1234',
+    isUpdateSafe,
   });
   return { serviceWorker, documentRef, windowRef, reload, session, cleanup };
 }
@@ -86,5 +92,61 @@ describe('installed PWA deployment refresh', () => {
     documentRef.dispatchEvent(new Event('visibilitychange'));
     await Promise.resolve();
     expect(serviceWorker.update).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('live-workout update hold', () => {
+  it('skips update checks entirely while the hold is up — resuming mid-workout finds no new deploy', async () => {
+    const { serviceWorker, documentRef } = setup({ scriptURL: '/sw.js' }, () => false);
+    await Promise.resolve();
+    expect(serviceWorker.update).not.toHaveBeenCalled();
+
+    documentRef.visibilityState = 'visible';
+    documentRef.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    expect(serviceWorker.update).not.toHaveBeenCalled();
+  });
+
+  it('defers a handover that lands mid-workout and reloads once the session ends (poll)', () => {
+    let safe = false;
+    const { serviceWorker, windowRef, reload } = setup({ scriptURL: '/sw.js' }, () => safe);
+
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    expect(reload).not.toHaveBeenCalled(); // mid-set: no yank
+
+    windowRef.runTimeouts(); // still unsafe — poll re-arms, no reload
+    expect(reload).not.toHaveBeenCalled();
+
+    safe = true; // workout finished
+    windowRef.runTimeouts();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands a deferred deployment over when the app is backgrounded after the session', () => {
+    let safe = false;
+    const { serviceWorker, documentRef, reload } = setup({ scriptURL: '/sw.js' }, () => safe);
+
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    expect(reload).not.toHaveBeenCalled();
+
+    // Backgrounding mid-workout must NOT reload either.
+    documentRef.visibilityState = 'hidden';
+    documentRef.dispatchEvent(new Event('visibilitychange'));
+    expect(reload).not.toHaveBeenCalled();
+
+    safe = true; // workout finished, then app backgrounded — invisible moment
+    documentRef.dispatchEvent(new Event('visibilitychange'));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('resuming after the session ended completes the deferred handover', () => {
+    let safe = false;
+    const { serviceWorker, documentRef, reload } = setup({ scriptURL: '/sw.js' }, () => safe);
+
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    safe = true;
+    documentRef.visibilityState = 'visible';
+    documentRef.dispatchEvent(new Event('visibilitychange'));
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

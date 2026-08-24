@@ -10,6 +10,8 @@ import { SetPassword } from './components/SetPassword';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { GlobalCapture } from './components/GlobalCapture';
 import { FINANCIAL_THEME_STYLE } from './lib/domainTheme';
+import { holdPwaUpdates } from './lib/updateHold';
+import { hasLiveWorkout } from './fitness/lib/liveSession';
 import { Home } from './screens/taskScreens'; // eager — the default landing screen
 
 // Lazy-load the remaining screens so the initial bundle ships only Home plus
@@ -147,6 +149,26 @@ export function App() {
       history.replaceState(null, '', DOMAIN_PATH[domain] + window.location.search + window.location.hash);
     }
   }, [domain]);
+
+  // A deployment reload mid-set was the "workout stops halfway and makes me
+  // reopen it" bug. While a live session exists, hold PWA update handovers
+  // (see pwaUpdate.ts) so a new deploy waits until the workout is done.
+  useEffect(() => {
+    holdPwaUpdates(hasLiveWorkout(fitness.data.workouts));
+  }, [fitness.data.workouts]);
+
+  // And if a reload happens anyway (iOS killing the PWA, a handover that got
+  // through), boot straight back into the live session instead of landing on
+  // the dashboard and making Rodney tap his way back mid-workout. Runs once,
+  // only before any manual navigation.
+  const autoResumed = useRef(false);
+  useEffect(() => {
+    if (autoResumed.current || !fitness.ready) return;
+    autoResumed.current = true;
+    if (screen === DEFAULT_SCREEN.fitness && hasLiveWorkout(fitness.data.workouts)) {
+      setScreen('fitness:workout');
+    }
+  }, [fitness.ready, fitness.data.workouts, screen]);
 
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
