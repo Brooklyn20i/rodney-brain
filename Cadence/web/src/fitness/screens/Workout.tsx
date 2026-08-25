@@ -682,16 +682,24 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <CardioBlock active={active} daySlots={daySlots} prefillKind={cardioPrefill} onPrefillConsumed={() => setCardioPrefill(null)} />
   );
 
-  // Live, compact elapsed clock (m:ss → h:mm:ss). useRestTimer's 1s tick
-  // re-renders this so it visibly advances, instead of "0 min" for a minute.
+  // Live elapsed clock (m:ss → h:mm:ss). useRestTimer's 1s tick re-renders
+  // this so it visibly advances, instead of "0 min" for a minute.
   const elapsedClock = formatElapsed(elapsedMsSince(active.started_at, Date.now()));
   const doneCount = sessionSets.filter((s) => s.done).length;
-  const summary = [
-    elapsedClock,
-    sessionSets.length ? `${doneCount}/${sessionSets.length} sets` : null,
+  const sessionMeta = [
+    sessionSets.length ? `${doneCount}/${sessionSets.length} sets` : '0 sets',
     sessionCardio.length ? `${sessionCardio.length} cardio` : null,
+    saveStatusLabel(saving, Boolean(syncError), pendingCount),
   ].filter(Boolean);
-  if (summary.length === 1) summary.push('0 sets'); // nothing logged yet
+  // The session clock must be readable from a barbell away — a 12px subtitle
+  // item is not. It gets its own big glanceable bar at the top of the screen
+  // (both modes); the header subtitle keeps only the date + save state.
+  const sessionBar = (
+    <div className="wo-session-bar">
+      <span className="wo-session-clock" aria-label="Session time">{elapsedClock}</span>
+      <span className="wo-session-meta">{sessionMeta.join(' · ')}</span>
+    </div>
+  );
   const allSetsDone = (exerciseId: string) => {
     const rows = sessionSets.filter((s) => s.exercise_id === exerciseId);
     return rows.length > 0 && rows.every((s) => s.done);
@@ -732,7 +740,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
     <>
       <ScreenHeader
         title={stripDayPrefix(active.name || 'Session')}
-        subtitle={`${fmtDayShort(active.date)} · ${summary.join(' · ')} · ${saveStatusLabel(saving, Boolean(syncError), pendingCount)}`}
+        subtitle={`${fmtDayShort(active.date)} · ${saveStatusLabel(saving, Boolean(syncError), pendingCount)}`}
         onMenu={onMenu}
       >
         <button className="btn btn-secondary btn-sm" onClick={() => setGymMode((g) => !g)}>
@@ -745,6 +753,7 @@ export function Workout({ onMenu, onNavigate }: { onMenu: () => void; onNavigate
 
       <div className={`screen-content ${gymMode ? 'gym-mode' : ''}`}>
         {actionError && <div className="cf-callout cf-callout-warn" role="alert">{actionError}</div>}
+        {sessionBar}
         {/* List mode keeps the timer at the top; Gym Focus docks it at the
             bottom with the nav so it never buries the exercise card. */}
         {!gymMode && restBar}
