@@ -169,12 +169,18 @@ test.describe('Gym Focus — 320×568 portrait', () => {
     await expect(repsInput(page, 1)).toHaveValue('12');
   });
 
-  test('the elapsed clock is live, not a frozen "0 min"', async ({ page }) => {
+  test('the session clock is big, visible and live — not a frozen "0 min"', async ({ page }) => {
     await openWorkoutScreen(page);
     await startSuggestedSession(page);
-    const header = page.locator('.screen-header, header').first();
-    await expect(header).toContainText(/\d+:\d\d/);
-    await expect(header).not.toContainText('0 min');
+    const clock = page.locator('.wo-session-clock');
+    await expect(clock).toBeVisible();
+    await expect(clock).toContainText(/\d+:\d\d/);
+    // Readable from a barbell away: this is a headline element, not caption text.
+    const fontSize = await clock.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(fontSize).toBeGreaterThanOrEqual(28);
+    // And it ticks: the seconds advance within a couple of real seconds.
+    const before = await clock.innerText();
+    await expect(clock).not.toHaveText(before, { timeout: 5000 });
   });
 
   test('the rest timer survives a Dashboard → Workout round-trip', async ({ page }) => {

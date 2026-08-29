@@ -57,6 +57,7 @@ export default defineConfig({
         work: 'work.html', // the Work app shell (root used to be this)
         financial: 'financial.html',
         health: 'health.html',
+        life: 'life.html',
       },
       output: {
         manualChunks(id) {
@@ -75,6 +76,10 @@ export default defineConfig({
           if (id.includes('/src/fitness/screens/')) {
             const name = id.split('/src/fitness/screens/')[1].replace(/\.tsx?$/, '').toLowerCase();
             return `screen-fitness-${name}`;
+          }
+          if (id.includes('/src/life/screens/')) {
+            const name = id.split('/src/life/screens/')[1].replace(/\.tsx?$/, '').toLowerCase();
+            return `screen-life-${name}`;
           }
         },
       },

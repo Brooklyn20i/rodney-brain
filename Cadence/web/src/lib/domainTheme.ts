@@ -28,3 +28,38 @@ export const FINANCIAL_THEME_STYLE = {
   '--accent': '#1C6B45',
   '--accent-lt': '#2E8A5E',
 } as const;
+
+// Life: warm light canvas over deep umber + amber — the household run well.
+// Same shape as FINANCIAL_THEME_STYLE (owns every token) and mirrored in
+// styles.css html[data-domain="life"]; the inline copy exists for the same
+// iOS PWA restore reason.
+export const LIFE_THEME_STYLE = {
+  '--app-bg': '#F6F3EE',
+  '--surface': '#FFFFFF',
+  '--surface2': '#F9F6F1',
+  '--border': 'rgba(0,0,0,0.08)',
+  '--text': '#1F1A14',
+  '--text2': '#6E6459',
+  '--text3': '#ACA298',
+  '--green': '#1A7F37',
+  '--green-bg': '#EDFAF1',
+  '--blue': '#1B5E9E',
+  '--blue-bg': '#EDF4FD',
+  '--red': '#D93025',
+  '--red-bg': '#FEF2F1',
+  '--orange': '#E07D00',
+  '--orange-bg': '#FFF8EE',
+  '--purple': '#6B3FA0',
+  '--purple-bg': '#F3EEFA',
+  '--teal': '#0E7490',
+  '--teal-bg': '#ECFAFA',
+  '--shadow': '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
+  '--shadow-md': '0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06)',
+  '--sidebar-bg': '#3E2A1B',
+  '--sidebar-active': '#54392A',
+  '--sidebar-active-text': '#FFFFFF',
+  '--sidebar-icon-active': '#E0A458',
+  '--sidebar-text': 'rgba(255,255,255,0.65)',
+  '--accent': '#A85B1D',
+  '--accent-lt': '#C97B2D',
+} as const;

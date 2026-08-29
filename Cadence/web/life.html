@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" data-domain="life">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Cadence Life" />
+  <meta name="theme-color" content="#3E2A1B" />
+  <link rel="manifest" href="/manifest-life.json" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="icon" type="image/png" href="./icon-life-192.png" />
+  <link rel="apple-touch-icon" href="./icon-life-180.png" />
+  <title>Cadence Life</title>
+  <style>
+    html, body, #root {
+      min-height: 100%;
+      margin: 0;
+      background: #3E2A1B;
+      color: #F8F3EC;
+    }
+    body { overscroll-behavior: none; }
+    .cadence-life-boot {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at 50% 0%, rgba(224, 164, 88, 0.22), transparent 36%), #3E2A1B;
+    }
+    .cadence-life-boot-card {
+      width: min(340px, 100%);
+      min-height: 180px;
+      border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.045);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+    .cadence-life-boot-mark {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 14px;
+      background: #A85B1D;
+      font-size: 24px;
+    }
+    .cadence-life-boot-title { margin: 0; font-weight: 800; letter-spacing: -0.02em; }
+    .cadence-life-boot-subtitle { margin: 6px 0 0; color: rgba(248,243,236,0.68); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="cadence-life-boot" role="status" aria-live="polite">
+      <div class="cadence-life-boot-card">
+        <div>
+          <div class="cadence-life-boot-mark" aria-hidden="true">⌂</div>
+          <p class="cadence-life-boot-title">Cadence Life</p>
+          <p class="cadence-life-boot-subtitle">Loading your life admin…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

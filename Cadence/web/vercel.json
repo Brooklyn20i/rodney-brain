@@ -7,6 +7,7 @@
     { "source": "/", "has": [{ "type": "query", "key": "invite" }], "destination": "/work.html" },
     { "source": "/financial", "destination": "/financial.html" },
     { "source": "/health", "destination": "/health.html" },
+    { "source": "/life", "destination": "/life.html" },
     { "source": "/work", "destination": "/work.html" },
     { "source": "/tour/work", "destination": "/tour-work.html" },
     { "source": "/tour/wealth", "destination": "/tour-wealth.html" },
