@@ -9,7 +9,8 @@ import { Login } from './components/Login';
 import { SetPassword } from './components/SetPassword';
 import { Sidebar, type Domain } from './components/Sidebar';
 import { GlobalCapture } from './components/GlobalCapture';
-import { FINANCIAL_THEME_STYLE } from './lib/domainTheme';
+import { useCadenceLife } from './life/lib/store';
+import { FINANCIAL_THEME_STYLE, LIFE_THEME_STYLE } from './lib/domainTheme';
 import { holdPwaUpdates } from './lib/updateHold';
 import { hasLiveWorkout } from './fitness/lib/liveSession';
 import { Home } from './screens/taskScreens'; // eager — the default landing screen
@@ -55,10 +56,15 @@ const FitRecovery = lazy(() => import('./fitness/screens/Recovery').then((m) => 
 const FitSync = lazy(() => import('./fitness/screens/Sync').then((m) => ({ default: m.Sync })));
 const FitKobe = lazy(() => import('./fitness/screens/Kobe').then((m) => ({ default: m.Kobe })));
 
+const LifeDashboard = lazy(() => import('./life/screens/Dashboard').then((m) => ({ default: m.Dashboard })));
+const LifeAdmin = lazy(() => import('./life/screens/Admin').then((m) => ({ default: m.Admin })));
+const LifeObligations = lazy(() => import('./life/screens/Obligations').then((m) => ({ default: m.Obligations })));
+
 const DEFAULT_SCREEN: Record<Domain, string> = {
   work: 'home',
   financial: 'financial:overview',
   fitness: 'fitness:dashboard',
+  life: 'life:dashboard',
 };
 
 // Deep links: each domain has its own clean URL so a typed address or an
@@ -70,11 +76,13 @@ const DOMAIN_PATH: Record<Domain, string> = {
   work: '/work',
   financial: '/financial',
   fitness: '/health',
+  life: '/life',
 };
 const DOMAIN_THEME_COLOR: Record<Domain, string> = {
   work: '#1A1F2E',
   financial: '#124A2C',
   fitness: '#0B0E0C',
+  life: '#3E2A1B',
 };
 // Home Screen identity per domain. Set dynamically (below) as well as statically
 // in each per-path HTML, so "Add to Home Screen" shows the right name + icon
@@ -84,27 +92,32 @@ const DOMAIN_TITLE: Record<Domain, string> = {
   work: 'Cadence Work',
   financial: 'Cadence Financial',
   fitness: 'Cadence Health',
+  life: 'Cadence Life',
 };
 const DOMAIN_TAGLINE: Record<Domain, string> = {
   work: 'Sign in to your executive cockpit.',
   financial: 'Sign in to your wealth command centre.',
   fitness: 'Sign in to your health cockpit.',
+  life: 'Sign in to your life admin.',
 };
 const DOMAIN_MANIFEST: Record<Domain, string> = {
   work: '/manifest.json',
   financial: '/manifest-financial.json',
   fitness: '/manifest-health.json',
+  life: '/manifest-life.json',
 };
 const DOMAIN_ICON: Record<Domain, string> = {
   work: '/icon-work-180.png?v=4',
   financial: '/icon-financial-180.png?v=4',
   fitness: '/icon-health-180.png?v=4',
+  life: '/icon-life-180.png',
 };
 
 function domainFromPath(): Domain {
   const p = window.location.pathname.replace(/\/+$/, '');
   if (p === '/financial') return 'financial';
   if (p === '/health' || p === '/fitness') return 'fitness';
+  if (p === '/life') return 'life';
   return 'work';
 }
 const initialScreenFromPath = (): string => DEFAULT_SCREEN[domainFromPath()];
@@ -116,11 +129,13 @@ export function App() {
   // like the tap did nothing.
   const fitness = useCadenceFitness();
   const financial = useCadenceFinancial();
-  const domainSyncError = syncError || fitness.syncError || financial.syncError;
+  const life = useCadenceLife();
+  const domainSyncError = syncError || fitness.syncError || financial.syncError || life.syncError;
   const clearDomainSyncError = () => {
     clearSyncError();
     fitness.clearSyncError();
     financial.clearSyncError();
+    life.clearSyncError();
   };
   const [screen, setScreen] = useState(initialScreenFromPath);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -130,7 +145,13 @@ export function App() {
   // The active domain is derived from the screen id's prefix rather than
   // tracked as separate state, so it can never drift out of sync with what's
   // actually on screen: 'financial:x' / 'fitness:x' / anything else -> work.
-  const domain: Domain = screen.startsWith('financial:') ? 'financial' : screen.startsWith('fitness:') ? 'fitness' : 'work';
+  const domain: Domain = screen.startsWith('financial:')
+    ? 'financial'
+    : screen.startsWith('fitness:')
+      ? 'fitness'
+      : screen.startsWith('life:')
+        ? 'life'
+        : 'work';
 
   // Re-theme the whole app for the active domain and keep the URL honest so a
   // reload / share / Home Screen shortcut re-opens the same section. Setting
@@ -208,7 +229,8 @@ export function App() {
     home: { count: getLoadSummary(data.work_items).overdue, cls: 'red' },
     inbox: { count: data.work_items.filter((w) => isUserTask(w) && w.inboxed).length, cls: '' },
     people: { count: getWaitingOnOthers(data.work_items).length, cls: 'blue' },
-  }), [data]);
+    'life:admin': { count: life.data.life_items.filter((i) => !i.deleted_at && i.status === 'inbox').length, cls: '' },
+  }), [data, life.data.life_items]);
 
   if (!ready) return <div className="login-wrap"><div className="login-card"><h1>Cadence</h1><p>Loading…</p></div></div>;
   if (!configured || !session) return <Login inviteHint={!!sessionStorage.getItem('cadence_invite') || !!inviteToken} title={DOMAIN_TITLE[domain]} tagline={DOMAIN_TAGLINE[domain]} />;
@@ -229,6 +251,7 @@ export function App() {
   // screen code at all.
   const financialNavigate = (id: string) => navigate(`financial:${id}`);
   const fitnessNavigate = (id: string) => navigate(`fitness:${id}`);
+  const lifeNavigate = (id: string) => navigate(`life:${id}`);
 
   const render = () => {
     if (domain === 'financial') {
@@ -278,6 +301,15 @@ export function App() {
         default: return <FitDashboard onMenu={onMenu} onNavigate={fitnessNavigate} />;
       }
     }
+    if (domain === 'life') {
+      const s = screen.slice('life:'.length);
+      switch (s) {
+        case 'dashboard': return <LifeDashboard onMenu={onMenu} onNavigate={lifeNavigate} />;
+        case 'admin': return <LifeAdmin onMenu={onMenu} />;
+        case 'obligations': return <LifeObligations onMenu={onMenu} />;
+        default: return <LifeDashboard onMenu={onMenu} onNavigate={lifeNavigate} />;
+      }
+    }
     switch (screen) {
       case 'home': return <Home onMenu={onMenu} onNavigate={navigate} />;
       case 'dashboard': return <Dashboard onMenu={onMenu} onNavigate={navigate} />;
@@ -295,7 +327,7 @@ export function App() {
   };
 
   return (
-    <div id="app" style={domain === 'financial' ? FINANCIAL_THEME_STYLE as CSSProperties : undefined}>
+    <div id="app" style={domain === 'financial' ? FINANCIAL_THEME_STYLE as CSSProperties : domain === 'life' ? LIFE_THEME_STYLE as CSSProperties : undefined}>
       {isOffline && (
         <div className="offline-banner">
           Offline{pendingCount > 0 ? ` — ${pendingCount} change${pendingCount === 1 ? '' : 's'} pending sync` : ''}

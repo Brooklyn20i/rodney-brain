@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Domain = 'work' | 'financial' | 'fitness';
+export type Domain = 'work' | 'financial' | 'fitness' | 'life';
 
 export interface NavItem { id: string; label: string; icon: string; }
 
@@ -76,10 +76,22 @@ export const FITNESS_NAV: { section: string; items: NavItem[] }[] = [
   ]},
 ];
 
+// Life: three screens, deliberately. It's an obligations register plus an
+// admin list — personal captures never touch Work's tables (and vice versa;
+// each domain's triage has a one-tap flick to the other).
+export const LIFE_NAV: { section: string; items: NavItem[] }[] = [
+  { section: '', items: [
+    { id: 'life:dashboard', label: 'Dashboard', icon: '◎' },
+    { id: 'life:admin', label: 'Admin', icon: '✎' },
+    { id: 'life:obligations', label: 'Obligations', icon: '↺' },
+  ]},
+];
+
 const DOMAINS: { id: Domain; label: string }[] = [
   { id: 'work', label: 'Work' },
   { id: 'financial', label: 'Financial' },
   { id: 'fitness', label: 'Health' },
+  { id: 'life', label: 'Life' },
 ];
 
 // Domain marks, drawn to what each domain actually is rather than stock glyphs:
@@ -122,12 +134,23 @@ function DomainIcon({ id }: { id: Domain }) {
       </svg>
     );
   }
-  // Health — a clean symmetric heart with a single ECG pulse (training +
-  // recovery), so it reads as vitality, not a "favourite" heart.
+  if (id === 'fitness') {
+    // Health — a clean symmetric heart with a single ECG pulse (training +
+    // recovery), so it reads as vitality, not a "favourite" heart.
+    return (
+      <svg {...common}>
+        <path d="M12 19.6c-.6-.45-7.1-5.05-7.1-9.75A3.65 3.65 0 0 1 12 7.75a3.65 3.65 0 0 1 7.1 2.1c0 4.7-6.5 9.3-7.1 9.75Z" />
+        <path d="M7.6 12h2.15l1.05-2 1.55 3.4 1-1.4h2.05" />
+      </svg>
+    );
+  }
+  // Life — a house with a tick inside: the household run well. Same stroke
+  // language as the other marks.
   return (
     <svg {...common}>
-      <path d="M12 19.6c-.6-.45-7.1-5.05-7.1-9.75A3.65 3.65 0 0 1 12 7.75a3.65 3.65 0 0 1 7.1 2.1c0 4.7-6.5 9.3-7.1 9.75Z" />
-      <path d="M7.6 12h2.15l1.05-2 1.55 3.4 1-1.4h2.05" />
+      <path d="M4 11.2 12 4.6l8 6.6" />
+      <path d="M6.3 10.2V19h11.4v-8.8" />
+      <path d="M9.4 13.9l1.9 1.9 3.4-3.6" />
     </svg>
   );
 }
@@ -153,7 +176,8 @@ export function Sidebar({ domain, onDomainChange, current, onNavigate, badges, o
     );
   };
 
-  const nav = domain === 'financial' ? FINANCIAL_NAV : domain === 'fitness' ? FITNESS_NAV : WORK_NAV;
+  const nav =
+    domain === 'financial' ? FINANCIAL_NAV : domain === 'fitness' ? FITNESS_NAV : domain === 'life' ? LIFE_NAV : WORK_NAV;
 
   return (
     <nav id="sidebar" className={open ? 'open' : ''}>
@@ -164,7 +188,9 @@ export function Sidebar({ domain, onDomainChange, current, onNavigate, badges, o
         </svg>
         <span className="sidebar-brand-text">
           <span className="sidebar-brand-name">Cadence</span>
-          <span className="sidebar-sub">{domain === 'financial' ? 'Financial' : domain === 'fitness' ? 'Health' : 'Work'}</span>
+          <span className="sidebar-sub">
+            {domain === 'financial' ? 'Financial' : domain === 'fitness' ? 'Health' : domain === 'life' ? 'Life' : 'Work'}
+          </span>
         </span>
       </div>
 

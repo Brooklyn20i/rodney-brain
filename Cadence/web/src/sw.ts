@@ -34,6 +34,9 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('/financial.html'), {
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/health.html'), {
   allowlist: [/^\/(?:health|fitness)\/?(?:\?.*)?$/],
 }));
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/life.html'), {
+  allowlist: [/^\/life\/?(?:\?.*)?$/],
+}));
 
 registerRoute(
   /^https:\/\/[a-z0-9]+\.supabase\.co\/rest\//,
@@ -58,7 +61,7 @@ self.addEventListener('activate', (event) => {
 
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const appPaths = new Set(['/work', '/financial', '/health', '/fitness']);
+    const appPaths = new Set(['/work', '/financial', '/health', '/fitness', '/life']);
 
     // Start the navigations but do not await them inside activate. Waiting for a
     // navigation that itself needs this worker to finish activating deadlocks

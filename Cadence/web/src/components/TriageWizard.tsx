@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useCadence } from '../lib/store';
+import { useCadenceLife } from '../life/lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { getTriageQueue } from '../lib/selectors';
 import { reassignPrimaryPerson, reassignPrimaryProject } from '../lib/tasks';
@@ -17,6 +18,7 @@ type Stage = 'main' | 'person' | 'direction' | 'project';
 // item's Triage button (itemId) handles just that one and closes.
 export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?: string }) {
   const { data, insert, update, remove, logActivity } = useCadence();
+  const lifeStore = useCadenceLife();
   const { raise } = useRaiseList();
 
   // Snapshot the queue at open so filing doesn't reshuffle the deck; each card
@@ -141,6 +143,23 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
     logActivity('triage_bin', title);
   });
 
+  // "This is personal, not work" — one tap moves the capture to Cadence
+  // Life's inbox (its own schema; it never appears in a work view again)
+  // and removes it here. Life's triage does the categorizing.
+  const toLife = () => act(async () => {
+    await lifeStore.insert('life_items', {
+      title: title.trim() || item!.title,
+      notes,
+      status: 'inbox',
+      category: 'admin',
+      due_date: due || null,
+      obligation_id: null,
+      completed_at: null,
+    });
+    await remove('work_items', item!.id);
+    logActivity('triage_life', title);
+  });
+
   const done = idx >= ids.length || !ids.length;
 
   return createPortal(
@@ -218,6 +237,9 @@ export function TriageWizard({ onClose, itemId }: { onClose: () => void; itemId?
                 </button>
                 <button className="wizard-dest" disabled={busy} onClick={toNote}>
                   ✎ Make it a note
+                </button>
+                <button className="wizard-dest" disabled={busy} onClick={toLife}>
+                  ⌂ Life (personal)
                 </button>
                 <button className="wizard-dest wizard-dest-bin" disabled={busy} onClick={toBin}>
                   🗑 Bin

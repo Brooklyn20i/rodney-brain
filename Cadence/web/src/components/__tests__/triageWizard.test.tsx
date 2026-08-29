@@ -7,8 +7,9 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { emptyData } from '../../lib/types';
 
-const h = vi.hoisted(() => ({ store: {} as any, raise: vi.fn() }));
+const h = vi.hoisted(() => ({ store: {} as any, life: {} as any, raise: vi.fn() }));
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
+vi.mock('../../life/lib/store', () => ({ useCadenceLife: () => h.life }));
 vi.mock('../../lib/raiseList', () => ({
   useRaiseList: () => ({ raise: h.raise, unraise: vi.fn(), toggle: vi.fn() }),
 }));
@@ -40,6 +41,12 @@ const lastUpdate = () => h.store.update.mock.calls[h.store.update.mock.calls.len
 
 beforeEach(() => {
   h.raise = vi.fn().mockResolvedValue(undefined);
+  h.life = {
+    insert: vi.fn().mockImplementation(async (table: string, row: any) => ({ id: `life-${table}`, ...row })),
+    update: vi.fn(),
+    remove: vi.fn(),
+    data: { life_items: [], obligations: [] },
+  };
   setStore({ work_items: [wi({ id: 'c1', title: 'Capture one' })] });
 });
 afterEach(() => cleanup());
@@ -169,6 +176,19 @@ describe('TriageWizard destinations', () => {
     await click(/Bin/);
     expect(h.store.remove).toHaveBeenCalledWith('work_items', 'c1');
     expect(h.store.insert).not.toHaveBeenCalled();
+  });
+
+  it('Life (personal): moves the capture to Life’s inbox — with the edits — and out of work entirely', async () => {
+    render(<TriageWizard onClose={vi.fn()} />);
+    fireEvent.change(screen.getByDisplayValue('Capture one'), { target: { value: 'Book flights' } });
+    await click(/Life \(personal\)/);
+    expect(h.life.insert).toHaveBeenCalledWith('life_items', expect.objectContaining({
+      title: 'Book flights',
+      status: 'inbox',
+    }));
+    // The work item is GONE from work — personal never lingers in a work view.
+    expect(h.store.remove).toHaveBeenCalledWith('work_items', 'c1');
+    expect(h.store.insert).not.toHaveBeenCalled(); // no work-side copy of any kind
   });
 });
 

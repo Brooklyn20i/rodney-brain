@@ -4,6 +4,7 @@ import { CadenceProvider } from './lib/store';
 import { E2EProvider } from './lib/e2eProvider';
 import { CadenceFinancialProvider } from './financial/lib/store';
 import { CadenceFitnessProvider } from './fitness/lib/store';
+import { CadenceLifeProvider } from './life/lib/store';
 import { App } from './App';
 import { ErrorBoundary, SaveErrorBanner } from './components/ErrorBoundary';
 import { lockCadencePortrait } from './fitness/lib/orientation';
@@ -90,7 +91,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             -- all three data sets load once and stay live via realtime. */}
         <CadenceFinancialProvider>
           <CadenceFitnessProvider>
-            <App />
+            <CadenceLifeProvider>
+              <App />
+            </CadenceLifeProvider>
           </CadenceFitnessProvider>
         </CadenceFinancialProvider>
       </Provider>

@@ -100,6 +100,33 @@ html[data-domain="fitness"] {
 /* The teal accent is light, so primary buttons need dark ink for contrast. */
 html[data-domain="fitness"] .btn-primary { color: #06110C; }
 
+html[data-domain="life"] {
+  /* Life = the household run well: warm light canvas, deep umber + amber.
+     Owns every token explicitly, same as financial (iOS PWA restore safety). */
+  --app-bg: #F6F3EE;
+  --surface: #FFFFFF;
+  --surface2: #F9F6F1;
+  --border: rgba(0,0,0,0.08);
+  --text: #1F1A14;
+  --text2: #6E6459;
+  --text3: #ACA298;
+  --green: #1A7F37;   --green-bg: #EDFAF1;
+  --blue: #1B5E9E;    --blue-bg: #EDF4FD;
+  --red: #D93025;      --red-bg: #FEF2F1;
+  --orange: #E07D00;   --orange-bg: #FFF8EE;
+  --purple: #6B3FA0;   --purple-bg: #F3EEFA;
+  --teal: #0E7490;     --teal-bg: #ECFAFA;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+  --sidebar-bg: #3E2A1B;
+  --sidebar-active: #54392A;
+  --sidebar-active-text: #FFFFFF;
+  --sidebar-icon-active: #E0A458;
+  --sidebar-text: rgba(255,255,255,0.65);
+  --accent: #A85B1D;
+  --accent-lt: #C97B2D;
+}
+
 html, body, #root { height: 100%; }
 body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   background: var(--sidebar-bg); color: var(--text); -webkit-font-smoothing: antialiased; }
@@ -2670,4 +2697,33 @@ summary:focus-visible {
   .pp-compare { grid-template-columns: 1fr 1fr; gap: 8px; }
   .pp-compare-delta { grid-column: 1 / -1; order: -1; flex-direction: row; align-items: baseline; gap: 8px; justify-content: center; }
   .pp-compare-cell figcaption { flex-direction: column; gap: 0; }
+}
+
+/* ── Cadence Life ── */
+.life-rows { display: flex; flex-direction: column; gap: 8px; }
+.life-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
+.life-row-icon { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--accent); }
+.life-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.life-row-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.life-row-sub { font-size: 12px; color: var(--text2); overflow-wrap: anywhere; }
+.life-row-done .life-row-title { color: var(--text2); }
+.life-row-waiting { opacity: 0.85; }
+.life-due { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--text2); white-space: nowrap; }
+.life-due.due { color: var(--orange); }
+.life-due.overdue { color: var(--red); }
+.life-tick { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); color: transparent; font-size: 15px; cursor: pointer; display: grid; place-items: center; }
+.life-tick:hover { color: var(--green); border-color: var(--green); }
+.life-waiting-on { background: var(--orange-bg); border-color: var(--orange); }
+.life-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow); }
+.life-stat-value { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.life-stat-label { font-size: 12px; color: var(--text2); font-weight: 600; }
+.life-shortcuts { display: flex; gap: 10px; flex-wrap: wrap; }
+.life-capture { display: flex; gap: 8px; margin-bottom: 16px; }
+.life-capture input { flex: 1 1 auto; min-width: 0; }
+.life-inbox-row { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; }
+.life-inbox-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.life-inbox-controls select, .life-inbox-controls input[type='date'] { padding: 7px 10px; font-size: 13px; }
+@media (max-width: 520px) {
+  .life-row { flex-wrap: wrap; }
+  .life-row .btn { margin-left: auto; }
 }

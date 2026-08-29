@@ -14,6 +14,14 @@ import { addDaysStr } from '../../lib/util';
 const h = vi.hoisted(() => ({ store: {} as any, dates: {} as Record<string, string> }));
 
 vi.mock('../../lib/store', () => ({ useCadence: () => h.store }));
+vi.mock('../../life/lib/store', () => ({
+  useCadenceLife: () => ({
+    insert: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    data: { life_items: [], obligations: [] },
+  }),
+}));
 vi.mock('../../lib/meetings', async (orig) => ({
   ...(await (orig() as Promise<Record<string, unknown>>)),
   useMeetingDates: () => ({ dates: h.dates, setMeetingDate: vi.fn() }),
