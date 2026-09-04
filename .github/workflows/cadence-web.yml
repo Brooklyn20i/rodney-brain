@@ -82,7 +82,17 @@ jobs:
         run: npm ci
 
       - name: Security audit
-        run: npm run audit:security
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 120s npm run audit:security; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Security audit attempt $attempt failed or timed out; retrying..."
+            sleep 5
+          done
 
       - name: Type check
         run: npm run typecheck

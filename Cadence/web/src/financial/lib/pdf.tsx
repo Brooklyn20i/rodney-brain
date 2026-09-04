@@ -14,7 +14,7 @@ import {
   priorMonthOf,
   summarizePeriod,
 } from './financeCalc';
-import { EVIDENCE_GRADE_LABEL, formatMoney, monthLabel, periodRange } from './util';
+import { EVIDENCE_GRADE_LABEL, formatMoney, monthLabel } from './util';
 import { deliverPdfBlob } from './pdfDelivery';
 
 export interface MonthlyAssessmentSections {
@@ -37,13 +37,13 @@ export function buildMonthlyAssessmentSections(
   const prior = priorMonthOf(data.monthly_metrics, current.period) ?? current;
   const bridge = netWorthBridge(prior, current);
 
-  const range = periodRange(data.monthly_metrics.map((m) => m.period))!;
-  const period = summarizePeriod(data.monthly_metrics, range.start, range.end);
-
-  const txRange = periodRange(data.investment_transactions.map((t) => t.date.slice(0, 7)));
-  const buys = txRange
-    ? investmentBuysSummary(data.investment_transactions, txRange.start, txRange.end)
-    : { shares: 0, btc: 0, total: 0, activeMonths: 0 };
+  // A monthly assessment must never silently aggregate the full history.
+  const period = summarizePeriod(data.monthly_metrics, current.period, current.period);
+  const buys = investmentBuysSummary(
+    data.investment_transactions,
+    current.period,
+    current.period
+  );
 
   const periodLabel = monthLabel(current.period);
   const openDecisions = data.decisions.filter(
@@ -63,8 +63,8 @@ export function buildMonthlyAssessmentSections(
       { metric: 'BTC / crypto', value: formatMoney(current.btc_crypto), read: 'Main market driver, positive or negative' },
     ],
     freeCashEngine: [
-      { measure: 'Cash saved + shares/BTC bought', total: formatMoney(period.freeCashGenerated), average: formatMoney(period.freeCashMonthlyAverage) },
-      { measure: 'All-in including debt reduction', total: formatMoney(period.allInSurplus), average: formatMoney(period.allInMonthlyAverage) },
+      { measure: 'This month: cash saved + shares/BTC bought', total: formatMoney(period.freeCashGenerated), average: formatMoney(period.freeCashMonthlyAverage) },
+      { measure: 'This month including debt reduction', total: formatMoney(period.allInSurplus), average: formatMoney(period.allInMonthlyAverage) },
     ],
     bridge: [
       { item: 'Opening net worth', movement: formatMoney(bridge.openingNetWorth) },
@@ -74,9 +74,9 @@ export function buildMonthlyAssessmentSections(
       { item: 'Net movement', movement: formatMoney(bridge.netWorthMovement) },
     ],
     investments: [
-      { label: 'Share buys captured', value: formatMoney(buys.shares) },
-      { label: 'BTC buys captured', value: formatMoney(buys.btc) },
-      { label: 'Total shares + BTC', value: formatMoney(buys.total) },
+      { label: 'Share buys captured this month', value: formatMoney(buys.shares) },
+      { label: 'BTC buys captured this month', value: formatMoney(buys.btc) },
+      { label: 'Total shares + BTC this month', value: formatMoney(buys.total) },
       { label: 'Active investment months', value: String(buys.activeMonths) },
     ],
     needsRodney: openDecisions.map((d) => ({ area: d.decision_area, priority: d.approval_status, why: d.question })),
@@ -144,7 +144,7 @@ export function MonthlyAssessmentDocument({ sections }: { sections: MonthlyAsses
 
         <Text style={styles.h1}>Free Cash Engine</Text>
         <Table
-          headers={['Measure', 'Period total', 'Monthly average']}
+          headers={['Measure', 'Month total', 'Monthly average']}
           rows={sections.freeCashEngine.map((r) => [r.measure, r.total, r.average])}
         />
 
