@@ -27,6 +27,22 @@ describe('buildMonthlyAssessmentSections', () => {
     expect(sections!.evidence.length).toBeGreaterThan(0);
   });
 
+  it('scopes free-cash and investment-buy sections to the reported month', () => {
+    const sections = buildMonthlyAssessmentSections(loadDemoData())!;
+
+    expect(sections.periodLabel).toBe(monthLabel('2025-07'));
+    expect(sections.freeCashEngine).toEqual([
+      { measure: 'This month: cash saved + shares/BTC bought', total: 'A$3,400.00', average: 'A$3,400.00' },
+      { measure: 'This month including debt reduction', total: 'A$4,530.00', average: 'A$4,530.00' },
+    ]);
+    expect(sections.investments).toEqual([
+      { label: 'Share buys captured this month', value: 'A$0.00' },
+      { label: 'BTC buys captured this month', value: 'A$0.00' },
+      { label: 'Total shares + BTC this month', value: 'A$0.00' },
+      { label: 'Active investment months', value: '0' },
+    ]);
+  });
+
   it('returns null when there is no monthly data to report on', () => {
     expect(buildMonthlyAssessmentSections(emptyData())).toBeNull();
   });
