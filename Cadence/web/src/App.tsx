@@ -340,7 +340,7 @@ export function App() {
         <div className="syncing-banner">Syncing…</div>
       )}
       {!isOffline && !isSyncing && pendingCount > 0 && (
-        <div className="syncing-banner">{pendingCount} change{pendingCount === 1 ? '' : 's'} synced</div>
+        <div className="syncing-banner">{pendingCount} change{pendingCount === 1 ? '' : 's'} pending sync</div>
       )}
       {domainSyncError && (
         <div className="sync-error-banner">

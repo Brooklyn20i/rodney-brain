@@ -8,6 +8,10 @@ import {
   itemsDueSoon,
   needsAttention,
   rollForward,
+  actionVisibleItems,
+  isValidLocalDate,
+  parseNonNegativeAmount,
+  parsePositiveInteger,
 } from '../lifeCalc';
 import type { LifeItem, Obligation } from '../types';
 
@@ -107,6 +111,45 @@ describe('itemsDueSoon', () => {
       item({ id: 'e', due_date: null }),
     ];
     expect(itemsDueSoon(rows, '2026-08-29', 14).map((i) => i.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('actionVisibleItems', () => {
+  it('keeps undated open and waiting items visible instead of pretending home is clear', () => {
+    const rows = [
+      item({ id: 'dated', due_date: '2026-09-02' }),
+      item({ id: 'undated-open', due_date: null, status: 'open' }),
+      item({ id: 'undated-waiting', due_date: null, status: 'waiting' }),
+      item({ id: 'far', due_date: '2026-11-01' }),
+      item({ id: 'done', due_date: null, status: 'done' }),
+    ];
+    expect(actionVisibleItems(rows, '2026-08-29', 14).map((i) => i.id)).toEqual([
+      'dated',
+      'undated-open',
+      'undated-waiting',
+    ]);
+  });
+});
+
+describe('field validation', () => {
+  it('validates real local dates, not just the YYYY-MM-DD shape', () => {
+    expect(isValidLocalDate('2026-02-28')).toBe(true);
+    expect(isValidLocalDate('2026-02-30')).toBe(false);
+    expect(isValidLocalDate('not-a-date')).toBe(false);
+  });
+
+  it('parses optional nonnegative finite amounts strictly', () => {
+    expect(parseNonNegativeAmount('')).toBeNull();
+    expect(parseNonNegativeAmount('125.5')).toBe(125.5);
+    expect(() => parseNonNegativeAmount('-1')).toThrow(/nonnegative/i);
+    expect(() => parseNonNegativeAmount('Infinity')).toThrow(/finite/i);
+    expect(() => parseNonNegativeAmount('abc')).toThrow(/finite/i);
+  });
+
+  it('requires positive finite integer cadences', () => {
+    expect(parsePositiveInteger('12', 'Cadence')).toBe(12);
+    expect(() => parsePositiveInteger('0', 'Cadence')).toThrow(/positive/i);
+    expect(() => parsePositiveInteger('1.5', 'Cadence')).toThrow(/integer/i);
   });
 });
 

@@ -28,7 +28,7 @@ test('meeting doc edits persist and captured tasks land in the Inbox', async ({ 
   await page.keyboard.type('Q3 roadmap needs a second pass before CLT.');
 
   // Capture a task mid-meeting — it goes to the Inbox, not into some agenda.
-  const capture = page.getByPlaceholder(/Capture a task/);
+  const capture = page.getByPlaceholder(/Capture an action|Capture a task/);
   await capture.fill('Chase the Q3 roadmap owners');
   await capture.press('Enter');
   await expect(page.locator('.mtg-captured-chip', { hasText: 'Chase the Q3 roadmap owners' })).toBeVisible();

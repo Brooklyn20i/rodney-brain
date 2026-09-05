@@ -28,10 +28,12 @@ export interface MeetingData {
 export const emptyMeeting = (): MeetingData => ({ agenda: [], actions: [], notes: '' });
 // crypto.randomUUID avoids the collision risk of short Math.random ids — these
 // ids are React keys and are matched across notes (carry-forward, dedupe).
-export const uid = () =>
-  (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2, 10);
+export const newId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  const rnd = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+  return `${rnd().slice(0, 8)}-${rnd().slice(0, 4)}-4${rnd().slice(0, 3)}-${(8 + Math.floor(Math.random() * 4)).toString(16)}${rnd().slice(0, 3)}-${rnd()}${rnd().slice(0, 4)}`;
+};
+export const uid = newId;
 
 // `raw` is the full parsed object. Unknown top-level keys (written by a newer
 // web build, the Swift app, or the Python agent — all sharing the notes table)

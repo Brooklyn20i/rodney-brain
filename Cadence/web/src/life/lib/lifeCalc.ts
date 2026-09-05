@@ -75,6 +75,56 @@ export function itemsDueSoon(items: LifeItem[], todayIso: string, horizonDays = 
     .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
 }
 
+// Home action visibility: dated due-soon items plus undated open/waiting items.
+// An undated item still needs a human decision, so the dashboard must not say
+// "Nothing needs you" while those rows exist.
+export function actionVisibleItems(items: LifeItem[], todayIso: string, horizonDays = 14): LifeItem[] {
+  const rows = items.filter((i) => {
+    if (i.deleted_at || (i.status !== 'open' && i.status !== 'waiting')) return false;
+    if (i.due_date === null) return true;
+    return daysUntil(i.due_date, todayIso) <= horizonDays;
+  });
+  return rows.sort((a, b) => {
+    const ad = a.due_date ?? '9999-99-99';
+    const bd = b.due_date ?? '9999-99-99';
+    const byDate = ad.localeCompare(bd);
+    if (byDate !== 0) return byDate;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
+
+export function isValidLocalDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const dt = new Date(year, month - 1, day);
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+
+export function parseNonNegativeAmount(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) throw new Error('Amount must be finite');
+  if (n < 0) throw new Error('Amount must be nonnegative');
+  return n;
+}
+
+export function parsePositiveInteger(value: string | number, label: string): number {
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(n)) throw new Error(`${label} must be finite`);
+  if (!Number.isInteger(n)) throw new Error(`${label} must be an integer`);
+  if (n <= 0) throw new Error(`${label} must be positive`);
+  return n;
+}
+
+export function parseNonNegativeInteger(value: string | number, label: string): number {
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(n)) throw new Error(`${label} must be finite`);
+  if (!Number.isInteger(n)) throw new Error(`${label} must be an integer`);
+  if (n < 0) throw new Error(`${label} must be nonnegative`);
+  return n;
+}
+
 // Human cycle label for the register.
 export function cadenceLabel(cadenceMonths: number): string {
   if (cadenceMonths === 1) return 'Monthly';

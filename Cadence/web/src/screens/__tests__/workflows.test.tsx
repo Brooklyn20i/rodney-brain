@@ -58,7 +58,7 @@ function setStore(over: any = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date(2026, 5, 20));
+  vi.setSystemTime(new Date('2026-06-20T12:00:00Z'));
   h.dates = {};
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });

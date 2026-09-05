@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, Person } from '../lib/types';
 import { ScreenHeader, Modal } from '../components/bits';
@@ -77,9 +77,12 @@ function MeetingGroupModal({ existing, onClose, onDelete }: { existing?: Person;
 
 // ── Group meeting notes list ──────────────────────────────────────────────────
 function GroupMeetingNotes({ group }: { group: Person }) {
-  const { data, insert } = useCadence();
+  const { data, insert, remove } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [createError, setCreateError] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+  const createBusyRef = useRef(false);
 
   const folder = mtgFolder(group.id);
   const today = todayStr();
@@ -114,21 +117,26 @@ function GroupMeetingNotes({ group }: { group: Person }) {
   // dated occurrences; there is no schedule model).
   const [newDate, setNewDate] = useState(todayStr());
   const newMeeting = async () => {
+    if (createBusyRef.current) return;
+    createBusyRef.current = true;
+    setCreateBusy(true);
+    setCreateError('');
     const date = newDate || todayStr();
     const title = `${group.name} · ${fmtDMY(date)}`;
-    let n: Note;
-    try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
-    catch (e: any) {
-      // Without a folder the note can't be associated with this group and would
-      // become an invisible orphan — fail loudly instead of stranding data.
-      if (/folder/i.test(String(e?.message || e))) {
-        alert('Could not create the meeting note — the database is missing the "folder" column. Please run the latest migration.');
-        return;
-      }
-      throw e;
+    let n: Note | null = null;
+    try {
+      n = await insert('notes', { title, body: '', folder } as Partial<Note>, { strict: true });
+      await setMeetingDate(n.id, date);
+      setOpenId(n.id);
+    } catch (e: any) {
+      if (n?.id) { try { await remove('notes', n.id); } catch { /* best-effort rollback */ } }
+      setCreateError(/folder/i.test(String(e?.message || e))
+        ? 'Could not create the meeting note — the database is missing the folder column.'
+        : 'Could not create the meeting note — check connection and try again.');
+    } finally {
+      createBusyRef.current = false;
+      setCreateBusy(false);
     }
-    try { await setMeetingDate(n.id, date); } catch { /* non-critical */ }
-    setOpenId(n.id);
   };
 
   const openNote = openId ? data.notes.find((n) => n.id === openId) || null : null;
@@ -141,7 +149,8 @@ function GroupMeetingNotes({ group }: { group: Person }) {
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
           <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)}
             aria-label="Date for the new meeting" style={{ fontSize: 12, padding: '4px 6px' }} />
-          <button className="btn btn-primary btn-sm" onClick={newMeeting}>+ New Meeting</button>
+          <button className="btn btn-primary btn-sm" onClick={newMeeting} disabled={createBusy}>{createBusy ? 'Creating…' : '+ New Meeting'}</button>
+          {createError && <span style={{ color: 'var(--red)', fontSize: 11 }}>{createError}</span>}
         </span>
       </h3>
       {meetings.length === 0 ? (

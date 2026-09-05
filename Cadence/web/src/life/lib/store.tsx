@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { writeWithColumnDrift } from '../../lib/supabaseWrite';
 import { useSupabaseOwnerId, fetchSchemaTables } from '../../lib/domainStore';
 import { CadenceLifeData, TABLES, emptyData } from './types';
 import { loadDemoData } from './demoData';
+import { completeRenewalCycle, type RenewalCompletionResult } from './renewals';
 
 // The Life *data* layer only — auth/login is handled once at the top of the
 // unified app. Every table lives in the `life` Postgres schema, so every
@@ -26,7 +26,9 @@ export interface Ctx {
   data: CadenceLifeData;
   insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
   update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
+  completeObligation: (id: string, expectedDue: string, todayIso: string) => Promise<RenewalCompletionResult>;
   remove: (table: Table, id: string) => Promise<void>;
+  loading: boolean;
   syncError: string | null;
   clearSyncError: () => void;
 }
@@ -46,19 +48,36 @@ function newId(): string {
 export function CadenceLifeProvider({ children }: { children: React.ReactNode }) {
   const ownerId = useSupabaseOwnerId(OFFLINE);
   const [data, setData] = useState<CadenceLifeData>(() => (DEMO_MODE ? loadDemoData() : emptyData()));
+  const [loading, setLoading] = useState(!OFFLINE);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const reload = useCallback(async (table?: Table) => {
     if (OFFLINE) return;
+    if (!table) setLoading(true);
     const tables = (table ? [table] : TABLES) as string[];
-    const results = await fetchSchemaTables('life', tables);
-    setData((prev) => {
-      const next = { ...prev };
-      results.forEach(({ t, error, data }) => {
-        if (!error && data) (next as any)[t] = data;
+    try {
+      const results = await fetchSchemaTables('life', tables);
+      const failures = results.filter(({ error }) => error);
+      setData((prev) => {
+        const next = { ...prev };
+        results.forEach(({ t, error, data }) => {
+          if (!error && data) (next as any)[t] = data;
+        });
+        return next;
       });
-      return next;
-    });
+      if (failures.length > 0) {
+        const msg = failures
+          .map(({ t, error }) => `${t}: ${(error as { message?: string })?.message || String(error)}`)
+          .join('; ');
+        setSyncError(`Life data did not load. ${msg}`);
+      } else {
+        setSyncError(null);
+      }
+    } catch (error) {
+      setSyncError(`Life data did not load. ${(error as { message?: string })?.message || String(error)}`);
+    } finally {
+      if (!table) setLoading(false);
+    }
   }, []);
 
   // Writes in flight — realtime refetches must not race them (the same
@@ -106,13 +125,27 @@ export function CadenceLifeProvider({ children }: { children: React.ReactNode })
     writesInFlight.current += 1;
     let d: unknown, error: unknown;
     try {
-      ({ data: d, error } = await writeWithColumnDrift(ownedRow, (p) =>
-        supabase.schema('life').from(table as string).insert(p).select().single()
-      ));
+      ({ data: d, error } = await supabase.schema('life').from(table as string).insert(ownedRow).select().single());
     } finally {
       writesInFlight.current = Math.max(0, writesInFlight.current - 1);
     }
     if (error) {
+      const pgError = error as { code?: string; message?: string };
+      if (pgError.code === '23505' && stamped.id) {
+        const { data: existing, error: readError } = await supabase
+          .schema('life')
+          .from(table as string)
+          .select()
+          .eq('id', stamped.id)
+          .single();
+        if (!readError && existing) {
+          setData((prev) => ({
+            ...prev,
+            [table]: [...(prev as any)[table].filter((r: any) => r.id !== (existing as any).id), existing],
+          }));
+          return existing as unknown as Row<K>;
+        }
+      }
       setSyncError((error as { message?: string }).message || 'Save failed');
       throw error;
     }
@@ -146,9 +179,7 @@ export function CadenceLifeProvider({ children }: { children: React.ReactNode })
     writesInFlight.current += 1;
     let d: unknown, error: unknown;
     try {
-      ({ data: d, error } = await writeWithColumnDrift(patch as Record<string, unknown>, (p) =>
-        supabase.schema('life').from(table as string).update(p).eq('id', id).select().single()
-      ));
+      ({ data: d, error } = await supabase.schema('life').from(table as string).update(patch as any).eq('id', id).select().single());
     } finally {
       writesInFlight.current = Math.max(0, writesInFlight.current - 1);
     }
@@ -159,6 +190,48 @@ export function CadenceLifeProvider({ children }: { children: React.ReactNode })
     }
     setData((prev) => ({ ...prev, [table]: (prev as any)[table].map((r: any) => (r.id === id ? d : r)) }));
     return d as unknown as Row<K>;
+  };
+
+  const completeObligation = async (
+    id: string,
+    expectedDue: string,
+    todayIso: string
+  ): Promise<RenewalCompletionResult> => {
+    const obligation = data.obligations.find((o) => o.id === id && !o.deleted_at);
+    if (!obligation) throw new Error('Obligation no longer exists');
+    if (obligation.next_due !== expectedDue) throw new Error('This renewal date changed. Reload and try again.');
+
+    if (OFFLINE) {
+      return completeRenewalCycle({ data, insert, update }, obligation, todayIso);
+    }
+
+    writesInFlight.current += 1;
+    let d: unknown, error: unknown;
+    try {
+      ({ data: d, error } = await supabase.schema('life').rpc('complete_obligation', {
+        p_obligation_id: id,
+        p_expected_due: expectedDue,
+        p_today: todayIso,
+      }));
+    } finally {
+      writesInFlight.current = Math.max(0, writesInFlight.current - 1);
+    }
+    if (error) {
+      setSyncError((error as { message?: string }).message || 'Renewal completion failed');
+      throw error;
+    }
+    const result = d as RenewalCompletionResult | null;
+    if (!result?.obligation || !result.history) {
+      const e = new Error('Renewal completion returned no data');
+      setSyncError(e.message);
+      throw e;
+    }
+    setData((prev) => ({
+      ...prev,
+      obligations: prev.obligations.map((o) => (o.id === id ? result.obligation : o)),
+      life_items: [...prev.life_items.filter((i) => i.id !== result.history.id), result.history],
+    }));
+    return result;
   };
 
   const remove = async (table: Table, id: string): Promise<void> => {
@@ -199,7 +272,9 @@ export function CadenceLifeProvider({ children }: { children: React.ReactNode })
         data,
         insert,
         update,
+        completeObligation,
         remove,
+        loading,
         syncError,
         clearSyncError,
       }}

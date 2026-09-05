@@ -1,0 +1,141 @@
+.meeting-save-status {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.meeting-save-status-saving { color: var(--accent); }
+.meeting-save-status-saved { color: var(--green); }
+.meeting-save-status-failed { color: var(--red); font-weight: 600; }
+
+.meeting-error {
+  margin: 8px 18px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.meeting-continuity-panel,
+.meeting-history-panel {
+  margin: 12px 18px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.meeting-continuity-panel h3,
+.meeting-history-panel h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+.meeting-commitment-group + .meeting-commitment-group { margin-top: 12px; }
+
+.meeting-commitment-heading {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.meeting-commitment-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border-light, var(--border));
+}
+
+.meeting-commitment-row:first-of-type { border-top: 0; }
+
+.meeting-commitment-body {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meeting-commitment-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meeting-commitment-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.meeting-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.meeting-history-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meeting-history-card span {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.meeting-history-card strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.meeting-history-card small {
+  grid-column: 1 / -1;
+  color: var(--text3);
+  line-height: 1.35;
+}
+
+.meeting-action-capture {
+  flex-wrap: wrap;
+}
+
+.meeting-action-owner,
+.meeting-action-due {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.meeting-action-due { width: 136px; }
