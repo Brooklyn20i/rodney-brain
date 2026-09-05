@@ -8,7 +8,7 @@
 // getNextMeeting() returns the soonest FUTURE date across all of a person's
 // meeting notes. If all dates are in the past (or none exist), returns null.
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useCadence } from './store';
 import type { Note } from './types';
 import { todayStr } from './util';
@@ -95,18 +95,26 @@ export function useMeetingDates() {
   // clobber each other with a stale snapshot from the previous render cycle.
   const datesRef = useRef<MeetingDates>({});
   datesRef.current = dates;
+  const metaNoteRef = useRef<Note | undefined>(undefined);
+  metaNoteRef.current = metaNote;
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
 
-  const setMeetingDate = async (noteId: string, date: string | null) => {
-    const next = { ...datesRef.current };
-    if (date) next[noteId] = date;
-    else delete next[noteId];
-    // Optimistically update the ref so back-to-back calls see fresh state
-    // before React re-renders.
-    datesRef.current = next;
-    const body = JSON.stringify(next);
-    if (metaNote) await update('notes', metaNote.id, { body } as any);
-    else await insert('notes', { title: MEETING_DATES_NOTE_TITLE, body } as any);
-  };
+  const setMeetingDate = useCallback((noteId: string, date: string | null): Promise<void> => {
+    const run = async () => {
+      const next = { ...datesRef.current };
+      if (date) next[noteId] = date;
+      else delete next[noteId];
+      const body = JSON.stringify(next);
+      const currentMeta = metaNoteRef.current;
+      let saved: Note;
+      if (currentMeta) saved = await update('notes', currentMeta.id, { body } as Partial<Note>, { strict: true }) as Note;
+      else saved = await insert('notes', { title: MEETING_DATES_NOTE_TITLE, body } as Partial<Note>, { strict: true }) as Note;
+      datesRef.current = next;
+      if (saved?.id) metaNoteRef.current = saved;
+    };
+    writeChainRef.current = writeChainRef.current.then(run, run);
+    return writeChainRef.current;
+  }, [insert, update]);
 
   return { dates, setMeetingDate };
 }

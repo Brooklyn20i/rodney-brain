@@ -8,6 +8,7 @@ import { applyWorkTableScope } from './workTableScope';
 
 type Table = keyof CadenceData;
 type Row<K extends Table> = CadenceData[K][number];
+type WriteOptions = { strict?: boolean };
 
 export interface Ctx {
   ready: boolean;
@@ -22,8 +23,8 @@ export interface Ctx {
   setPassword: (password: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
-  insert: <K extends Table>(table: K, row: Partial<Row<K>>) => Promise<Row<K>>;
-  update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => Promise<Row<K>>;
+  insert: <K extends Table>(table: K, row: Partial<Row<K>>, opts?: WriteOptions) => Promise<Row<K>>;
+  update: <K extends Table>(table: K, id: string, patch: Partial<Row<K>>, opts?: WriteOptions) => Promise<Row<K>>;
   remove: (table: Table, id: string) => Promise<void>;
   reload: (table?: Table) => Promise<void>;
   logActivity: (action: string, detail?: string, actor?: string) => Promise<void>;
@@ -326,13 +327,43 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
   // Viewers are read-only; everyone else (incl. no-membership owner) can write.
   const canEdit = myRole !== 'viewer';
 
-  const insert = async <K extends Table>(table: K, row: Partial<Row<K>>) => {
+  const insert = async <K extends Table>(table: K, row: Partial<Row<K>>, opts?: WriteOptions) => {
     if (!canEdit) { setSyncError('You have read-only access to this workspace.'); throw new Error('read-only'); }
+    const strict = opts?.strict === true;
     // Always include owner_id + workspace_id so rows are correctly scoped.
     // workspace_id is omitted pre-migration and dropMissingColumn handles it gracefully.
     const ownedRow = session?.user?.id
       ? { owner_id: session.user.id, ...(workspace?.id ? { workspace_id: workspace.id } : {}), ...row }
       : row;
+
+    if (strict) {
+      if (!navigator.onLine) {
+        const error = new Error('Save needs a server acknowledgement; reconnect and retry.');
+        setSyncError(error.message);
+        throw error;
+      }
+      const payload: any = ownedRow;
+      const { data: d, error } = await supabase.from(table as string).insert(payload).select().single();
+      if (!error) {
+        setData((prev) => ({ ...prev, [table]: [...(prev as any)[table], d] }));
+        return d as Row<K>;
+      }
+      const duplicate = ((error as any)?.code === '23505' || /duplicate key/i.test(String((error as any)?.message || ''))) && (payload as any)?.id;
+      if (duplicate) {
+        const { data: existing, error: selectErr } = await supabase.from(table as string).select('*').eq('id', (payload as any).id).single();
+        if (!selectErr && existing) {
+          setData((prev) => {
+            const rows = (prev as any)[table] as any[];
+            return rows.some((r) => r.id === existing.id)
+              ? { ...prev, [table]: rows.map((r) => (r.id === existing.id ? existing : r)) }
+              : { ...prev, [table]: [...rows, existing] };
+          });
+          return existing as Row<K>;
+        }
+      }
+      setSyncError(error?.message || 'Save failed');
+      throw error;
+    }
 
     // Offline: stamp a client id so the optimistic row and the queued replay
     // share one stable primary key (idempotent on reconnect), then queue it.
@@ -375,8 +406,23 @@ export function CadenceProvider({ children }: { children: React.ReactNode }) {
     throw new Error('insert failed after stripping unknown columns');
   };
 
-  const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>) => {
+  const update = async <K extends Table>(table: K, id: string, patch: Partial<Row<K>>, opts?: WriteOptions) => {
     if (!canEdit) { setSyncError('You have read-only access to this workspace.'); throw new Error('read-only'); }
+    const strict = opts?.strict === true;
+    if (strict) {
+      if (!navigator.onLine) {
+        const error = new Error('Save needs a server acknowledgement; reconnect and retry.');
+        setSyncError(error.message);
+        throw error;
+      }
+      const { data: d, error } = await supabase.from(table as string).update(patch as any).eq('id', id).select().single();
+      if (!error) {
+        setData((p) => ({ ...p, [table]: (p as any)[table].map((r: any) => (r.id === id ? d : r)) }));
+        return d as Row<K>;
+      }
+      setSyncError(error?.message || 'Save failed');
+      throw error;
+    }
     // Optimistic: apply patch to state immediately for instant UI feedback.
     const prev = (data as any)[table].find((r: any) => r.id === id) as Row<K> | undefined;
     setData((prev) => ({

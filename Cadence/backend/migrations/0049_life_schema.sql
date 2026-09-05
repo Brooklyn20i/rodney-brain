@@ -13,9 +13,9 @@
 
 create schema if not exists life;
 
-grant usage on schema life to authenticated, anon;
-alter default privileges in schema life grant all on tables to authenticated, anon;
-alter default privileges in schema life grant all on sequences to authenticated, anon;
+grant usage on schema life to authenticated;
+alter default privileges in schema life grant all on tables to authenticated;
+alter default privileges in schema life grant all on sequences to authenticated;
 
 set search_path to life, public;
 

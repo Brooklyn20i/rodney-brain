@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCadence } from '../lib/store';
 import type { Note, Person, WorkItem } from '../lib/types';
 import { ScreenHeader, Modal, Due, TypeTag, PriTag } from '../components/bits';
@@ -154,10 +154,13 @@ function PersonModal({ existing, onClose, onDelete, groups }: { existing?: Perso
 // Demoted to a collapsed section: the ledger is the 1:1 system now; the doc
 // trail is here for when the write-up matters, one tap away, never in the way.
 function MeetingNotes({ person }: { person: Person }) {
-  const { data, insert } = useCadence();
+  const { data, insert, remove } = useCadence();
   const { dates, setMeetingDate } = useMeetingDates();
   const [openId, setOpenId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+  const createBusyRef = useRef(false);
 
   const folder = mtgFolder(person.id);
   const today = todayStr();
@@ -178,17 +181,27 @@ function MeetingNotes({ person }: { person: Person }) {
   const nextId = meetings.find((n) => (dates[n.id] || n.created_at).slice(0, 10) >= today)?.id;
 
   const newMeeting = async () => {
+    if (createBusyRef.current) return;
+    createBusyRef.current = true;
+    setCreateBusy(true);
+    setCreateError('');
     const todayDate = todayStr();
     const todayLabel = fmtDMY(todayDate);
     const title = `1:1 · ${person.name} · ${todayLabel}`;
-    let n: Note;
-    try { n = await insert('notes', { title, body: '', folder } as Partial<Note>); }
-    catch (e: any) {
-      if (/folder/i.test(String(e?.message || e))) n = await insert('notes', { title, body: '' } as Partial<Note>);
-      else throw e;
+    let n: Note | null = null;
+    try {
+      n = await insert('notes', { title, body: '', folder } as Partial<Note>, { strict: true });
+      await setMeetingDate(n.id, todayDate);
+      setOpenId(n.id);
+    } catch (e: any) {
+      if (n?.id) { try { await remove('notes', n.id); } catch { /* best-effort rollback */ } }
+      setCreateError(/folder/i.test(String(e?.message || e))
+        ? 'Could not create the 1:1 note — the database is missing the folder column.'
+        : 'Could not create the 1:1 note — check connection and try again.');
+    } finally {
+      createBusyRef.current = false;
+      setCreateBusy(false);
     }
-    try { await setMeetingDate(n.id, todayDate); } catch { /* non-critical */ }
-    setOpenId(n.id);
   };
 
   const openNote = openId ? data.notes.find((n) => n.id === openId) || null : null;
@@ -199,12 +212,13 @@ function MeetingNotes({ person }: { person: Person }) {
         📝 Meeting notes
         {meetings.length > 0 && <span className="section-count" style={{ background: 'var(--accent)' }}>{meetings.length}</span>}
         {open && (
-          <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }}
-            onClick={(e) => { e.stopPropagation(); void newMeeting(); }}>+ New 1:1</button>
+          <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} disabled={createBusy}
+            onClick={(e) => { e.stopPropagation(); void newMeeting(); }}>{createBusy ? 'Creating…' : '+ New 1:1'}</button>
         )}
         <span style={{ marginLeft: open ? 8 : 'auto', fontSize: 11, color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
           {open ? '▴' : '▾'}</span>
       </h3>
+      {createError && <div role="alert" className="error-banner">{createError}</div>}
       {open && (meetings.length === 0 ? (
         <p style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
           No meeting notes yet. Hit "+ New 1:1" to start capturing.

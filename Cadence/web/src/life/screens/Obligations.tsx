@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCadenceLife } from '../lib/store';
 import { ScreenHeader, Card, EmptyState } from '../components/bits';
 import {
@@ -8,7 +8,17 @@ import {
   type LifeCategory,
   type Obligation,
 } from '../lib/types';
-import { cadenceLabel, dueLabel, dueState, fmtAmount, fmtDay, rollForward, todayLocalISO } from '../lib/lifeCalc';
+import {
+  cadenceLabel,
+  dueLabel,
+  dueState,
+  fmtAmount,
+  isValidLocalDate,
+  parseNonNegativeAmount,
+  parseNonNegativeInteger,
+  parsePositiveInteger,
+  todayLocalISO,
+} from '../lib/lifeCalc';
 
 const CADENCES: { months: number; label: string }[] = [
   { months: 1, label: 'Monthly' },
@@ -40,11 +50,35 @@ const emptyDraft = (today: string): Draft => ({
   notes: '',
 });
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function validateDraft(draft: Draft) {
+  const name = draft.name.trim();
+  if (!name) throw new Error('Obligation name is required.');
+  if (!isValidLocalDate(draft.next_due)) throw new Error('Enter a real due date.');
+  const cadence = parsePositiveInteger(draft.cadence_months, 'Frequency');
+  if (cadence > 1200) throw new Error('Frequency must be 1200 months or less.');
+  const lead = parseNonNegativeInteger(draft.lead_days, 'Lead days');
+  if (lead > 3660) throw new Error('Lead days must be 3660 or less.');
+  const amount = parseNonNegativeAmount(draft.amount);
+  return {
+    name,
+    category: draft.category,
+    cadence_months: cadence,
+    next_due: draft.next_due,
+    lead_days: lead,
+    amount,
+    notes: draft.notes,
+  };
+}
+
 // The obligations register: everything that comes back — BAS, rego,
-// insurance, passport. Stores only the NEXT date and the cycle; Done ✓
-// rolls forward and logs history, so nothing is generated and nothing rots.
+// insurance, passport. Stores only the NEXT date and the cycle; Done ✓ uses
+// the atomic server renewal mutation so history and next_due move together.
 export function Obligations({ onMenu }: { onMenu: () => void }) {
-  const { data, insert, update, remove } = useCadenceLife();
+  const { data, insert, update, completeObligation, remove, loading, syncError } = useCadenceLife();
   const today = todayLocalISO();
 
   const obligations = data.obligations
@@ -53,13 +87,18 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
 
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(today));
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Set<string>>(() => new Set());
+  const busyRef = useRef<Set<string>>(new Set());
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
   const startNew = () => {
+    setLocalError(null);
     setDraft(emptyDraft(today));
     setEditing('new');
   };
   const startEdit = (ob: Obligation) => {
+    setLocalError(null);
     setDraft({
       name: ob.name,
       category: ob.category,
@@ -73,37 +112,56 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
   };
 
   const saveDraft = async () => {
-    const name = draft.name.trim();
-    if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(draft.next_due)) return;
-    const row = {
-      name,
-      category: draft.category,
-      cadence_months: draft.cadence_months,
-      next_due: draft.next_due,
-      lead_days: Math.max(0, Math.round(draft.lead_days)),
-      amount: draft.amount.trim() === '' ? null : Number(draft.amount),
-      notes: draft.notes,
-    };
-    if (editing === 'new') await insert('obligations', row);
-    else if (editing) await update('obligations', editing, row);
-    setEditing(null);
+    let row: ReturnType<typeof validateDraft>;
+    try {
+      row = validateDraft(draft);
+    } catch (error) {
+      setLocalError(errorMessage(error, 'Invalid obligation'));
+      return;
+    }
+
+    setLocalError(null);
+    try {
+      if (editing === 'new') await insert('obligations', row);
+      else if (editing) await update('obligations', editing, row);
+      setEditing(null);
+    } catch (error) {
+      setLocalError(errorMessage(error, 'Save failed'));
+    }
   };
 
-  const completeObligation = async (ob: Obligation) => {
-    await insert('life_items', {
-      title: ob.name,
-      notes: '',
-      status: 'done',
-      category: ob.category,
-      due_date: ob.next_due,
-      obligation_id: ob.id,
-      completed_at: new Date().toISOString(),
-    });
-    await update('obligations', ob.id, { next_due: rollForward(ob, today) });
+  const completeRenewal = async (ob: Obligation) => {
+    const key = `${ob.id}:${ob.next_due}`;
+    if (busyRef.current.has(key)) return;
+    busyRef.current.add(key);
+    setBusy((b) => new Set(b).add(key));
+    setLocalError(null);
+    try {
+      await completeObligation(ob.id, ob.next_due, today);
+    } catch (error) {
+      setLocalError(errorMessage(error, 'Renewal completion failed'));
+    } finally {
+      busyRef.current.delete(key);
+      setBusy((b) => {
+        const next = new Set(b);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const deleteObligation = async (ob: Obligation) => {
+    setLocalError(null);
+    try {
+      await remove('obligations', ob.id);
+    } catch (error) {
+      setLocalError(errorMessage(error, 'Delete failed'));
+    }
   };
 
   const form = (
     <Card title={editing === 'new' ? 'New obligation' : 'Edit obligation'}>
+      {localError && <div className="life-error">{localError}</div>}
       <div className="form-grid">
         <div>
           <label className="field">Name</label>
@@ -135,20 +193,20 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
         </div>
         <div>
           <label className="field">Remind (days before)</label>
-          <input type="number" aria-label="Lead days" min={0} value={draft.lead_days} onChange={(e) => set({ lead_days: Number(e.target.value) })} />
+          <input type="number" aria-label="Lead days" min={0} max={3660} value={draft.lead_days} onChange={(e) => set({ lead_days: Number(e.target.value) })} />
         </div>
         <div>
           <label className="field">Typical cost ($, optional)</label>
-          <input type="number" aria-label="Typical cost" inputMode="decimal" value={draft.amount} onChange={(e) => set({ amount: e.target.value })} />
+          <input type="number" aria-label="Typical cost" inputMode="decimal" min={0} value={draft.amount} onChange={(e) => set({ amount: e.target.value })} />
         </div>
         <div>
           <label className="field">Notes</label>
           <input type="text" aria-label="Obligation notes" value={draft.notes} onChange={(e) => set({ notes: e.target.value })} />
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="life-shortcuts">
         <button className="btn btn-primary" onClick={() => void saveDraft()} disabled={!draft.name.trim()}>
-          {editing === 'new' ? 'Add obligation' : 'Save changes'}
+          {editing === 'new' ? 'Add obligation' : 'Save obligation changes'}
         </button>
         <button className="btn btn-secondary" onClick={() => setEditing(null)}>
           Cancel
@@ -165,6 +223,8 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
         </button>
       </ScreenHeader>
       <div className="screen-content">
+        {!editing && (syncError || localError) && <div className="life-error">{syncError || localError}</div>}
+        {!editing && loading && <div className="life-error">Life data is loading; do not treat an empty register as clear yet.</div>}
         {editing && form}
         {obligations.length === 0 && !editing ? (
           <EmptyState
@@ -178,13 +238,14 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
               <div className="life-rows">
                 {obligations.map((ob) => {
                   const state = dueState(ob, today);
+                  const key = `${ob.id}:${ob.next_due}`;
                   return (
                     <div key={ob.id} className="life-row">
                       <span className="life-row-icon">{CATEGORY_ICON[ob.category]}</span>
                       <div className="life-row-main">
                         <span className="life-row-title">{ob.name}</span>
                         <span className="life-row-sub">
-                          {cadenceLabel(ob.cadence_months)} · next {fmtDay(ob.next_due)}
+                          {cadenceLabel(ob.cadence_months)} · Next due {ob.next_due}
                           {ob.amount != null ? ` · ${fmtAmount(ob.amount)}` : ''}
                           {ob.notes ? ` · ${ob.notes}` : ''}
                         </span>
@@ -193,14 +254,19 @@ export function Obligations({ onMenu }: { onMenu: () => void }) {
                         {dueLabel(ob.next_due, today)}
                       </span>
                       {state !== 'upcoming' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => void completeObligation(ob)}>
-                          Done ✓
+                        <button
+                          className="btn btn-primary btn-sm"
+                          aria-label={`Complete ${ob.name} renewal`}
+                          onClick={() => void completeRenewal(ob)}
+                          disabled={busy.has(key)}
+                        >
+                          {busy.has(key) ? 'Completing…' : 'Done ✓'}
                         </button>
                       )}
                       <button className="btn btn-secondary btn-sm" aria-label={`Edit ${ob.name}`} onClick={() => startEdit(ob)}>
                         ✎
                       </button>
-                      <button className="btn btn-danger btn-sm" aria-label={`Delete ${ob.name}`} onClick={() => void remove('obligations', ob.id)}>
+                      <button className="btn btn-danger btn-sm" aria-label={`Delete ${ob.name}`} onClick={() => void deleteObligation(ob)}>
                         ✕
                       </button>
                     </div>

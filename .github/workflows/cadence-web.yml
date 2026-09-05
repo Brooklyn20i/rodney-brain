@@ -72,6 +72,20 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
 
+      - name: Life completion and isolation assertions
+        run: >-
+          psql -v ON_ERROR_STOP=1 --no-psqlrc
+          -c "BEGIN; SET LOCAL cadence.life_test_mode='on'; GRANT USAGE ON SCHEMA auth TO authenticated;"
+          -f Cadence/backend/scripts/life_completion_assertions.sql
+          -c "ROLLBACK;"
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+
       - uses: actions/setup-node@v6
         with:
           node-version: 22

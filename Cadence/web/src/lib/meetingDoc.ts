@@ -1,10 +1,8 @@
 // Word-style meeting documents.
 //
-// A meeting note's body is now a plain rich-text (HTML) document — the same
-// writing surface as Notes. Older meetings stored structured JSON
-// ({agenda, actions, notes}); these convert ONE WAY into a readable HTML
-// document the first time they're opened, so nothing Rodney captured under the
-// old template is lost — it just becomes text he can edit freely.
+// New meeting bodies use rich-text HTML. Legacy structured JSON renders as a
+// document, but edits preserve all original keys/IDs and store the editable
+// narrative in document_html. Opening a legacy note never rewrites it.
 
 import { parseMeeting } from './meetingData';
 import type { MeetingData } from './meetingData';
@@ -60,10 +58,20 @@ export function legacyMeetingToHtml(parsed: MeetingData): string {
   return parts.join('');
 }
 
+// Preserve legacy action IDs/provenance rather than silently flattening them.
+export function meetingDocumentBody(originalBody: string, html: string): string {
+  if (!isLegacyMeetingJson(originalBody)) return html;
+  return JSON.stringify({ ...JSON.parse(originalBody), document_html: html });
+}
+
 // Body (any era) → HTML for the document editor.
 export function meetingDocHtml(body: string): string {
   if (!body.trim()) return '';
-  if (isLegacyMeetingJson(body)) return legacyMeetingToHtml(parseMeeting(body).data);
+  if (isLegacyMeetingJson(body)) {
+    const parsed = JSON.parse(body);
+    if (typeof parsed.document_html === 'string') return parsed.document_html;
+    return legacyMeetingToHtml(parseMeeting(body).data);
+  }
   return toEditorHtml(body);
 }
 
