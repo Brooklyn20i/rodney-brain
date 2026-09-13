@@ -621,6 +621,49 @@ def send_agent_message(
 
 # ── Agent queue (agent_control_events) ───────────────────────────────────────
 
+AGENT_CONTROL_ACTIVE_STATUSES = {"pending", "processing"}
+AGENT_CONTROL_TERMINAL_STATUSES = {
+    "processed",
+    "failed",  # technical/runtime failures only
+    "ignored",
+    "requires_approval",
+    "blocked_authorization",
+    "refused_safely",
+}
+AGENT_CONTROL_STATUSES = AGENT_CONTROL_ACTIVE_STATUSES | AGENT_CONTROL_TERMINAL_STATUSES
+
+
+def _agent_event_payload_patch(event_id: str, entries: dict) -> dict:
+    existing = bridge.select("agent_control_events", f"select=payload&id=eq.{event_id}", limit=1)
+    old_payload = (existing[0].get("payload") or {}) if isinstance(existing, list) and existing else {}
+    return {"payload": {**old_payload, **entries}}
+
+
+def _terminal_agent_event_patch(event_id: str, outcome: str, summary: str = "") -> dict:
+    """Build a terminal-status patch for agent_control_events.
+
+    `failed` is reserved for technical errors. Safe/authority stops are terminal
+    control outcomes, not failures, so they use processed_at and payload notes.
+    """
+    from datetime import datetime, timezone
+
+    if outcome not in AGENT_CONTROL_TERMINAL_STATUSES:
+        allowed = ", ".join(sorted(AGENT_CONTROL_TERMINAL_STATUSES))
+        raise ValueError(f"Unsupported agent event outcome {outcome!r}; expected one of: {allowed}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    if outcome == "failed":
+        return {"status": "failed", "failed_at": now, "error": summary}
+
+    patch: dict = {"status": outcome, "processed_at": now}
+    if summary or outcome in {"requires_approval", "blocked_authorization", "refused_safely"}:
+        patch.update(_agent_event_payload_patch(event_id, {
+            "control_outcome": outcome,
+            "outcome_summary": summary,
+        }))
+    return patch
+
+
 @mcp.tool()
 def list_tasks_for_kobe(limit: int = 50) -> list[dict]:
     """List open tasks Rodney has assigned to Kobe via the 'For Kobe' tab in Cadence.
@@ -639,8 +682,9 @@ def list_tasks_for_kobe(limit: int = 50) -> list[dict]:
 @mcp.tool()
 def list_agent_queue(status: str = "pending", limit: int = 50) -> list[dict]:
     """List agent_control_events by status.
-    status: 'pending' (not yet started), 'processing' (in flight), 'processed', 'failed', 'ignored'
-    — use 'pending' on your normal triage loop to find what needs action next."""
+    status: pending, processing, processed, ignored, requires_approval,
+    blocked_authorization, refused_safely, failed (technical errors), or all.
+    Use 'pending' on the normal triage loop to find what needs action next."""
     try:
         q = f"select=*&deleted_at=is.null&order=created_at.asc"
         if status != "all":
@@ -665,6 +709,21 @@ def claim_agent_event(event_id: str) -> dict:
 
 
 @mcp.tool()
+def resolve_agent_event(event_id: str, outcome: str, summary: str = "") -> dict:
+    """Resolve an agent_control_event with an explicit terminal outcome.
+
+    outcome: processed, ignored, requires_approval, blocked_authorization,
+    refused_safely, or failed. Use failed only for genuine technical/runtime
+    errors; safe authority stops should use one of the non-failure outcomes.
+    """
+    try:
+        patch = _terminal_agent_event_patch(event_id, outcome, summary)
+        return bridge.patch_row("agent_control_events", event_id, patch)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 def complete_agent_event(event_id: str, summary: str = "") -> dict:
     """Mark an agent_control_event as processed after Kobe has acted on it.
     summary: brief note on what was done (stored in payload for audit trail)."""
@@ -673,9 +732,7 @@ def complete_agent_event(event_id: str, summary: str = "") -> dict:
         now = datetime.now(timezone.utc).isoformat()
         patch: dict = {"status": "processed", "processed_at": now}
         if summary:
-            existing = bridge.select("agent_control_events", f"select=payload&id=eq.{event_id}", limit=1)
-            old_payload = (existing[0].get("payload") or {}) if isinstance(existing, list) and existing else {}
-            patch["payload"] = {**old_payload, "kobe_summary": summary}
+            patch.update(_agent_event_payload_patch(event_id, {"kobe_summary": summary}))
         return bridge.patch_row("agent_control_events", event_id, patch)
     except Exception as e:
         return {"error": str(e)}
@@ -683,16 +740,34 @@ def complete_agent_event(event_id: str, summary: str = "") -> dict:
 
 @mcp.tool()
 def fail_agent_event(event_id: str, error: str) -> dict:
-    """Mark an agent_control_event as failed. error: brief description of what went wrong."""
+    """Mark an agent_control_event as failed for a genuine technical/runtime error.
+
+    Do not use this for safe refusals, missing approval, political sensitivity,
+    or unauthorised operations; use the explicit safety/authority tools instead.
+    """
     try:
-        from datetime import datetime, timezone
-        return bridge.patch_row("agent_control_events", event_id, {
-            "status": "failed",
-            "failed_at": datetime.now(timezone.utc).isoformat(),
-            "error": error,
-        })
+        patch = _terminal_agent_event_patch(event_id, "failed", error)
+        return bridge.patch_row("agent_control_events", event_id, patch)
     except Exception as e:
         return {"error": str(e)}
+
+
+@mcp.tool()
+def require_agent_event_approval(event_id: str, reason: str) -> dict:
+    """Close an event as requiring Rodney/owner approval, not as a failure."""
+    return resolve_agent_event(event_id, "requires_approval", reason)
+
+
+@mcp.tool()
+def block_agent_event_authorization(event_id: str, reason: str) -> dict:
+    """Close an event as blocked by missing authority/grant, not as a failure."""
+    return resolve_agent_event(event_id, "blocked_authorization", reason)
+
+
+@mcp.tool()
+def refuse_agent_event_safely(event_id: str, reason: str) -> dict:
+    """Close an event as safely refused/stopped, not as a technical failure."""
+    return resolve_agent_event(event_id, "refused_safely", reason)
 
 
 @mcp.tool()
@@ -704,9 +779,7 @@ def ignore_agent_event(event_id: str, reason: str = "") -> dict:
         now = datetime.now(timezone.utc).isoformat()
         patch: dict = {"status": "ignored", "processed_at": now}
         if reason:
-            existing = bridge.select("agent_control_events", f"select=payload&id=eq.{event_id}", limit=1)
-            old_payload = (existing[0].get("payload") or {}) if isinstance(existing, list) and existing else {}
-            patch["payload"] = {**old_payload, "ignore_reason": reason}
+            patch.update(_agent_event_payload_patch(event_id, {"ignore_reason": reason}))
         return bridge.patch_row("agent_control_events", event_id, patch)
     except Exception as e:
         return {"error": str(e)}
