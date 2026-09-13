@@ -33,7 +33,12 @@ const dependabot = read('../../.github/dependabot.yml');
 assert(!workflow.includes('@v4'), 'Cadence web workflow must not use Node 20-era @v4 GitHub actions.');
 assert(workflow.includes('actions/checkout@v7'), 'Cadence web workflow must use Node 24 checkout action.');
 assert(workflow.includes('actions/setup-node@v6'), 'Cadence web workflow must use Node 24 setup-node action.');
+assert(!workflow.includes('actions/setup-node@v7'), 'Cadence web workflow must not use setup-node@v7 until the Node 24 action guard is deliberately updated.');
 assert(workflow.includes('actions/upload-artifact@v7'), 'Cadence web workflow must use Node 24 upload-artifact action.');
+assert(
+  workflow.includes('push:\n    branches:\n      - main'),
+  'Cadence web push trigger must run only on main so PR branches receive one pull_request CI run.',
+);
 
 // Guard the production smoke automation so it cannot silently disappear from
 // the workflow. This CI job runs after `ci` on main pushes and verifies prod.
@@ -67,10 +72,20 @@ assert(!dependabot.includes('CadenceFinancial') && !dependabot.includes('Cadence
 const viteConfig = read('vite.config.ts');
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
 assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init must tag errors with the deploy release.');
-assert(read('src/vite-env.d.ts').includes('__BUILD_COMMIT__'), 'vite-env.d.ts must declare __BUILD_COMMIT__.');
+const packageJsonText = read('package.json');
+const packageJson = JSON.parse(packageJsonText);
+assert(
+  packageJson.engines?.node === '^22.22.2 || ^24.15.0 || >=26',
+  'Node engine range must satisfy jsdom 30 and its transitive engine requirements.',
+);
+assert(read('src/vite-env.d.ts').includes('__BUILD_COMMIT__'), 'vite-env.d.ts must declare build commit.');
 assert(read('tsconfig.json').includes('"api"'), 'typecheck must include Vercel API functions.');
 assert(read('package.json').includes('eslint src api'), 'lint must include Vercel API functions.');
 assert(read('package.json').includes('smoke:prod'), 'package.json must expose production smoke checks.');
+assert(
+  read('src/test-setup.ts').includes("@testing-library/jest-dom/vitest"),
+  'Vitest setup must import @testing-library/jest-dom/vitest so Testing Library matchers are typed and installed.',
+);
 assert(read('eslint.config.js').includes("'api/**/*.ts'"), 'ESLint config must cover api/**/*.ts.');
 assert(existsSync(join(root, 'api/health.ts')), 'api/health.ts must expose deploy provenance.');
 const healthApi = read('api/health.ts');
