@@ -9,3 +9,11 @@ Cadence/supabase/.temp/
 
 # Playwright run scratch output (screenshots/traces on failure)
 **/test-results/
+
+# Native iOS public-client build values. Never commit service credentials.
+Cadence/Config/Secrets.xcconfig
+
+# Native build products and local SwiftPM/Xcode state.
+**/.build/
+**/.swiftpm/
+**/DerivedData/

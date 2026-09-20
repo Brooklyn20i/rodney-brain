@@ -1,0 +1,5 @@
+// Public mobile-client configuration. Local and release values live in the
+// ignored Secrets.xcconfig file or the CI/App Store build environment.
+CADENCE_SUPABASE_URL =
+CADENCE_SUPABASE_ANON_KEY =
+#include? "Secrets.xcconfig"

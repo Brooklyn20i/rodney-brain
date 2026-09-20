@@ -17,11 +17,13 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Cadence needs access to your photo library to import screenshots for text extraction and task creation.</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CADENCE_SUPABASE_URL</key>
+	<string>$(CADENCE_SUPABASE_URL)</string>
+	<key>CADENCE_SUPABASE_ANON_KEY</key>
+	<string>$(CADENCE_SUPABASE_ANON_KEY)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -37,6 +39,10 @@
 	</array>
 	<key>UIRequiresFullScreen</key>
 	<false/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
