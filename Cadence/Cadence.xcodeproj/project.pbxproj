@@ -54,6 +54,16 @@
 		D2D8D95CA703EDF7210D0048 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 39DF35C5B235782381DC07AE /* Assets.xcassets */; };
 		37A0E13462FD24D6AF28CF17 /* OCRServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AFA75E5A09B4549EBE7294D /* OCRServiceTests.swift */; };
 		12C667E0C7F66216C8460F01 /* ClassificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3271E47CA707A78EDBB4E946 /* ClassificationTests.swift */; };
+		363C2DDDD507FEF370D3C223 /* CadenceConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33BD5CD2102FD405EBA98DF /* CadenceConfiguration.swift */; };
+		A293DF2768861DE5AA984039 /* CadenceSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14209FF9E350702DA3D2930 /* CadenceSession.swift */; };
+		403FF740C589DBCA2FFDFB66 /* HTTPTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB164DAC9C68AFBCB763B30 /* HTTPTransport.swift */; };
+		24AD2C0DBF485E33EA39ECFE /* CadenceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AECE8632A42A811DB4013E08 /* CadenceClient.swift */; };
+		02A2E7260DA5330ECAAA9243 /* ExecutiveBrief.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169487360E7B917ADD466FBA /* ExecutiveBrief.swift */; };
+		26B57E821E74581970F72312 /* NativeAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724C288A4A4DC03D17D1C7BD /* NativeAppModel.swift */; };
+		9A8EA9754F20E25CC05F1A28 /* NativeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E0B2A6DB0CF25E87150A51 /* NativeRootView.swift */; };
+		B4752F7896A34950967CD402 /* NativeLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57CE620CAAE9322D89BE1C2 /* NativeLoginView.swift */; };
+		0821F3A89F64B5DE924B2E23 /* NativeExecutiveBriefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5320E111BDEA1F787AADCF9 /* NativeExecutiveBriefView.swift */; };
+		FDB8E2C14E84D0BA0985E540 /* KeychainSessionVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F82A64277BAC9397B12986 /* KeychainSessionVault.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -107,6 +117,17 @@
 		10392818C35A0ECF18CC6D09 /* CadenceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CadenceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1AFA75E5A09B4549EBE7294D /* OCRServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRServiceTests.swift; sourceTree = "<group>"; };
 		3271E47CA707A78EDBB4E946 /* ClassificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationTests.swift; sourceTree = "<group>"; };
+		D33BD5CD2102FD405EBA98DF /* CadenceConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceNativeCore/Sources/CadenceNativeCore/CadenceConfiguration.swift; sourceTree = SOURCE_ROOT; };
+		A14209FF9E350702DA3D2930 /* CadenceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceNativeCore/Sources/CadenceNativeCore/CadenceSession.swift; sourceTree = SOURCE_ROOT; };
+		ABB164DAC9C68AFBCB763B30 /* HTTPTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceNativeCore/Sources/CadenceNativeCore/HTTPTransport.swift; sourceTree = SOURCE_ROOT; };
+		AECE8632A42A811DB4013E08 /* CadenceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceNativeCore/Sources/CadenceNativeCore/CadenceClient.swift; sourceTree = SOURCE_ROOT; };
+		169487360E7B917ADD466FBA /* ExecutiveBrief.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CadenceNativeCore/Sources/CadenceNativeCore/ExecutiveBrief.swift; sourceTree = SOURCE_ROOT; };
+		724C288A4A4DC03D17D1C7BD /* NativeAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/App/NativeAppModel.swift; sourceTree = SOURCE_ROOT; };
+		C9E0B2A6DB0CF25E87150A51 /* NativeRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/App/NativeRootView.swift; sourceTree = SOURCE_ROOT; };
+		B57CE620CAAE9322D89BE1C2 /* NativeLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/Features/Native/NativeLoginView.swift; sourceTree = SOURCE_ROOT; };
+		B5320E111BDEA1F787AADCF9 /* NativeExecutiveBriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/Features/Native/NativeExecutiveBriefView.swift; sourceTree = SOURCE_ROOT; };
+		F9F82A64277BAC9397B12986 /* KeychainSessionVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/Services/Session/KeychainSessionVault.swift; sourceTree = SOURCE_ROOT; };
+		D0167CC642E0F439E4CA5362 /* Native.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Native.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -115,6 +136,17 @@
 			children = (
 				2A7FAACA52F16B9AE7A27542 /* Cadence */,
 				96B7E24D34095657BB9ACD14 /* CadenceTests */,
+				D33BD5CD2102FD405EBA98DF /* CadenceConfiguration.swift */,
+				A14209FF9E350702DA3D2930 /* CadenceSession.swift */,
+				ABB164DAC9C68AFBCB763B30 /* HTTPTransport.swift */,
+				AECE8632A42A811DB4013E08 /* CadenceClient.swift */,
+				169487360E7B917ADD466FBA /* ExecutiveBrief.swift */,
+				724C288A4A4DC03D17D1C7BD /* NativeAppModel.swift */,
+				C9E0B2A6DB0CF25E87150A51 /* NativeRootView.swift */,
+				B57CE620CAAE9322D89BE1C2 /* NativeLoginView.swift */,
+				B5320E111BDEA1F787AADCF9 /* NativeExecutiveBriefView.swift */,
+				F9F82A64277BAC9397B12986 /* KeychainSessionVault.swift */,
+				D0167CC642E0F439E4CA5362 /* Native.xcconfig */,
 				BF7A2D27A78D590BDEF15AF2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -352,49 +384,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB41D46E0BBF04F386C83C86 /* CadenceApp.swift in Sources */,
-				7F4BB21E8B4B2CE059FAD509 /* ContentView.swift in Sources */,
-				F037FD90903291707F03D649 /* WorkItem.swift in Sources */,
-				53D38D1F610EAFF630462CC3 /* Project.swift in Sources */,
-				B24169BAF3D1EFDF3E24274D /* Person.swift in Sources */,
-				864AF5CEB7B5B0F0C237F5BC /* Decision.swift in Sources */,
-				6378B06E8DF9D98454EA8220 /* ScreenshotCapture.swift in Sources */,
-				A5DC0CDBB3D6F9CFC6CABEFF /* OCRTextBlock.swift in Sources */,
-				31BC173396CB1343900B792B /* ReviewSession.swift in Sources */,
-				1C57D060954A2D9FF61B7753 /* UserSettings.swift in Sources */,
-				C7AA904F11F9470F053AD59E /* OCRResult.swift in Sources */,
-				31501BCE7EF60C506B0E3219 /* OCRService.swift in Sources */,
-				19685F3766B14168B4AF2576 /* VisionOCRService.swift in Sources */,
-				839A8590CB47093FADC1D2C1 /* MockOCRService.swift in Sources */,
-				FEE9227AD6FA0001251ACC36 /* ClassificationResult.swift in Sources */,
-				6BBCEF7C31E66EB62900A8EA /* WorkItemClassifier.swift in Sources */,
-				C64654237BE52B4D45106678 /* LocalHeuristicClassifier.swift in Sources */,
-				B57C2B809FD723F01D901DCB /* MockClassifier.swift in Sources */,
-				037D2CF6B7B73F36F4BAD3C1 /* FutureAIClassifier.swift in Sources */,
-				27410CAE888FA75E7708B167 /* CadenceTheme.swift in Sources */,
-				0EDDA2A7882247D1528E1A10 /* TypeBadge.swift in Sources */,
-				46446C12556B5A8649D638A5 /* EmptyStateView.swift in Sources */,
-				69F17828929CD548EEF6BA89 /* WorkItemCard.swift in Sources */,
-				309028A29C87E3B948A8D2A8 /* DateParser.swift in Sources */,
-				479A2F2A6F96EDBF98086659 /* PersonExtractor.swift in Sources */,
-				C1871E182FD996D9D063E8B1 /* CaptureViewModel.swift in Sources */,
-				1BFE7D3B52561DC9626C1CB4 /* CaptureView.swift in Sources */,
-				326F7A9CD0CAE8D5FAF713CC /* OCRReviewView.swift in Sources */,
-				98C047D4C99DBBDF81B03D49 /* CreateItemSheet.swift in Sources */,
-				7F576002E7713A38D82AE335 /* InboxView.swift in Sources */,
-				841FEC9E99A79610CD90925A /* WorkItemDetailView.swift in Sources */,
-				61CB6C54A3311100DBDEBDC0 /* TodayViewModel.swift in Sources */,
-				4FE798686548D0C419434400 /* TodayView.swift in Sources */,
-				E2538429AB991FA69E25096E /* ProjectsView.swift in Sources */,
-				9FE771FE2D747F96C6883482 /* ProjectDetailView.swift in Sources */,
-				D78D36AB063ADBBA049FC7C6 /* PeopleView.swift in Sources */,
-				E908F0E1EE0BAFBD77817AF3 /* PersonDetailView.swift in Sources */,
-				C40130017CFCA952AAC6602E /* DecisionsView.swift in Sources */,
-				73E3B9FCBACE8C9FECA9890B /* DecisionDetailView.swift in Sources */,
-				D38BD1342D038F8ECA1D63FB /* ReviewViewModel.swift in Sources */,
-				5422CC61C346A2598681A57A /* ReviewView.swift in Sources */,
-				E921A3EA7FD58372294DE323 /* SearchViewModel.swift in Sources */,
-				AA060298DAF66069CEE6B832 /* SearchView.swift in Sources */,
-				E4553405710E8C4F33785693 /* SettingsView.swift in Sources */,
+				363C2DDDD507FEF370D3C223 /* CadenceConfiguration.swift in Sources */,
+				A293DF2768861DE5AA984039 /* CadenceSession.swift in Sources */,
+				403FF740C589DBCA2FFDFB66 /* HTTPTransport.swift in Sources */,
+				24AD2C0DBF485E33EA39ECFE /* CadenceClient.swift in Sources */,
+				02A2E7260DA5330ECAAA9243 /* ExecutiveBrief.swift in Sources */,
+				26B57E821E74581970F72312 /* NativeAppModel.swift in Sources */,
+				9A8EA9754F20E25CC05F1A28 /* NativeRootView.swift in Sources */,
+				B4752F7896A34950967CD402 /* NativeLoginView.swift in Sources */,
+				0821F3A89F64B5DE924B2E23 /* NativeExecutiveBriefView.swift in Sources */,
+				FDB8E2C14E84D0BA0985E540 /* KeychainSessionVault.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -537,7 +536,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -565,14 +564,16 @@
 				SDKROOT = iphoneos;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
 		DD950A8C39AE26E74C4B8CAE /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D0167CC642E0F439E4CA5362 /* Native.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -587,13 +588,15 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
 		D87766918198A19E7606DEE9 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D0167CC642E0F439E4CA5362 /* Native.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -607,7 +610,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -621,7 +624,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cadence.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cadence";
 			};
 			name = Debug;
@@ -635,7 +638,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cadence.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cadence";
 			};
 			name = Release;

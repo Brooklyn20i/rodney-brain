@@ -218,8 +218,12 @@ They operate against a local JSON file, not Supabase.
 | `Cadence/cadence_data.seed.json` | **LEGACY** — seed data for local prototype |
 | `Cadence/cadence-preview.html` | **LEGACY** — static preview |
 
-The `Cadence/` Swift directory is the in-progress native iOS/iPadOS app. It is
-not yet connected to Supabase. Do not treat it as a data source.
+The `Cadence/` Swift directory is the native iPhone/iPad client. Its first
+production slice now uses the same Supabase backend through the user-scoped
+`CadenceNativeCore` client: native authentication, an executive brief and a
+server-acknowledged completion path. It must never embed MCP, service-role or
+agent credentials. Full Xcode, signing and TestFlight verification remain
+release gates; see `docs/native-ios/CADENCE_IPHONE_PRODUCT_BRIEF.md`.
 
 ---
 
