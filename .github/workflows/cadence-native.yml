@@ -82,7 +82,6 @@ jobs:
             -sdk iphonesimulator \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath "$derived_data" \
-            CODE_SIGNING_ALLOWED=NO \
             CADENCE_SUPABASE_URL="$CADENCE_SUPABASE_URL" \
             CADENCE_SUPABASE_ANON_KEY="$CADENCE_SUPABASE_ANON_KEY" \
             build

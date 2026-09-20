@@ -39,9 +39,10 @@ xcodebuild \
   -scheme Cadence \
   -sdk iphonesimulator \
   -destination 'generic/platform=iOS Simulator' \
-  CODE_SIGNING_ALLOWED=NO \
   build
 ```
+
+Keep Xcode's local simulator signing enabled. Cadence reads the Keychain during startup, and an unsigned simulator build does not receive the simulated entitlements required by Security.framework.
 
 The same command runs in `.github/workflows/cadence-native.yml` on native-code pull requests.
 
