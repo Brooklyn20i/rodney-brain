@@ -87,7 +87,12 @@ public struct ExecutiveBrief: Equatable, Sendable {
         calendar: Calendar = .current
     ) {
         let startOfToday = calendar.startOfDay(for: now)
-        let active = workItems.filter { !$0.done && $0.deletedAt == nil }
+        let active = workItems.filter {
+            !$0.done &&
+                $0.deletedAt == nil &&
+                !$0.inboxed &&
+                !$0.source.hasPrefix("for:")
+        }
 
         self.overdue = active.filter { item in
             guard let dueDate = Self.date(from: item.dueDate, calendar: calendar) else { return false }

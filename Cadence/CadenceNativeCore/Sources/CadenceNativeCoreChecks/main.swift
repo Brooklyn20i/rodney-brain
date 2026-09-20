@@ -430,6 +430,57 @@ private func runExecutiveBriefChecks() async throws {
         "created_at":"2026-09-18T08:00:00Z",
         "updated_at":"2026-09-18T08:00:00Z",
         "deleted_at":null
+      },
+      {
+        "id":"20000000-0000-0000-0000-000000000004",
+        "owner_id":"11111111-1111-1111-1111-111111111111",
+        "workspace_id":"30000000-0000-0000-0000-000000000001",
+        "title":"Delegated to Kobe",
+        "type":"task",
+        "priority":"high",
+        "due_date":"2026-09-19",
+        "notes":"",
+        "done":false,
+        "inboxed":false,
+        "source":"for:kobe",
+        "completed_at":null,
+        "created_at":"2026-09-18T08:00:00Z",
+        "updated_at":"2026-09-18T08:00:00Z",
+        "deleted_at":null
+      },
+      {
+        "id":"20000000-0000-0000-0000-000000000005",
+        "owner_id":"11111111-1111-1111-1111-111111111111",
+        "workspace_id":"30000000-0000-0000-0000-000000000001",
+        "title":"Untriaged capture",
+        "type":"waitingFor",
+        "priority":"medium",
+        "due_date":"2026-09-20",
+        "notes":"",
+        "done":false,
+        "inboxed":true,
+        "source":"you",
+        "completed_at":null,
+        "created_at":"2026-09-18T08:00:00Z",
+        "updated_at":"2026-09-18T08:00:00Z",
+        "deleted_at":null
+      },
+      {
+        "id":"20000000-0000-0000-0000-000000000006",
+        "owner_id":"11111111-1111-1111-1111-111111111111",
+        "workspace_id":"30000000-0000-0000-0000-000000000001",
+        "title":"Agent-created user work",
+        "type":"task",
+        "priority":"medium",
+        "due_date":"2026-09-20",
+        "notes":"",
+        "done":false,
+        "inboxed":false,
+        "source":"agent:kobe",
+        "completed_at":null,
+        "created_at":"2026-09-18T08:00:00Z",
+        "updated_at":"2026-09-18T08:00:00Z",
+        "deleted_at":null
       }
     ]
     """
@@ -483,16 +534,19 @@ private func runExecutiveBriefChecks() async throws {
         calendar: calendar
     )
 
-    try expect(brief.overdue.map(\.title) == ["Resolve overdue commitment"], "brief classifies overdue work")
-    try expect(brief.dueToday.map(\.title) == ["Approve today"], "brief classifies today's work")
-    try expect(brief.waitingOn.map(\.title) == ["Waiting for supplier"], "brief classifies waiting-on work")
+    try expect(brief.overdue.map(\.title) == ["Resolve overdue commitment"], "brief excludes delegated for:* work from overdue")
+    try expect(
+        brief.dueToday.map(\.title) == ["Approve today", "Agent-created user work"],
+        "brief excludes inbox captures while retaining filed agent-created user work"
+    )
+    try expect(brief.waitingOn.map(\.title) == ["Waiting for supplier"], "brief excludes inbox captures from waiting-on")
     try expect(brief.pendingDecisions.map(\.title) == ["Choose launch path"], "brief includes pending decisions")
 
     let acknowledged = brief.removingWorkItem(
         id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
     )
     try expect(acknowledged.overdue.isEmpty, "acknowledged completion is removed before a follow-up refresh")
-    try expect(acknowledged.dueToday.count == 1, "completion removal preserves unrelated work")
+    try expect(acknowledged.dueToday.count == 2, "completion removal preserves unrelated user and agent-created work")
 
     let requests = await transport.requests
     try expect(requests.count == 2, "brief performs the two required reads")
