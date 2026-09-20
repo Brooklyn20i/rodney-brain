@@ -64,9 +64,9 @@ jobs:
           print(sorted(candidates, reverse=True)[0][2])
           ')"
           printf 'udid=%s\n' "$udid" >> "$GITHUB_OUTPUT"
-          if ! xcrun simctl list devices | grep -F "$udid" | grep -q "(Booted)"; then
-            xcrun simctl boot "$udid"
-          fi
+          xcrun simctl shutdown "$udid" 2>/dev/null || true
+          xcrun simctl erase "$udid"
+          xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
 
       - name: Build, install and launch Cadence
