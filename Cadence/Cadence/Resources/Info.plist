@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CADENCE_SUPABASE_URL</key>
 	<string>$(CADENCE_SUPABASE_URL)</string>
 	<key>CADENCE_SUPABASE_ANON_KEY</key>

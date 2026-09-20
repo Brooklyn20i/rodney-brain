@@ -1,0 +1,39 @@
+{
+  "tracking": false,
+  "data_linked_to_user": true,
+  "data_used_for_tracking": false,
+  "collected_data": [
+    {
+      "category": "Contact Info",
+      "type": "Email Address",
+      "purpose": ["App Functionality"],
+      "linked_to_user": true,
+      "tracking": false
+    },
+    {
+      "category": "Identifiers",
+      "type": "User ID",
+      "purpose": ["App Functionality"],
+      "linked_to_user": true,
+      "tracking": false
+    },
+    {
+      "category": "User Content",
+      "type": "Other User Content",
+      "purpose": ["App Functionality"],
+      "linked_to_user": true,
+      "tracking": false,
+      "examples": ["work items", "decisions", "workspace content"]
+    }
+  ],
+  "not_collected_by_native_app": [
+    "Health & Fitness",
+    "Financial Info",
+    "Location",
+    "Contacts",
+    "Browsing History",
+    "Search History",
+    "Diagnostics",
+    "Usage Data"
+  ]
+}

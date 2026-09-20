@@ -1,0 +1,12 @@
+Cadence gives leaders a focused, trusted view of the work that needs attention.
+
+Use the native iPhone app to:
+• Sign in securely to your Cadence workspace
+• Review overdue and due-today commitments
+• See work waiting on other people
+• Surface decisions that still need resolution
+• Complete work with server-confirmed updates
+
+Cadence keeps your organisation's source of truth on the existing Cadence platform. Sessions are stored in the iPhone Keychain and workspace access is enforced by the server.
+
+A Cadence workspace account is required.

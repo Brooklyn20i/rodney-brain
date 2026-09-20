@@ -54,6 +54,8 @@ export default defineConfig({
         tourWealth: 'tour-wealth.html', // marketing: Financial feature tour
         tourHealth: 'tour-health.html', // marketing: Health feature tour
         kobe: 'kobe.html', // marketing: agent page
+        privacy: 'privacy.html', // public App Store privacy policy
+        support: 'support.html', // public App Store support page
         work: 'work.html', // the Work app shell (root used to be this)
         financial: 'financial.html',
         health: 'health.html',

@@ -64,6 +64,7 @@
 		B4752F7896A34950967CD402 /* NativeLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57CE620CAAE9322D89BE1C2 /* NativeLoginView.swift */; };
 		0821F3A89F64B5DE924B2E23 /* NativeExecutiveBriefView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5320E111BDEA1F787AADCF9 /* NativeExecutiveBriefView.swift */; };
 		FDB8E2C14E84D0BA0985E540 /* KeychainSessionVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F82A64277BAC9397B12986 /* KeychainSessionVault.swift */; };
+		A94D15E7108C4AF38E719001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A94D15E7108C4AF38E719002 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -128,6 +129,7 @@
 		B5320E111BDEA1F787AADCF9 /* NativeExecutiveBriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/Features/Native/NativeExecutiveBriefView.swift; sourceTree = SOURCE_ROOT; };
 		F9F82A64277BAC9397B12986 /* KeychainSessionVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cadence/Services/Session/KeychainSessionVault.swift; sourceTree = SOURCE_ROOT; };
 		D0167CC642E0F439E4CA5362 /* Native.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Native.xcconfig; sourceTree = SOURCE_ROOT; };
+		A94D15E7108C4AF38E719002 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -361,6 +363,7 @@
 			isa = PBXGroup;
 			children = (
 				5E4978EFF3D1173E79C6DB22 /* Info.plist */,
+				A94D15E7108C4AF38E719002 /* PrivacyInfo.xcprivacy */,
 				39DF35C5B235782381DC07AE /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -413,6 +416,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A94D15E7108C4AF38E719001 /* PrivacyInfo.xcprivacy in Resources */,
 				D2D8D95CA703EDF7210D0048 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
