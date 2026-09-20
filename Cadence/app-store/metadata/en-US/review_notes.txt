@@ -1,0 +1,5 @@
+Cadence is an authenticated workspace application. App Review requires a dedicated review account configured only in App Store Connect's Sign-in information fields; credentials must not be placed in source control or these notes.
+
+After signing in, the Executive Brief displays Overdue, Due today, Waiting on and Pending decisions. The Complete action performs a workspace-scoped server mutation and updates the brief after the server acknowledges it.
+
+The app uses standard HTTPS/TLS and Apple's Keychain. It does not contain advertising, analytics SDKs, tracking, purchases or custom encryption.

@@ -26,6 +26,21 @@ assert(
   vercelConfig.includes("connect-src 'self' data:"),
   "Content-Security-Policy must permit the PDF renderer to fetch its embedded WebAssembly data URL.",
 );
+for (const [route, destination] of [
+  ['/privacy', '/privacy.html'],
+  ['/support', '/support.html'],
+]) {
+  assert(
+    vercelConfig.includes(`\"source\": \"${route}\"`) && vercelConfig.includes(`\"destination\": \"${destination}\"`),
+    `vercel.json must route ${route} to ${destination}.`,
+  );
+}
+for (const page of ['privacy.html', 'support.html']) {
+  assert(existsSync(join(root, page)), `${page} must exist for App Store review.`);
+  const content = read(page);
+  assert(content.includes('Cadence'), `${page} must identify Cadence.`);
+  assert(content.includes('contact'), `${page} must provide a contact path.`);
+}
 
 const workflow = read('../../.github/workflows/cadence-web.yml');
 const productionWatchdog = read('../../.github/workflows/cadence-production-watchdog.yml');
@@ -70,6 +85,9 @@ assert(dependabot.includes('dependency-name: typescript') && dependabot.includes
 assert(!dependabot.includes('CadenceFinancial') && !dependabot.includes('CadenceFitness'), 'Dependabot must not monitor superseded legacy Cadence apps.');
 
 const viteConfig = read('vite.config.ts');
+for (const page of ["privacy: 'privacy.html'", "support: 'support.html'"]) {
+  assert(viteConfig.includes(page), `Vite build inputs must include ${page}.`);
+}
 assert(viteConfig.includes('__BUILD_COMMIT__'), 'vite.config must inject __BUILD_COMMIT__ for deploy provenance.');
 assert(read('src/main.tsx').includes('release: __BUILD_COMMIT__'), 'Sentry.init must tag errors with the deploy release.');
 const packageJsonText = read('package.json');

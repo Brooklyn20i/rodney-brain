@@ -13,6 +13,8 @@
     { "source": "/tour/wealth", "destination": "/tour-wealth.html" },
     { "source": "/tour/health", "destination": "/tour-health.html" },
     { "source": "/kobe", "destination": "/kobe.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/support", "destination": "/support.html" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [
