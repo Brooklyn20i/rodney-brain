@@ -1,189 +1,26 @@
 name: Cadence web
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'Cadence/web/**'
-      - 'Cadence/backend/**'
-      - 'Cadence/agent/**'
-      - '.github/workflows/cadence-web.yml'
-      - '.github/dependabot.yml'
   pull_request:
+  push:
+    branches: [main]
 
-# Required PR checks must always materialize. Do not path-filter
-# pull_request, or GitHub can leave the required check pending on PRs that
-# touch docs/config outside the filtered paths. Main-branch push runs stay
-# path-scoped to avoid wasting minutes on unrelated production changes.
-
-# Least-privilege: this job only reads the repo. No write scopes are granted.
 permissions:
   contents: read
-
-# Supersede in-flight runs for the same PR to save minutes. Main push runs are
-# left to complete so a deploy-gating check is never cancelled after merge.
-concurrency:
-  group: cadence-web-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
     name: Typecheck · Lint · Test · Build
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    defaults:
-      run:
-        working-directory: Cadence/web
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-        working-directory: .
-
-      - name: Replay database migrations
-        run: bash Cadence/backend/scripts/replay_migrations.sh
-        working-directory: .
-        env:
-          PGHOST: localhost
-          PGPORT: '5432'
-          PGDATABASE: postgres
-          PGUSER: postgres
-          PGPASSWORD: postgres
-
-      - name: RLS negative / security assertions
-        run: psql -v ON_ERROR_STOP=1 --no-psqlrc -v CADENCE_CI_RLS_ASSERTIONS=1 -f Cadence/backend/scripts/rls_assertions.sql
-        working-directory: .
-        env:
-          PGHOST: localhost
-          PGPORT: '5432'
-          PGDATABASE: postgres
-          PGUSER: postgres
-          PGPASSWORD: postgres
-
-      - name: Life completion and isolation assertions
-        run: >-
-          psql -v ON_ERROR_STOP=1 --no-psqlrc
-          -c "BEGIN; SET LOCAL cadence.life_test_mode='on'; GRANT USAGE ON SCHEMA auth TO authenticated;"
-          -f Cadence/backend/scripts/life_completion_assertions.sql
-          -c "ROLLBACK;"
-        working-directory: .
-        env:
-          PGHOST: localhost
-          PGPORT: '5432'
-          PGDATABASE: postgres
-          PGUSER: postgres
-          PGPASSWORD: postgres
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: Cadence/web/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Security audit
+      - name: Verify sanitized public repository
+        shell: bash
         run: |
-          for attempt in 1 2 3; do
-            if timeout 120s npm run audit:security; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              exit 1
-            fi
-            echo "Security audit attempt $attempt failed or timed out; retrying..."
-            sleep 5
-          done
-
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Smoke tests
-        run: npm test
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Build
-        run: npm run build
-
-      # E2E is in CI (not just local) so the suite can't silently rot when the
-      # app's routes or labels change — which is exactly how it broke before
-      # (goto('/') hit the marketing site; the Fitness button became "Health").
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: E2E tests
-        run: npm run test:e2e
-
-      # Gym Focus (Health → Workout) runs under its own config/port in the
-      # seeded demo build so it exercises a real program. Wired here so it can't
-      # silently rot when the workout screen's routes or labels change.
-      - name: Gym Focus E2E tests
-        run: npm run test:e2e:gym
-
-      # Preserve Playwright traces/reports for post-mortem when E2E fails.
-      # if-no-files-found: ignore keeps the step green when no artifacts exist.
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-artifacts
-          path: |
-            Cadence/web/test-results/
-            Cadence/web/playwright-report/
-          if-no-files-found: ignore
-          retention-days: 7
-
-  # After CI passes on a push to main, verify production is actually healthy.
-  # This runs only on main pushes (not PRs, not other branches) so we never hit
-  # prod from a preview branch, and only after `ci` is green. The smoke check is
-  # strictly read-only: it issues GETs against cadence-agent.com and asserts on
-  # status codes, headers, and the /api/health payload — it never writes.
-  prod-smoke:
-    name: Production smoke
-    needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Cadence/web
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      # No `npm ci`: prod-smoke.mjs uses only Node built-ins and global fetch,
-      # so it needs no installed dependencies. Vercel deploys independently of
-      # GitHub Actions, so poll until production reports the pushed commit rather
-      # than accepting a healthy-but-old deploy.
-      - name: Production smoke check
-        run: |
-          for attempt in {1..30}; do
-            if npm run smoke:prod -- --expected-commit="$GITHUB_SHA"; then
-              exit 0
-            fi
-            echo "Production smoke attempt ${attempt}/30 did not match ${GITHUB_SHA::7}; waiting for Vercel production deploy..."
-            sleep 10
-          done
-          echo "Production smoke did not pass for ${GITHUB_SHA::7} after 30 attempts" >&2
-          exit 1
+          test -f README.md
+          test -f .github/workflows/cadence-web.yml
+          test ! -d Cadence
+          test ! -d CadenceFinancial
+          test ! -d CadenceFitness
+          test ! -d articles
+          test ! -d docs
