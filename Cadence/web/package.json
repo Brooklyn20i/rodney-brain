@@ -26,8 +26,8 @@
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.9.0",
-    "@sentry/react": "^10.74.0",
-    "@supabase/supabase-js": "^2.116.0",
+    "@sentry/react": "^11.0.0",
+    "@supabase/supabase-js": "^2.117.1",
     "@tiptap/extension-color": "^3.31.3",
     "@tiptap/extension-highlight": "^3.31.3",
     "@tiptap/extension-image": "^3.31.3",
@@ -42,7 +42,7 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.16",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
